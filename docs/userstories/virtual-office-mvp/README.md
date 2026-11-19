@@ -3,20 +3,21 @@
 Design: [2026-11-19-virtual-office-mvp-design.md](../../superpowers/specs/2026-11-19-virtual-office-mvp-design.md) (approved by the owner on 2026-11-19).
 
 Branch: `feature/virtual-office-mvp` (created after backlog approval).
-Execution mode: pending owner choice (all stories or one at a time).
+Execution mode: all stories (approved by the owner on 2026-11-19).
+Implementer route: no local model was available (LM Studio unreachable, Ollama with no models), so code was written by a lightweight hosted implementer (Claude Sonnet subagents); planning, review, and verification by the planner.
 Scope: Claude Code adapter only. Codex, OpenCode, Gemini CLI, and the orchestrating boss are out of scope.
 
 ## Story status
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Open the office securely | — | pending |
-| US-02 | Hire a Claude employee | US-01 | pending |
-| US-03 | Chat with an employee | US-02 | pending |
-| US-04 | Approve or reject permission requests | US-03 | pending |
-| US-05 | Answer agent questions and plans | US-04 | pending |
-| US-06 | Stop an employee | US-03 | pending |
-| US-07 | Keep history and resume employees | US-04, US-06 | pending |
+| US-01 | Open the office securely | — | in progress: 3D view not yet observed (AC-01) |
+| US-02 | Hire a Claude employee | US-01 | complete |
+| US-03 | Chat with an employee | US-02 | in progress: selecting via 3D character not yet observed (AC-01) |
+| US-04 | Approve or reject permission requests | US-03 | complete |
+| US-05 | Answer agent questions and plans | US-04 | complete (automated; real-CLI manual check not run) |
+| US-06 | Stop an employee | US-03 | complete |
+| US-07 | Keep history and resume employees | US-04, US-06 | complete |
 
 Verification levels: Vitest for domain, use cases, API, and the Claude adapter behind its port with a fake SDK; a reproducible manual check with the real `claude` CLI for each story that touches the agent.
 
@@ -96,14 +97,21 @@ As the owner, I want employees and their conversations to survive restarts and t
 
 ## Verification mapping
 
+Evidence date: 2026-11-19. Automated suites: `npm run test -w apps/server` (6 files, 57 tests passed), `npm run test -w apps/web` (2 files, 13 tests passed), `npm run typecheck` passed. Manual end-to-end run: real `claude` CLI through the HTTP API on port 4399 with a temporary database and working folder (removed afterwards); UI checked in the desktop app's browser pane, which has no WebGL.
+
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01` | Manual: run start command, open printed URL, check four boss areas | Pending |
-| `US-01 / AC-02`–`AC-04` | `apps/server` API tests: missing/wrong token, foreign Origin/Host, token per launch | Pending |
-| `US-02 / AC-01`–`AC-04` | Use-case and API tests with fake SDK; manual hire with real `claude` CLI | Pending |
-| `US-03 / AC-01`–`AC-05` | Adapter tests mapping SDK messages to entry kinds; repository tests; manual chat with real CLI | Pending |
-| `US-04 / AC-01`–`AC-07` | Approval use-case tests with fake `canUseTool` (allow, deny, conflict, expiry on abort/stop, approve for session); manual approval of a shell command with real CLI | Pending |
-| `US-05 / AC-01`–`AC-03` | Adapter tests for `AskUserQuestion` and `ExitPlanMode` inputs and returned answers; manual check with real CLI | Pending |
-| `US-06 / AC-01`–`AC-02` | Use-case tests for stop in each status | Pending |
-| `US-07 / AC-01`–`AC-04` | Startup recovery tests on a temporary SQLite file; resume tests with fake SDK; manual resume after real restart | Pending |
-| Risk: approvals answered as allow by mistake | Tests asserting every expiry/error path returns deny | Pending |
+| `US-01 / AC-01` | Manual: `npm start`, open printed URL, check four boss areas | Partial: URL with token printed; page, panel, and "Connected" observed. 3D boss areas NOT observed (browser pane has no WebGL). Pending owner check in a WebGL browser. |
+| `US-01 / AC-02`–`AC-04` | `apps/server/test/http/api.test.ts` (US-01 AC-02..AC-04); manual curl | Passed. Manual: no token → 401, foreign Origin → 403, foreign Host → 403, old token after restart → 401. |
+| `US-02 / AC-01`–`AC-04` | `apps/server/test/office/hire.test.ts`; manual hire with real CLI | Passed. Manual: missing folder → 400; real employee hired, session id captured, reached `idle`. |
+| `US-03 / AC-01` | Manual: select employee and view conversation | Partial: opened from the panel roster with full conversation shown; selecting via 3D character NOT observed (no WebGL). |
+| `US-03 / AC-02`–`AC-05` | `apps/server/test/office/chat.test.ts`; `apps/web/src/state/officeReducer.test.ts` (US-03 AC-05); manual follow-up message | Passed. Manual: follow-up 202, stored kinds `user_text`, `tool_call`, `tool_result`, `agent_text`. |
+| `US-04 / AC-01`–`AC-07` | `apps/server/test/office/approvals.test.ts`; manual approve and reject with real CLI | Passed. Manual: Bash `date > vo-e2e-marker.txt` reached the inbox (`canApproveForSession: true`), approve created the file, second decision → 409 `approval_not_pending`; `rm` request rejected → agent saw "Rejected by the owner", file kept. |
+| `US-05 / AC-01`–`AC-03` | `apps/server/test/office/approvals.test.ts`; `apps/web/src/state/answers.test.ts` (US-05 AC-02) | Passed (automated). Real-CLI manual check not run. |
+| `US-06 / AC-01`–`AC-02` | `apps/server/test/office/stop.test.ts` | Passed. |
+| `US-07 / AC-01`–`AC-04` | `apps/server/test/office/recovery.test.ts`; manual restart with real CLI | Passed. Manual: after restart, 8 stored messages kept, status `idle`, message resumed the session and the agent recalled `vo-e2e-marker.txt`. |
+| Risk: approvals answered as allow by mistake | `approvals.test.ts` safety-invariant tests (stop, abort, adapter error, shutdown, repository failure, recovery) | Passed. |
+| Risk: 3D failure hides the inbox (design anti-goal) | Manual: load UI without WebGL | Found failing (blank page); fixed with `SceneErrorBoundary`; re-check showed fallback text and working panel. |
+| Risk: employees unreachable without the 3D scene | Manual: open existing employee without WebGL | Found missing; added `EmployeeList` roster; re-check opened the employee and its history. |
+
+Not observed red-first: the server implementer wrote implementation before tests, so RED was not seen for the server suite.
