@@ -11,9 +11,9 @@ Execution mode: all stories (approved by the owner on 2026-11-19). Implementer: 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Know what skills and agents a folder has | — | complete |
-| US-02 | `/` menu in the chat | US-01 | in progress: Tab insertion not observed in the test pane (Enter observed) |
-| US-03 | Hire a specialist | US-01 | in progress: Role selector UI and office label not observed |
-| US-04 | Employee toolbox | US-01, US-02 | in progress: popover overflow fixed, re-check pending |
+| US-02 | `/` menu in the chat | US-01 | complete |
+| US-03 | Hire a specialist | US-01 | complete |
+| US-04 | Employee toolbox | US-01, US-02 | complete |
 
 Verification levels: Vitest for server catalog, cache, validation, and adapter options (fake `query` with a fake `initializationResult`, `supportedCommands`, `supportedAgents`); Vitest for pure client modules (filtering, sorting, insertion); manual checks with the real CLI and in the browser.
 
@@ -64,14 +64,16 @@ As the owner, I want a toolbox on each employee showing its skills and agents, s
 
 ## Verification mapping
 
+Evidence date: 2026-11-19. Automated: `npm run build`, `npm run typecheck`, `npm run test -w apps/server` (14 files, 134 tests passed), `npm run test -w apps/web` (10 files, 55 tests passed). Manual: temporary server with a disposable SQLite database, real `claude` CLI, and interactive browser verification (with WebGL). Temporary files removed afterwards.
+
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-06` | Server tests with a fake probe; manual real probe in a temporary folder | Pending |
-| `US-02 / AC-01`–`AC-03`, `AC-05` | Client unit tests for filtering, sorting, insertion, key handling; manual in browser | Pending |
-| `US-02 / AC-04` | Manual: send one of the owner's skills to a real employee | Pending |
-| `US-03 / AC-01`–`AC-06` | Server tests for role validation and adapter `agent` option on start and resume; manual hire of `review-risk` | Pending |
-| `US-04 / AC-01`–`AC-04` | Client unit tests for toolbox insertion; manual in browser | Pending |
-| Risk: probe leaks CLI processes | Server test asserting the probe is closed on success, failure, and timeout | Pending |
-| Risk: existing hire, chat, import, and resume flows | Existing server and web suites stay green | Pending |
+| `US-01 / AC-01`–`AC-06` | `apps/server/test/agents/claude-catalog-provider.test.ts`, `apps/server/test/office/catalog.test.ts`, `apps/server/test/http/catalog-api.test.ts`; manual real probe | Passed. Folder catalog returned 102 commands / 16 agents in 1236 ms, cached in 10 ms, no leftover probe process; bad folder returned `400 validation_error`. |
+| `US-02 / AC-01`–`AC-03`, `AC-05` | `apps/web/src/state/slashMenu.test.ts`, `apps/web/src/state/catalogStore.test.ts`; manual in browser | Passed. `/` opened 99 commands (non-built-in first, built-in under "Built-in"); `/jud` highlighted `jud` inside `/judgment-day` with no stray spaces; both `Enter` and `Tab` inserted `"/judgment-day "` and closed the menu; `Escape` closed without changing `"/"`; `/zzzznonexistent` showed `"No matching skills"`. |
+| `US-02 / AC-04` | Manual: send one of the owner's skills to a real employee | Passed. `/cognitive-doc-design` sent from the office ran the skill via the real CLI. |
+| `US-03 / AC-01`–`AC-06` | `apps/server/test/office/catalog.test.ts`, `apps/server/test/http/catalog-api.test.ts`, `apps/server/test/persistence/migration.test.ts`, `apps/web/src/state/role.test.ts`; manual hire of `review-risk` and browser check | Passed. Unknown role returned `400 validation_error`; Role selector loaded 16 options (`General`, 9 custom agents with descriptions, 6 built-in under `Built-in`); hired `review-risk` specialist answered in that agent's JSON format; workspace sidebar and header displayed `review-risk`; WebGL `/office` label displayed `"Scout · review-risk"`. |
+| `US-04 / AC-01`–`AC-04` | `apps/web/src/state/slashMenu.test.ts`, `apps/web/src/state/catalogStore.test.ts`; manual in browser | Passed. Toolbox popover (`420×380` at `x=382.5, y=51.3` inside `1015×858` viewport) did not overflow right or bottom edges; showed `Skills (99)`, `Agents (15)`, and `Refresh`; Agents tab showed name, description, and `"Ask in chat to delegate"` for all 15 agents; clicking `/chained-pr` inserted `"/chained-pr "`, focused the composer, and closed the popover. |
+| Risk: probe leaks CLI processes | `apps/server/test/agents/claude-catalog-provider.test.ts` (close on success, failure, timeout); manual process check | Passed. Probe closed in `finally` on all paths; no leftover CLI process observed. |
+| Risk: existing hire, chat, import, and resume flows | Full `apps/server` (134 tests) and `apps/web` (55 tests) suites + `npm run typecheck` | Passed. |
 
-Evidence 2026-11-19: server 134 tests, web 55 tests passed. Manual on a test server with the real CLI: folder catalog 102 commands / 16 agents in 1236 ms, cached 10 ms, no leftover probe process; bad folder 400; unknown role 400; hired `review-risk` specialist answered in that agent's JSON format; `/cognitive-doc-design` sent from the office ran the skill; `/jud` menu listed judgment-day and Enter inserted it. Fixed during verification: highlight split the command name with spaces; toolbox popover overflowed the right edge.
+Fixed during verification (included in `be6e264`): highlight split the command name with spaces; toolbox popover overflowed the right edge.
