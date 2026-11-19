@@ -1,4 +1,6 @@
-# Virtual Office API Contract (MVP)
+# Virtual Office API Contract
+
+Version: MVP + workspace-and-import (see `docs/userstories/workspace-and-import/README.md`).
 
 Shared contract between `apps/server` and `apps/web`. All timestamps are ISO 8601 strings. All IDs are strings.
 
@@ -17,8 +19,12 @@ type BossId = "claude" | "codex" | "opencode" | "gemini";
 type Boss = { id: BossId; name: string; available: boolean }; // only claude available in MVP
 
 type EmployeeStatus = "starting" | "working" | "waiting_approval" | "idle" | "stopped" | "failed";
+type Species = "wolf" | "dog" | "fox" | "cat" | "bear" | "human";
 type Employee = {
   id: string; bossId: BossId; hiredBy: string | null; task: string; workingDirectory: string;
+  name: string;                 // 1-40 chars after trim; not unique
+  species: Species;
+  importedAt: string | null;    // set when created by an import
   providerSessionId: string | null; status: EmployeeStatus; failureReason: string | null;
   createdAt: string; updatedAt: string;
 };
@@ -27,6 +33,12 @@ type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "s
 type Message = {
   id: string; employeeId: string; kind: MessageKind; content: string;
   toolName: string | null; toolUseId: string | null; parentToolUseId: string | null; createdAt: string;
+  sourceUuid: string | null;    // provider message uuid (imports and catch-up dedupe); null for live-only entries
+};
+
+type ClaudeSessionSummary = {
+  sessionId: string; title: string; cwd: string | null; gitBranch: string | null;
+  lastModified: string; createdAt: string | null; alreadyImported: boolean;
 };
 
 type ApprovalKind = "permission" | "question" | "plan";
@@ -49,12 +61,21 @@ type ApprovalRequest = {
 | --- | --- | --- | --- |
 | `GET /api/state` | — | `200 { bosses: Boss[], employees: Employee[], approvals: ApprovalRequest[] }` (approvals: pending only) | — |
 | `GET /api/employees/:id/messages` | — | `200 { messages: Message[] }` ordered by creation | `404 not_found` |
-| `POST /api/employees` | `{ bossId, task, workingDirectory }` | `201 { employee }` | `400 validation_error` with `field` (`task` empty, `workingDirectory` missing / not a directory, unknown `bossId`); `409 boss_unavailable` |
-| `POST /api/employees/:id/messages` | `{ text }` (non-empty) | `202 { message }` | `400 validation_error`; `404 not_found` |
+| `POST /api/employees` | `{ bossId, task, workingDirectory, name?, species? }` | `201 { employee }` (name/species generated when omitted) | `400 validation_error` with `field` (`task` empty, `workingDirectory` missing / not a directory, unknown `bossId`, `name` empty or > 40, unknown `species`); `409 boss_unavailable` |
+| `PATCH /api/employees/:id` | `{ name?, species? }` (at least one) | `200 { employee }` | `400 validation_error`; `404 not_found` |
+| `POST /api/employees/:id/messages` | `{ text }` (non-empty) | `202 { message }` | `400 validation_error`; `404 not_found`; `409 working_directory_missing` (employee folder does not exist) |
+| `GET /api/imports/claude/sessions?q=&limit=&offset=` | — | `200 { sessions: ClaudeSessionSummary[], total: number }` newest first; `q` filters title and cwd case-insensitive over all sessions; `limit` default 30, max 100 | `400 validation_error` |
+| `POST /api/imports/claude` | `{ sessionIds: string[] }` (1-100) | `200 { imported: Employee[], skipped: { sessionId: string, reason: "already_imported" \| "missing_cwd" \| "not_found" \| "read_failed" }[] }` | `400 validation_error` |
 | `POST /api/employees/:id/stop` | — | `200 { employee }` (no-op for `idle`, `stopped`, `failed`) | `404 not_found` |
 | `POST /api/approvals/:id/decision` | `{ decision, answers? }` | `200 { approval }` | `400 validation_error` (`approve_for_session` when not allowed; `question` kind needs `answers` unless rejecting); `404 not_found`; `409 approval_not_pending` |
 
 Error body shape: `{ error: { code: string, message: string, field?: string } }`.
+
+## Client routes
+
+The server answers `GET /office` and `GET /workspace` (and any non-`/api`, non-`/ws`, non-asset path) with the client's `index.html` (SPA fallback, no token required, Host check applies). `/` redirects client-side to `/workspace` keeping the query string. `/workspace?employee=<id>` preselects that employee.
+
+Cross-window UI messages use `new BroadcastChannel("virtual-office")` with `{ type: "focus_employee", employeeId: string }` and a presence ping `{ type: "workspace_ping" }` / `{ type: "workspace_pong" }` so `/office` knows whether a workspace window is open.
 
 ## WebSocket `/ws?token=<token>`
 
