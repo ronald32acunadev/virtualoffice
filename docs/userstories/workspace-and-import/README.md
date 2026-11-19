@@ -4,18 +4,19 @@ Design: [2026-11-19-workspace-and-import-design.md](../../superpowers/specs/2026
 Builds on: [Virtual Office MVP stories](../virtual-office-mvp/README.md).
 
 Branch: `feature/workspace-and-import`, created from `feature/virtual-office-mvp` after backlog approval.
-Execution mode: pending owner choice (all stories or one at a time).
+Execution mode: all stories (approved by the owner on 2026-11-19).
+Implementer route: no local model available (LM Studio unreachable, Ollama with no models); Claude Sonnet subagents wrote the code; planner reviewed and verified.
 
 ## Story status
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Office and workspace as separate views | — | pending |
-| US-02 | Open an employee from the office on the other screen | US-01 | pending |
-| US-03 | Claude-like workspace | US-01 | pending |
-| US-04 | Named characters | US-03 | pending |
-| US-05 | Import existing Claude sessions | US-04 | pending |
-| US-06 | Catch up on terminal turns before resuming | US-05 | pending |
+| US-01 | Office and workspace as separate views | — | in progress: two-window live sync and `/office` 3D not observed |
+| US-02 | Open an employee from the office on the other screen | US-01 | in progress: cross-window check pending in a WebGL browser |
+| US-03 | Claude-like workspace | US-01 | complete |
+| US-04 | Named characters | US-03 | in progress: name labels and species cues in 3D not observed (AC-05) |
+| US-05 | Import existing Claude sessions | US-04 | complete |
+| US-06 | Catch up on terminal turns before resuming | US-05 | complete |
 
 Verification levels: Vitest for server use cases and API (fake SDK functions for `listSessions` and `getSessionMessages`), Vitest for pure client modules; manual checks in the browser for layout and cross-window behavior, and with real Claude sessions for import.
 
@@ -84,16 +85,26 @@ As the owner, I want turns I made in the terminal after importing to appear befo
 
 ## Verification mapping
 
+Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` 10 files, 96 tests passed; `npm run test -w apps/web` 7 files, 32 tests passed; `npm run typecheck` passed. Manual: test server on port 4399 with a temporary database, real Claude sessions read through the SDK, real `claude` CLI for resume and terminal turns, UI in the desktop browser pane (no WebGL). Temporary files removed afterwards.
+
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-03` | Manual in browser; client routing unit test for `/` redirect | Pending |
-| `US-01 / AC-04` | Manual: two windows, trigger events with a real employee | Pending |
-| `US-01 / AC-05` | Server API test: SPA fallback for `/office` and `/workspace` | Pending |
-| `US-02 / AC-01`–`AC-03` | Unit test for channel message handling; manual with two windows | Pending |
-| `US-03 / AC-01`–`AC-05` | Unit tests for tool-row labels and sidebar ordering; manual visual check | Pending |
-| `US-03 / AC-06` | Existing MVP server and web suites stay green; manual MVP flow in workspace | Pending |
-| `US-04 / AC-01`–`AC-04` | Server tests: name generation, validation, PATCH, startup backfill | Pending |
-| `US-04 / AC-05` | Manual in a WebGL browser | Pending |
-| `US-05 / AC-01`–`AC-07` | Server tests with fake `listSessions`/`getSessionMessages`; manual import of real sessions | Pending |
-| `US-06 / AC-01`–`AC-03` | Server tests with fake `getSessionMessages` returning extra turns; manual terminal turn then resume | Pending |
-| Risk: schema change breaks existing database | Server test opening an MVP-shaped database and migrating it | Pending |
+| `US-01 / AC-01` | Manual `/office` in a WebGL browser | Pending owner check (pane has no WebGL; fallback shown) |
+| `US-01 / AC-02`, `AC-03` | `apps/web/src/state/routing.test.ts`; manual | Passed. `/?token=…` redirected to `/workspace` with the token; workspace shows new task, import, approvals, employees, "Open office" |
+| `US-01 / AC-04` | Manual: two windows | Pending owner check |
+| `US-01 / AC-05` | `apps/server/test/http/workspace-api.test.ts`; curl | Passed. `/office` 200, `/workspace` 200 |
+| `US-02 / AC-01`–`AC-03` | `apps/web/src/state/windowChannel.test.ts`; manual two windows | Unit tests passed; cross-window manual check pending owner (needs WebGL to click characters) |
+| `US-03 / AC-01`–`AC-05` | `toolLabel.test.ts`, `sidebar.test.ts`, `timeline` tests; manual | Passed. Sidebar grouped by boss with species icons, names, status dots; markdown rendered (lists, bold, code); tool rows collapsed ("Ran `rm vo-e2e-marker.txt`"); right-aligned owner bubbles |
+| `US-03 / AC-06` | MVP suites still green; manual resume and chat through the workspace | Passed |
+| `US-04 / AC-01`–`AC-04` | `apps/server/test/office/names.test.ts`, `persistence/migration.test.ts` | Passed. Imports got names "Ember" (wolf) and "Daisy" (fox) |
+| `US-04 / AC-05` | Manual 3D | Pending owner check |
+| `US-05 / AC-01`–`AC-04` | `apps/server/test/office/import.test.ts`; manual | Passed. 9 real sessions listed; `q=virtualoffice` → 1; import of 2 sessions + duplicate + unknown id → 2 imported, `already_imported`, `not_found`; history with text, tool calls, results; picker marks "Already in the office" |
+| `US-05 / AC-05` | `import.test.ts`; manual: folder removed, send message | Passed. `409 working_directory_missing` "Project folder not found: …" |
+| `US-05 / AC-06` | Manual: resume imported employee | Passed. Resumed and answered with earlier context |
+| `US-05 / AC-07` | Manual: md5 of the imported session file before and after import | Passed. File unchanged |
+| `US-06 / AC-01`–`AC-03` | `import.test.ts` (US-06); manual: `claude -p --resume` turn in the terminal, then send from the office; then restart and send again | Passed. Terminal turn appended in order before the new message; after restart and a second resume, 0 duplicate uuids; owner message uuid back-filled |
+| Risk: MVP database migration | `persistence/migration.test.ts` | Passed |
+
+Known issue found (not in scope, not fixed): stopping the server records "Employee failed: Claude Code process exited with code 143" in a running employee's history although it was a normal shutdown.
+
+Not observed red-first: both implementers wrote implementation before tests.
