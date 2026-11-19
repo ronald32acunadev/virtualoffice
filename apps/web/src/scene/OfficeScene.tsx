@@ -13,8 +13,14 @@ const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
   { id: "gemini", name: "Gemini", available: false },
 ];
 
-export function OfficeScene() {
-  const { state, actions } = useOffice();
+export function OfficeScene({
+  onSelectEmployee,
+  onClear,
+}: {
+  onSelectEmployee: (employeeId: string) => void;
+  onClear: () => void;
+}) {
+  const { state } = useOffice();
   const bosses = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
 
   const indexByBoss = new Map<BossId, number>();
@@ -25,7 +31,7 @@ export function OfficeScene() {
   });
 
   return (
-    <Canvas camera={{ position: [0, 17, 21], fov: 45 }} onPointerMissed={() => actions.select(null)}>
+    <Canvas camera={{ position: [0, 17, 21], fov: 45 }} onPointerMissed={onClear}>
       <color attach="background" args={["#1a1d24"]} />
       <ambientLight intensity={0.7} />
       <directionalLight position={[8, 14, 6]} intensity={1.1} />
@@ -42,7 +48,7 @@ export function OfficeScene() {
           employee={employee}
           position={position}
           selected={state.selectedId === employee.id}
-          onSelect={actions.select}
+          onSelect={onSelectEmployee}
         />
       ))}
       <OrbitControls

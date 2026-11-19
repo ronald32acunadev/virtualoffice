@@ -1,27 +1,24 @@
+import { useState } from "react";
 import { getToken } from "./api/client";
-import { OfficeProvider, useOffice } from "./state/OfficeProvider";
-import { OfficeScene } from "./scene/OfficeScene";
-import { SceneErrorBoundary } from "./scene/SceneErrorBoundary";
-import { SidePanel } from "./ui/SidePanel";
+import { OfficeProvider } from "./state/OfficeProvider";
+import { resolveRoute } from "./state/routing";
+import { OfficeView } from "./views/OfficeView";
+import { WorkspaceView } from "./views/WorkspaceView";
 
-function Shell() {
-  const { state } = useOffice();
-  return (
-    <div className="app">
-      <main className="scene-pane">
-        <SceneErrorBoundary>
-          <OfficeScene />
-        </SceneErrorBoundary>
-        <div className={`connection connection-${state.connection}`}>
-          {state.connection === "online" ? "Connected" : state.connection === "connecting" ? "Connecting..." : "Reconnecting..."}
-        </div>
-      </main>
-      <SidePanel />
-    </div>
-  );
+function currentView() {
+  const route = resolveRoute(location.pathname, location.search);
+  if (route.redirectTo) {
+    try {
+      history.replaceState(null, "", route.redirectTo);
+    } catch {
+      // Keep rendering the workspace even when the URL cannot be rewritten.
+    }
+  }
+  return route.view;
 }
 
 export function App() {
+  const [view] = useState(currentView);
   if (!getToken()) {
     return (
       <div className="no-token">
@@ -30,9 +27,5 @@ export function App() {
       </div>
     );
   }
-  return (
-    <OfficeProvider>
-      <Shell />
-    </OfficeProvider>
-  );
+  return <OfficeProvider>{view === "office" ? <OfficeView /> : <WorkspaceView />}</OfficeProvider>;
 }

@@ -5,6 +5,7 @@ import type { Group, Mesh, MeshStandardMaterial } from "three";
 import type { Employee } from "../api/types";
 import { Desk } from "./BossArea";
 import { STATUS_COLORS, type Vec3 } from "./layout";
+import { SPECIES_COLORS, SpeciesParts } from "./SpeciesParts";
 
 type Props = {
   employee: Employee;
@@ -73,8 +74,9 @@ export function Character({ employee, position, selected, onSelect }: Props) {
         </mesh>
         <mesh position={[0, 1.55, 0]}>
           <sphereGeometry args={[0.24, 16, 16]} />
-          <meshStandardMaterial color={status === "stopped" ? "#9a9a9a" : "#f1d3b3"} />
+          <meshStandardMaterial color={status === "stopped" ? "#9a9a9a" : SPECIES_COLORS[employee.species]} />
         </mesh>
+        <SpeciesParts species={employee.species} tint={status === "stopped" ? "#9a9a9a" : undefined} />
         <mesh ref={armL} position={[-0.38, 1.05, -0.1]}>
           <boxGeometry args={[0.12, 0.5, 0.12]} />
           <meshStandardMaterial color={color} />
@@ -90,12 +92,15 @@ export function Character({ employee, position, selected, onSelect }: Props) {
           </mesh>
         ) : null}
         {marker ? (
-          <Html position={[0, 2.3, 0]} center zIndexRange={[10, 0]}>
+          <Html position={[0, 2.75, 0]} center zIndexRange={[10, 0]}>
             {marker}
           </Html>
         ) : null}
+        <Html position={[0, 2.15, 0]} center zIndexRange={[5, 0]}>
+          <div className="name-label">{employee.name}</div>
+        </Html>
         {hovered ? (
-          <Html position={[0, 2.9, 0]} center zIndexRange={[20, 0]}>
+          <Html position={[0, 3.4, 0]} center zIndexRange={[20, 0]}>
             <div className="tooltip">
               <strong>{employee.task.length > 80 ? `${employee.task.slice(0, 80)}...` : employee.task}</strong>
               <span>{employee.status.replace("_", " ")}</span>

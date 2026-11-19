@@ -9,12 +9,20 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision } from "../api/types";
+import type { BossId, Decision, ImportResult, Species } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
   select: (employeeId: string | null) => void;
-  createEmployee: (input: { bossId: BossId; task: string; workingDirectory: string }) => Promise<void>;
+  createEmployee: (input: {
+    bossId: BossId;
+    task: string;
+    workingDirectory: string;
+    name?: string;
+    species?: Species;
+  }) => Promise<void>;
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) => Promise<void>;
+  importSessions: (sessionIds: string[]) => Promise<ImportResult>;
   sendMessage: (employeeId: string, text: string) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
@@ -30,8 +38,19 @@ export function useOffice(): OfficeContextValue {
   return value;
 }
 
+function readPreselectedEmployee(): string | null {
+  try {
+    return new URLSearchParams(location.search).get("employee");
+  } catch {
+    return null;
+  }
+}
+
 export function OfficeProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(officeReducer, initialOfficeState);
+  const [state, dispatch] = useReducer(officeReducer, initialOfficeState, (initial) => ({
+    ...initial,
+    selectedId: readPreselectedEmployee(),
+  }));
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = state.selectedId;
 
@@ -81,6 +100,17 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
       sendMessage: async (employeeId, text) => {
         const { message } = await api.sendMessage(employeeId, text);
         dispatch({ type: "server_event", event: { type: "message_added", message } });
+      },
+      updateEmployee: async (employeeId, patch) => {
+        const { employee } = await api.updateEmployee(employeeId, patch);
+        dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
+      },
+      importSessions: async (sessionIds) => {
+        const result = await api.importClaudeSessions(sessionIds);
+        for (const employee of result.imported) {
+          dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
+        }
+        return result;
       },
       stopEmployee: async (employeeId) => {
         const { employee } = await api.stopEmployee(employeeId);

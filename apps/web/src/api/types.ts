@@ -10,12 +10,17 @@ export type EmployeeStatus =
   | "stopped"
   | "failed";
 
+export type Species = "wolf" | "dog" | "fox" | "cat" | "bear" | "human";
+
 export type Employee = {
   id: string;
   bossId: BossId;
   hiredBy: string | null;
   task: string;
   workingDirectory: string;
+  name: string;
+  species: Species;
+  importedAt: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
@@ -33,6 +38,23 @@ export type Message = {
   toolUseId: string | null;
   parentToolUseId: string | null;
   createdAt: string;
+  sourceUuid: string | null;
+};
+
+export type ClaudeSessionSummary = {
+  sessionId: string;
+  title: string;
+  cwd: string | null;
+  gitBranch: string | null;
+  lastModified: string;
+  createdAt: string | null;
+  alreadyImported: boolean;
+};
+
+export type ImportSkipReason = "already_imported" | "missing_cwd" | "not_found" | "read_failed";
+export type ImportResult = {
+  imported: Employee[];
+  skipped: { sessionId: string; reason: ImportSkipReason }[];
 };
 
 export type ApprovalKind = "permission" | "question" | "plan";

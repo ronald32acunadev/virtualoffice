@@ -30,7 +30,7 @@ export function ApprovalCard({ approval, employee, onSelectEmployee, onDecide }:
   return (
     <li className={`approval approval-${approval.kind}`}>
       <button type="button" className="approval-head" onClick={() => onSelectEmployee(approval.employeeId)}>
-        <span className="approval-task">{employee?.task ?? approval.employeeId}</span>
+        <span className="approval-task">{employee?.name ?? approval.employeeId}</span>
         <span className="approval-tool">{approval.toolName}</span>
       </button>
       {approval.kind === "question" ? (

@@ -8,6 +8,9 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   hiredBy: null,
   task: "Fix bug",
   workingDirectory: "/tmp",
+  name: "Ada",
+  species: "fox",
+  importedAt: null,
   providerSessionId: null,
   status: "working",
   failureReason: null,
@@ -25,6 +28,7 @@ const message = (over: Partial<Message> = {}): Message => ({
   toolUseId: null,
   parentToolUseId: null,
   createdAt: "2026-01-01T00:00:01.000Z",
+  sourceUuid: null,
   ...over,
 });
 

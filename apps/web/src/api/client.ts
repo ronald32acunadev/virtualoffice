@@ -1,10 +1,13 @@
 import type {
   ApprovalRequest,
   BossId,
+  ClaudeSessionSummary,
   Decision,
+  ImportResult,
   Employee,
   Message,
   ServerEvent,
+  Species,
   StateSnapshot,
 } from "./types";
 
@@ -86,8 +89,28 @@ export const api = {
   getState: () => request<StateSnapshot>("GET", "/api/state"),
   getMessages: (employeeId: string) =>
     request<{ messages: Message[] }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/messages`),
-  createEmployee: (input: { bossId: BossId; task: string; workingDirectory: string }) =>
-    request<{ employee: Employee }>("POST", "/api/employees", input),
+  createEmployee: (input: {
+    bossId: BossId;
+    task: string;
+    workingDirectory: string;
+    name?: string;
+    species?: Species;
+  }) => request<{ employee: Employee }>("POST", "/api/employees", input),
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) =>
+    request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
+  listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {
+    const query = new URLSearchParams({
+      limit: String(params.limit),
+      offset: String(params.offset),
+    });
+    if (params.q.trim()) query.set("q", params.q.trim());
+    return request<{ sessions: ClaudeSessionSummary[]; total: number }>(
+      "GET",
+      `/api/imports/claude/sessions?${query.toString()}`,
+    );
+  },
+  importClaudeSessions: (sessionIds: string[]) =>
+    request<ImportResult>("POST", "/api/imports/claude", { sessionIds }),
   sendMessage: (employeeId: string, text: string) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
       text,
