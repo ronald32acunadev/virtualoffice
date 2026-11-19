@@ -17,6 +17,7 @@ Implementer route: no local model available (LM Studio unreachable, Ollama with 
 | US-04 | Named characters | US-03 | in progress: name labels and species cues in 3D not observed (AC-05) |
 | US-05 | Import existing Claude sessions | US-04 | complete |
 | US-06 | Catch up on terminal turns before resuming | US-05 | complete |
+| US-07 | Shutdown is not reported as a failure | — | complete (bugfix approved by the owner on 2026-11-19: "Sí, arreglalo") |
 
 Verification levels: Vitest for server use cases and API (fake SDK functions for `listSessions` and `getSessionMessages`), Vitest for pure client modules; manual checks in the browser for layout and cross-window behavior, and with real Claude sessions for import.
 
@@ -81,6 +82,16 @@ As the owner, I want turns I made in the terminal after importing to appear befo
 - `US-06 / AC-02`: Given no new turns exist, when resuming, then no messages are added besides the owner's.
 - `US-06 / AC-03`: Given reading the session fails during catch-up, then the resume continues and a `system` message notes that earlier turns could not be loaded.
 
+## US-07 — Shutdown is not reported as a failure
+
+As the owner, I want stopping the server (Ctrl+C or a terminate signal) to leave my working employees as stopped, so that their history does not show a failure that never happened and I can resume them.
+
+Found during US-06 verification: stopping the server recorded "Employee failed: Claude Code process exited with code 143" because the signal also reaches the `claude` child process, which exits before the office's shutdown marks the session as closed.
+
+- `US-07 / AC-01`: Given an employee is `working` or `waiting_approval`, when the server receives SIGINT or SIGTERM, then the employee ends as `stopped`, no "Employee failed" message is added, and its pending approvals are `expired` (agent gets deny).
+- `US-07 / AC-02`: Given the agent process dies from a termination signal (exit code 130 or 143) while the server keeps running, then the employee becomes `stopped` with the system message "Session interrupted: the agent process was terminated. Send a message to resume." instead of `failed`.
+- `US-07 / AC-03` (regression): Given the agent process fails for any other reason (for example a non-signal exit code or a start error), then the employee still becomes `failed` with its reason, as in MVP `US-02 / AC-04`.
+
 ---
 
 ## Verification mapping
@@ -104,7 +115,8 @@ Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` 10 files, 96
 | `US-05 / AC-07` | Manual: md5 of the imported session file before and after import | Passed. File unchanged |
 | `US-06 / AC-01`–`AC-03` | `import.test.ts` (US-06); manual: `claude -p --resume` turn in the terminal, then send from the office; then restart and send again | Passed. Terminal turn appended in order before the new message; after restart and a second resume, 0 duplicate uuids; owner message uuid back-filled |
 | Risk: MVP database migration | `persistence/migration.test.ts` | Passed |
+| `US-07 / AC-01`–`AC-03` | `apps/server/test/office/shutdown.test.ts` (RED observed first: `beginShutdown is not a function`, AC-02 ended `failed`); manual: real employee in `waiting_approval`, server stopped with a termination signal | Passed. 105 server tests green. Manual: employee `stopped`, failure reason null, approval `expired`, no system failure message, the requested command never ran |
 
-Known issue found (not in scope, not fixed): stopping the server records "Employee failed: Claude Code process exited with code 143" in a running employee's history although it was a normal shutdown.
+Known issue found during verification: stopping the server recorded "Employee failed: Claude Code process exited with code 143". Tracked and fixed as US-07.
 
 Not observed red-first: both implementers wrote implementation before tests.

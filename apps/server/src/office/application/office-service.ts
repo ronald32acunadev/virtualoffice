@@ -48,6 +48,14 @@ type PendingApproval = {
 
 type LiveSession = { active: boolean };
 
+const SIGNAL_INTERRUPTED = "Session interrupted: the agent process was terminated. Send a message to resume.";
+
+/** True when a failure reason says the agent process died from SIGINT/SIGTERM (exit code 130/143 or a signal message). */
+export function isSignalTermination(reason: string): boolean {
+  if (/exited with code (130|143)\b/i.test(reason)) return true;
+  return /\b(terminated|killed)\b/i.test(reason) && /\bSIG(TERM|INT)\b/i.test(reason);
+}
+
 function defaultIsDirectory(path: string): boolean {
   try {
     return fs.statSync(path).isDirectory();
@@ -57,6 +65,7 @@ function defaultIsDirectory(path: string): boolean {
 }
 
 export class OfficeService {
+  private shuttingDown = false;
   private readonly repository: OfficeRepository;
   private readonly adapter: AgentAdapter;
   private readonly events: EventBus;
@@ -385,8 +394,14 @@ export class OfficeService {
     return { stopped, expired };
   }
 
+  /** Marks the server as shutting down so agent process deaths are not reported as failures. */
+  beginShutdown(): void {
+    this.shuttingDown = true;
+  }
+
   /** Server shutdown: expire every pending request (agents get deny) and stop live sessions. */
   async shutdown(): Promise<void> {
+    this.beginShutdown();
     const ids = [...this.sessions.keys()];
     for (const id of ids) {
       try {
@@ -488,6 +503,15 @@ export class OfficeService {
         session.active = false;
         this.sessions.delete(employeeId);
         this.expireApprovalsOf(employeeId);
+        if (this.shuttingDown) {
+          this.setStatus(employeeId, "stopped");
+          return;
+        }
+        if (isSignalTermination(reason)) {
+          this.appendMessage(employeeId, { kind: "system", content: SIGNAL_INTERRUPTED });
+          this.setStatus(employeeId, "stopped");
+          return;
+        }
         this.appendMessage(employeeId, { kind: "system", content: `Employee failed: ${reason}` });
         this.setStatus(employeeId, "failed", { failureReason: reason });
       },

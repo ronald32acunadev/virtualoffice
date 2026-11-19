@@ -46,8 +46,14 @@ async function shutdown(): Promise<void> {
   repository.close();
   process.exit(0);
 }
-process.on("SIGINT", () => void shutdown());
-process.on("SIGTERM", () => void shutdown());
+process.on("SIGINT", () => {
+  office.beginShutdown();
+  void shutdown();
+});
+process.on("SIGTERM", () => {
+  office.beginShutdown();
+  void shutdown();
+});
 
 await app.listen({ host: "127.0.0.1", port });
 console.log(`Virtual Office: http://127.0.0.1:${port}/?token=${token}`);
