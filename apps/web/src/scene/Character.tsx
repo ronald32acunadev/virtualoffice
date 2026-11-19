@@ -3,6 +3,7 @@ import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import type { Group, Mesh, MeshStandardMaterial } from "three";
 import type { Employee } from "../api/types";
+import { employeeLabel } from "../state/role";
 import { Desk } from "./BossArea";
 import { STATUS_COLORS, type Vec3 } from "./layout";
 import { SPECIES_COLORS, SpeciesParts } from "./SpeciesParts";
@@ -97,7 +98,7 @@ export function Character({ employee, position, selected, onSelect }: Props) {
           </Html>
         ) : null}
         <Html position={[0, 2.15, 0]} center zIndexRange={[5, 0]}>
-          <div className="name-label">{employee.name}</div>
+          <div className="name-label">{employeeLabel(employee)}</div>
         </Html>
         {hovered ? (
           <Html position={[0, 3.4, 0]} center zIndexRange={[20, 0]}>

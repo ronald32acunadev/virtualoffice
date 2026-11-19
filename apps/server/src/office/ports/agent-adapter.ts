@@ -1,4 +1,4 @@
-import type { ApprovalKind, Decision, Employee, MessageKind } from "../domain/types.ts";
+import type { ApprovalKind, Decision, Employee, MessageKind, ProviderCatalog } from "../domain/types.ts";
 
 export type AgentMessage = {
   kind: MessageKind;
@@ -29,6 +29,8 @@ export interface AgentSink {
   onDelta(text: string): void;
   onTurnFinished(): void;
   onFailed(reason: string): void;
+  /** The live session's current commands and agents (after init and whenever the provider pushes a change). */
+  onCatalog(catalog: ProviderCatalog): void;
   /** Must resolve `expired` (never approve) when the signal aborts or the session ends. */
   requestApproval(prompt: ApprovalPrompt, signal: AbortSignal): Promise<ApprovalOutcome>;
 }
@@ -46,6 +48,8 @@ export interface AgentAdapter {
   hasSession(employeeId: string): boolean;
   /** Delivers a follow-up message to a live session. Returns false when there is none. */
   sendMessage(employeeId: string, text: string): boolean;
+  /** Current lists straight from a live session; null when there is none or it cannot answer. */
+  fetchCatalog(employeeId: string): Promise<ProviderCatalog | null>;
   /** Interrupts and closes the session. Safe to call when there is none. */
   stop(employeeId: string): Promise<void>;
 }

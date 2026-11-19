@@ -11,6 +11,7 @@ const emp = (over: Partial<Employee>): Employee => ({
   name: "Ada",
   species: "cat",
   importedAt: null,
+  role: null,
   providerSessionId: null,
   status: "idle",
   failureReason: null,

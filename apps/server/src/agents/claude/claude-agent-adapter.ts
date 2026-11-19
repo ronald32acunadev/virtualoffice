@@ -7,6 +7,9 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentAdapter, AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
+import type { ProviderAgent, ProviderCatalog } from "../../office/domain/types.ts";
+import { toAgents, toCommands, withTimeout } from "./catalog-support.ts";
+import { SETTING_SOURCES, SYSTEM_PROMPT } from "./session-options.ts";
 import { approvalKindFor, summarizeToolInput } from "./approval-mapping.ts";
 import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 import { PushQueue } from "./push-queue.ts";
@@ -15,13 +18,26 @@ import { PushQueue } from "./push-queue.ts";
 export type QueryFunction = (params: {
   prompt: string | AsyncIterable<SDKUserMessage>;
   options?: Options;
-}) => AsyncIterable<SDKMessage> & { interrupt?: () => Promise<unknown>; close?: () => void };
+}) => AsyncIterable<SDKMessage> & SessionHandle;
+
+/** The control methods of an SDK query this module uses; all optional so partial fakes and older SDKs work. */
+type SessionHandle = {
+  interrupt?: () => Promise<unknown>;
+  close?: () => void;
+  initializationResult?: () => Promise<unknown>;
+  supportedCommands?: () => Promise<unknown>;
+  supportedAgents?: () => Promise<unknown>;
+};
+
+const CATALOG_READ_TIMEOUT_MS = 15_000;
 
 type Session = {
   queue: PushQueue<SDKUserMessage>;
   abort: AbortController;
   stopped: boolean;
-  handle?: { interrupt?: () => Promise<unknown>; close?: () => void };
+  handle?: SessionHandle;
+  /** Agents from the last full read; a command push carries no agents. */
+  agents?: ProviderAgent[];
 };
 
 /** Loosely typed view of the SDK messages we care about; the real union is large and open. */
@@ -35,6 +51,7 @@ type LooseMessage = {
   event?: { type?: string; delta?: { type?: string; text?: string } };
   result?: unknown;
   errors?: unknown;
+  commands?: unknown;
 };
 
 const REJECTED_MESSAGE = "Rejected by the owner";
@@ -97,13 +114,14 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
     const options: Options = {
       cwd: employee.workingDirectory,
-      settingSources: ["user", "project", "local"],
-      systemPrompt: { type: "preset", preset: "claude_code" },
+      settingSources: SETTING_SOURCES,
+      systemPrompt: SYSTEM_PROMPT,
       permissionMode: "default",
       includePartialMessages: true,
       abortController: session.abort,
       canUseTool,
       ...(resume ? { resume } : {}),
+      ...(employee.role ? { agent: employee.role } : {}),
     };
 
     void this.run(employee.id, session, options, sink);
@@ -114,6 +132,11 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     if (!session || session.stopped) return false;
     session.queue.push(userMessage(text));
     return true;
+  }
+
+  async fetchCatalog(employeeId: string): Promise<ProviderCatalog | null> {
+    const session = this.sessions.get(employeeId);
+    return session ? this.readCatalog(session) : null;
   }
 
   async stop(employeeId: string): Promise<void> {
@@ -148,6 +171,9 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             initSeen = true;
             sink.onSessionStarted(message.session_id);
           }
+          void this.publishCatalog(session, sink);
+        } else if (message.type === "system" && message.subtype === "commands_changed") {
+          this.onCommandsChanged(session, message, sink);
         } else if (message.type === "assistant") {
           this.mapAssistant(message, sink);
         } else if (message.type === "user") {
@@ -171,6 +197,34 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       this.teardown(employeeId, session);
       sink.onFailed(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  /** Reads the live lists, remembers the agents, and returns both; null when the session cannot answer. */
+  private async readCatalog(session: Session): Promise<ProviderCatalog | null> {
+    const handle = session.handle;
+    if (!handle?.supportedCommands || !handle.supportedAgents) return null;
+    try {
+      const [commands, agents] = await withTimeout(
+        Promise.all([handle.supportedCommands(), handle.supportedAgents()]),
+        CATALOG_READ_TIMEOUT_MS,
+        "Reading the session catalog timed out",
+      );
+      const catalog = { commands: toCommands(commands), agents: toAgents(agents) };
+      session.agents = catalog.agents;
+      return catalog;
+    } catch {
+      return null;
+    }
+  }
+
+  private async publishCatalog(session: Session, sink: AgentSink): Promise<void> {
+    const catalog = await this.readCatalog(session);
+    if (catalog && !session.stopped) sink.onCatalog(catalog);
+  }
+
+  private onCommandsChanged(session: Session, message: LooseMessage, sink: AgentSink): void {
+    if (!session.agents) return; // no full read yet; the post-init read will bring the current commands
+    sink.onCatalog({ commands: toCommands(message.commands), agents: session.agents });
   }
 
   private teardown(employeeId: string, session: Session): void {

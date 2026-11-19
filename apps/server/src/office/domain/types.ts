@@ -27,6 +27,8 @@ export type Employee = {
   name: string;
   species: Species;
   importedAt: string | null;
+  /** Agent name the employee runs as (provider `agent` option); null means General. */
+  role: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
@@ -47,6 +49,21 @@ export type Message = {
   /** Provider message uuid (imports and catch-up dedupe); null for entries the provider never numbered. */
   sourceUuid: string | null;
 };
+
+export type SlashCommand = {
+  name: string;
+  description: string;
+  argumentHint: string;
+  aliases?: string[];
+  builtin?: boolean;
+};
+/** An agent as a provider reports it (no source flag). */
+export type ProviderAgent = { name: string; description: string; model?: string };
+export type AgentInfo = ProviderAgent & { builtin: boolean };
+/** Lists as a provider reports them. */
+export type ProviderCatalog = { commands: SlashCommand[]; agents: ProviderAgent[] };
+/** Lists as the office serves them: commands non-built-in first, agents owner's first. */
+export type Catalog = { commands: SlashCommand[]; agents: AgentInfo[] };
 
 export type ClaudeSessionSummary = {
   sessionId: string;
@@ -112,7 +129,8 @@ export class OfficeError extends Error {
       | "not_found"
       | "boss_unavailable"
       | "approval_not_pending"
-      | "working_directory_missing",
+      | "working_directory_missing"
+      | "catalog_unavailable",
     message: string,
     readonly field?: string,
   ) {

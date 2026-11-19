@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ClaudeAgentAdapter } from "./agents/claude/claude-agent-adapter.ts";
+import { ClaudeCatalogProvider } from "./agents/claude/claude-catalog-provider.ts";
 import { ClaudeSessionCatalog } from "./agents/claude/claude-session-catalog.ts";
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
@@ -24,6 +25,7 @@ const office = new OfficeService({
   adapter: new ClaudeAgentAdapter(),
   events: new InMemoryEventBus(),
   sessions: new ClaudeSessionCatalog(),
+  catalogProvider: new ClaudeCatalogProvider(),
 });
 office.recoverOnStartup();
 office.backfillProfiles();

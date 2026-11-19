@@ -1,7 +1,9 @@
 import { useState, type FormEvent } from "react";
 import type { BossId, Species } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
+import { groupRoleOptions } from "../state/role";
 import { SPECIES_LIST, speciesLabel } from "../state/species";
+import { useCatalog } from "../state/useCatalog";
 import { toFormError, type FormError } from "../ui/errors";
 import { Modal } from "./Modal";
 
@@ -12,8 +14,20 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
   const [workingDirectory, setWorkingDirectory] = useState("");
   const [name, setName] = useState("");
   const [species, setSpecies] = useState<"" | Species>("");
+  const [role, setRole] = useState("");
   const [error, setError] = useState<FormError | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const folder = workingDirectory.trim();
+  // Roles are read only on an explicit action (focusing/opening the selector or "Load roles"), never on keystrokes.
+  const { entry: rolesEntry, load: loadRoles, refresh: refreshRoles } = useCatalog(
+    folder ? { kind: "folder", path: folder } : null,
+  );
+  const agents = "catalog" in rolesEntry ? (rolesEntry.catalog?.agents ?? []) : [];
+  const roleGroups = groupRoleOptions(agents);
+  const selectedAgent = agents.find((a) => a.name === role);
+  const rolesLoading = rolesEntry.status === "loading";
+  const rolesUnavailable = rolesEntry.status === "unavailable" && agents.length === 0;
 
   const bosses =
     state.bosses.length > 0 ? state.bosses : [{ id: "claude" as BossId, name: "Claude", available: true }];
@@ -29,6 +43,7 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
         workingDirectory,
         ...(name.trim() !== "" ? { name } : {}),
         ...(species !== "" ? { species } : {}),
+        ...(role !== "" ? { role } : {}),
       });
       onClose();
     } catch (err) {
@@ -63,7 +78,10 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
         </label>
         <label>
           Working directory
-          <input type="text" value={workingDirectory} onChange={(e) => setWorkingDirectory(e.target.value)} placeholder="/path/to/project" />
+          <input type="text" value={workingDirectory} onChange={(e) => {
+              setWorkingDirectory(e.target.value);
+              setRole("");
+            }} placeholder="/path/to/project" />
           {fieldError("workingDirectory")}
         </label>
         <div className="form-row">
@@ -84,6 +102,71 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
             </select>
             {fieldError("species")}
           </label>
+        </div>
+        <div className="role-field">
+          <label>
+            Role (optional)
+            <select
+              value={role}
+              disabled={!folder}
+              onFocus={() => {
+                if (rolesEntry.status === "idle") loadRoles();
+              }}
+              onChange={(e) => setRole(e.target.value)}
+              aria-describedby="role-help"
+            >
+              <option value="">General</option>
+              {roleGroups.owner.map((a) => (
+                <option key={a.name} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+              {roleGroups.builtin.length > 0 ? (
+                <optgroup label="Built-in">
+                  {roleGroups.builtin.map((a) => (
+                    <option key={a.name} value={a.name}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </select>
+            {fieldError("role")}
+          </label>
+          <p id="role-help" className="role-help muted">
+            {!folder
+              ? "Enter a working directory to choose a specialist."
+              : rolesLoading
+                ? "Loading roles…"
+                : rolesUnavailable
+                  ? "Couldn't read this folder's agents."
+                  : selectedAgent
+                    ? selectedAgent.description
+                    : "General runs as a plain employee. Open the list to see your agents."}
+          </p>
+          {folder ? (
+            <button type="button" className="link" disabled={rolesLoading} onClick={rolesEntry.status === "ready" ? refreshRoles : loadRoles}>
+              {rolesEntry.status === "ready" ? "Reload roles" : "Load roles"}
+            </button>
+          ) : null}
+          {roleGroups.owner.length + roleGroups.builtin.length > 0 ? (
+            <ul className="role-list">
+              {[...roleGroups.owner, ...roleGroups.builtin].map((a) => (
+                <li key={a.name}>
+                  <button
+                    type="button"
+                    className={`role-option${role === a.name ? " is-selected" : ""}`}
+                    aria-pressed={role === a.name}
+                    onClick={() => setRole(role === a.name ? "" : a.name)}
+                  >
+                    <strong>{a.name}</strong>
+                    {a.builtin ? <span className="menu-alias">built-in</span> : null}
+                    <span className="menu-desc">{a.description}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         {error && !error.field ? <p className="field-error">{error.message}</p> : null}
         <div className="actions">

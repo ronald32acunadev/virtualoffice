@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import type { AgentAdapter, AgentMessage, AgentSink, ApprovalOutcome, ApprovalPrompt } from "../ports/agent-adapter.ts";
+import type { CatalogProvider } from "../ports/catalog-provider.ts";
 import type { EventBus } from "../ports/event-bus.ts";
 import type { OfficeRepository } from "../ports/office-repository.ts";
 import type { SessionCatalog } from "../ports/session-catalog.ts";
+import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import {
   BOSSES,
@@ -14,11 +17,13 @@ import {
   isSpecies,
   type ApprovalRequest,
   type Boss,
+  type Catalog,
   type ClaudeSessionSummary,
   type Decision,
   type Employee,
   type ImportSkipReason,
   type Message,
+  type ProviderCatalog,
   type Species,
 } from "../domain/types.ts";
 
@@ -34,6 +39,8 @@ export type OfficeDeps = {
   sessions?: SessionCatalog;
   /** Source of randomness for generated names and species; injectable for deterministic tests. */
   random?: RandomFn;
+  /** Reads a folder's commands and agents without an employee. Without it, catalogs come only from live sessions. */
+  catalogProvider?: CatalogProvider;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -74,6 +81,11 @@ export class OfficeService {
   private readonly isDirectory: (path: string) => boolean;
   private readonly catalog: SessionCatalog | undefined;
   private readonly random: RandomFn;
+  private readonly catalogProvider: CatalogProvider | undefined;
+  /** Catalogs per absolute folder; only successful reads are stored. */
+  private readonly catalogCache = new Map<string, Catalog>();
+  /** In-flight probes per folder, so concurrent requests share one. */
+  private readonly probes = new Map<string, Promise<Catalog>>();
   /** Per-employee tail of in-flight message deliveries, so concurrent sends keep their order. */
   private readonly deliveries = new Map<string, Promise<unknown>>();
 
@@ -90,6 +102,7 @@ export class OfficeService {
     this.isDirectory = deps.isDirectory ?? defaultIsDirectory;
     this.catalog = deps.sessions;
     this.random = deps.random ?? Math.random;
+    this.catalogProvider = deps.catalogProvider;
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -113,6 +126,26 @@ export class OfficeService {
   listMessages(employeeId: string): Message[] {
     this.requireEmployee(employeeId);
     return this.repository.listMessages(employeeId);
+  }
+
+  /** Commands and agents of a folder: cached, or probed on a miss or when `refresh` is true. */
+  async getCatalog(query: { workingDirectory?: unknown; refresh?: unknown }): Promise<Catalog> {
+    const folder = this.requireFolder(query.workingDirectory);
+    return this.folderCatalog(folder, parseRefresh(query.refresh));
+  }
+
+  /** An employee's catalog: the live session's lists when it has one, else its folder's. */
+  async getEmployeeCatalog(employeeId: string, query: { refresh?: unknown }): Promise<Catalog> {
+    const employee = this.requireEmployee(employeeId);
+    const refresh = parseRefresh(query.refresh);
+    if (this.sessions.get(employeeId)?.active) {
+      const live = await this.adapter.fetchCatalog(employeeId);
+      if (live) return this.cacheCatalog(employee.workingDirectory, live);
+    }
+    if (!this.isDirectory(employee.workingDirectory)) {
+      throw new OfficeError("catalog_unavailable", `Project folder not found: ${employee.workingDirectory}`);
+    }
+    return this.folderCatalog(path.resolve(employee.workingDirectory), refresh);
   }
 
   /** Existing Claude sessions, filtered by `q` over title and folder, newest first, then paged. */
@@ -205,6 +238,7 @@ export class OfficeService {
         name: this.nextName(),
         species: generateSpecies(this.random),
         importedAt: timestamp,
+        role: null,
         providerSessionId: sessionId,
         status: folderExists ? "idle" : "failed",
         failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
@@ -222,35 +256,38 @@ export class OfficeService {
 
   // ---- commands ----
 
-  hire(input: {
-    bossId: unknown;
-    task: unknown;
-    workingDirectory: unknown;
-    name?: unknown;
-    species?: unknown;
-  }): Employee {
-    const boss = BOSSES.find((candidate) => candidate.id === input.bossId);
-    if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
-    if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
-    if (typeof input.task !== "string" || input.task.trim() === "") {
-      throw new OfficeError("validation_error", "Task must not be empty", "task");
+  /**
+   * Hire as the HTTP layer receives it: a role is checked against the folder's agents (probing when
+   * the catalog is not cached) before anyone is created; every other rule is checked first.
+   */
+  async hireFromRequest(input: HireInput): Promise<Employee> {
+    this.validateHire(input);
+    const role = parseRole(input.role);
+    if (role !== null) {
+      const catalog = await this.folderCatalog(path.resolve(input.workingDirectory as string), false);
+      if (!catalog.agents.some((agent) => agent.name === role)) {
+        throw new OfficeError("validation_error", `Unknown role: ${role}`, "role");
+      }
     }
-    if (typeof input.workingDirectory !== "string" || !this.isDirectory(input.workingDirectory)) {
-      throw new OfficeError("validation_error", "Working directory must be an existing folder", "workingDirectory");
-    }
+    return this.hire(input);
+  }
+
+  hire(input: HireInput): Employee {
+    const { boss, task, workingDirectory } = this.validateHire(input);
+    const role = parseRole(input.role);
     const name = input.name === undefined ? this.nextName() : parseName(input.name);
     const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
-    const task = input.task.trim();
     const timestamp = this.timestamp();
     const employee: Employee = {
       id: this.newId(),
       bossId: boss.id,
       hiredBy: null,
       task,
-      workingDirectory: input.workingDirectory,
+      workingDirectory,
       name,
       species,
       importedAt: null,
+      role,
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -262,6 +299,17 @@ export class OfficeService {
     this.appendMessage(employee.id, { kind: "user_text", content: task });
     this.openSession(employee, task);
     return this.requireEmployee(employee.id);
+  }
+
+  /** Checks the rules every hire shares and returns the parsed values. */
+  private validateHire(input: HireInput): { boss: Boss; task: string; workingDirectory: string } {
+    const boss = BOSSES.find((candidate) => candidate.id === input.bossId);
+    if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
+    if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
+    if (typeof input.task !== "string" || input.task.trim() === "") {
+      throw new OfficeError("validation_error", "Task must not be empty", "task");
+    }
+    return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
   /** Renames an employee and/or changes its species. Nothing changes when any value is invalid. */
@@ -515,6 +563,11 @@ export class OfficeService {
         this.appendMessage(employeeId, { kind: "system", content: `Employee failed: ${reason}` });
         this.setStatus(employeeId, "failed", { failureReason: reason });
       },
+      onCatalog: (catalog) => {
+        if (!session.active) return;
+        const employee = this.repository.getEmployee(employeeId);
+        if (employee) this.cacheCatalog(employee.workingDirectory, catalog);
+      },
       requestApproval: (prompt, signal) => this.requestApproval(employeeId, session, prompt, signal),
     };
   }
@@ -580,6 +633,45 @@ export class OfficeService {
 
   // ---- helpers ----
 
+  /** The folder as an absolute path, or a validation error when it is not an existing directory. */
+  private requireFolder(value: unknown): string {
+    if (typeof value !== "string" || !this.isDirectory(value)) {
+      throw new OfficeError("validation_error", "Working directory must be an existing folder", "workingDirectory");
+    }
+    return value;
+  }
+
+  private cacheCatalog(folder: string, provided: ProviderCatalog): Catalog {
+    const catalog = buildCatalog(provided);
+    this.catalogCache.set(path.resolve(folder), catalog);
+    return catalog;
+  }
+
+  private async folderCatalog(folder: string, refresh: boolean): Promise<Catalog> {
+    const key = path.resolve(folder);
+    if (!refresh) {
+      const cached = this.catalogCache.get(key);
+      if (cached) return cached;
+    }
+    const running = this.probes.get(key);
+    if (running) return running;
+    const provider = this.catalogProvider;
+    if (!provider) throw new OfficeError("catalog_unavailable", "Skills and agents cannot be read for this folder");
+    const probe = (async () => {
+      try {
+        return this.cacheCatalog(key, await provider.probe(key));
+      } catch (error) {
+        throw new OfficeError("catalog_unavailable", `Skills and agents could not be read: ${errorReason(error)}`);
+      }
+    })();
+    this.probes.set(key, probe);
+    try {
+      return await probe;
+    } finally {
+      if (this.probes.get(key) === probe) this.probes.delete(key);
+    }
+  }
+
   private requireEmployee(id: string): Employee {
     const employee = this.repository.getEmployee(id);
     if (!employee) throw new OfficeError("not_found", "Employee not found");
@@ -621,6 +713,30 @@ export class OfficeService {
   private timestamp(): string {
     return this.now().toISOString();
   }
+}
+
+type HireInput = {
+  bossId: unknown;
+  task: unknown;
+  workingDirectory: unknown;
+  name?: unknown;
+  species?: unknown;
+  role?: unknown;
+};
+
+/** `undefined` and `null` mean General; anything else must be a non-empty agent name. */
+function parseRole(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new OfficeError("validation_error", "Role must be an agent name", "role");
+  }
+  return value;
+}
+
+function parseRefresh(value: unknown): boolean {
+  if (value === undefined || value === false || value === "false") return false;
+  if (value === true || value === "true") return true;
+  throw new OfficeError("validation_error", "refresh must be true or false", "refresh");
 }
 
 function parseName(value: unknown): string {

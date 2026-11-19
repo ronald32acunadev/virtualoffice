@@ -60,3 +60,18 @@ describe("Schema migration risk: existing database", () => {
     reopened.close();
   });
 });
+
+describe("US-03 / AC-02 role column", () => {
+  it("adds a nullable role column to an older database, keeps rows, and persists a role", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+    expect(first.getEmployee("e1")?.role).toBeNull();
+    const e1 = first.getEmployee("e1")!;
+    first.updateEmployee({ ...e1, role: "review-risk" });
+    first.close();
+    const second = new SqliteOfficeRepository(file); // idempotent on reopen
+    expect(second.getEmployee("e1")?.role).toBe("review-risk");
+    expect(second.getEmployee("e2")?.role).toBeNull();
+    second.close();
+  });
+});

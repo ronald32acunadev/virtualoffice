@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ClaudeSessionCatalog } from "../../src/agents/claude/claude-session-catalog.ts";
+import { ClaudeCatalogProvider } from "../../src/agents/claude/claude-catalog-provider.ts";
 import { ClaudeAgentAdapter } from "../../src/agents/claude/claude-agent-adapter.ts";
 import { InMemoryEventBus } from "../../src/events/in-memory-event-bus.ts";
 import { OfficeService } from "../../src/office/application/office-service.ts";
@@ -12,18 +13,20 @@ import { FakeSdk, FakeSessionStore, waitFor } from "./fake-sdk.ts";
 
 export function createHarness(
   repository: OfficeRepository = new SqliteOfficeRepository(":memory:"),
-  options: { random?: () => number } = {},
+  options: { random?: () => number; probeTimeoutMs?: number } = {},
 ) {
   const sdk = new FakeSdk();
   const store = new FakeSessionStore();
   const catalog = new ClaudeSessionCatalog(store.list, store.messages);
   const adapter = new ClaudeAgentAdapter(sdk.query);
   const events = new InMemoryEventBus();
+  const catalogProvider = new ClaudeCatalogProvider(sdk.query, options.probeTimeoutMs);
   const office = new OfficeService({
     repository,
     adapter,
     events,
     sessions: catalog,
+    catalogProvider,
     ...(options.random ? { random: options.random } : {}),
   });
   const emitted: ServerEvent[] = [];

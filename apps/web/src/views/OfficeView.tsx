@@ -5,6 +5,7 @@ import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
+import { RoleBadge } from "../ui/RoleBadge";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
 
 export function OfficeView() {
@@ -86,6 +87,7 @@ export function OfficeView() {
             </button>
           </div>
           <span className={`status status-${card.status}`}>{card.status.replace("_", " ")}</span>
+          <RoleBadge role={card.role} />
           <p className="muted">{card.task}</p>
           <button type="button" onClick={() => openWorkspace(card.id)}>
             Open in workspace

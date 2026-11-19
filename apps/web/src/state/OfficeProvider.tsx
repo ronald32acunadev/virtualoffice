@@ -20,6 +20,7 @@ export type OfficeActions = {
     workingDirectory: string;
     name?: string;
     species?: Species;
+    role?: string;
   }) => Promise<void>;
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) => Promise<void>;
   importSessions: (sessionIds: string[]) => Promise<ImportResult>;

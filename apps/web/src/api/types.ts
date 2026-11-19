@@ -21,6 +21,7 @@ export type Employee = {
   name: string;
   species: Species;
   importedAt: string | null;
+  role: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
@@ -40,6 +41,16 @@ export type Message = {
   createdAt: string;
   sourceUuid: string | null;
 };
+
+export type SlashCommand = {
+  name: string;
+  description: string;
+  argumentHint: string;
+  aliases?: string[];
+  builtin?: boolean;
+};
+export type AgentInfo = { name: string; description: string; model?: string; builtin: boolean };
+export type Catalog = { commands: SlashCommand[]; agents: AgentInfo[] };
 
 export type ClaudeSessionSummary = {
   sessionId: string;

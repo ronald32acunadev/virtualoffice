@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useOffice } from "../state/OfficeProvider";
+import { RoleBadge } from "../ui/RoleBadge";
 import { SPECIES_EMOJI } from "../state/species";
 import { groupEmployeesByBoss } from "../state/sidebar";
 
@@ -59,7 +60,10 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
                       {SPECIES_EMOJI[employee.species]}
                     </span>
                     <span className="employee-text">
-                      <span className="employee-name">{employee.name}</span>
+                      <span className="employee-name">
+                        {employee.name}
+                        <RoleBadge role={employee.role} />
+                      </span>
                       <span className="employee-task" title={employee.task}>
                         {employee.task}
                       </span>

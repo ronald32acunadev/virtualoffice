@@ -1,5 +1,6 @@
 import type {
   ApprovalRequest,
+  Catalog,
   BossId,
   ClaudeSessionSummary,
   Decision,
@@ -95,7 +96,18 @@ export const api = {
     workingDirectory: string;
     name?: string;
     species?: Species;
+    role?: string;
   }) => request<{ employee: Employee }>("POST", "/api/employees", input),
+  getFolderCatalog: (workingDirectory: string, refresh = false) => {
+    const query = new URLSearchParams({ workingDirectory });
+    if (refresh) query.set("refresh", "true");
+    return request<{ catalog: Catalog }>("GET", `/api/catalog?${query.toString()}`);
+  },
+  getEmployeeCatalog: (employeeId: string, refresh = false) =>
+    request<{ catalog: Catalog }>(
+      "GET",
+      `/api/employees/${encodeURIComponent(employeeId)}/catalog${refresh ? "?refresh=true" : ""}`,
+    ),
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) =>
     request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
   listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {

@@ -22,6 +22,7 @@ const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
   boss_unavailable: 409,
   approval_not_pending: 409,
   working_directory_missing: 409,
+  catalog_unavailable: 503,
 };
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string, field?: string) {
@@ -111,15 +112,25 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.post("/api/employees", async (request, reply) => {
     const body = asRecord(request.body);
-    const employee = office.hire({
+    const employee = await office.hireFromRequest({
       bossId: body.bossId,
       task: body.task,
       workingDirectory: body.workingDirectory,
       name: body.name,
       species: body.species,
+      role: body.role,
     });
     return reply.code(201).send({ employee });
   });
+
+  app.get("/api/catalog", async (request) => {
+    const query = asRecord(request.query);
+    return { catalog: await office.getCatalog({ workingDirectory: query.workingDirectory, refresh: query.refresh }) };
+  });
+
+  app.get<{ Params: { id: string } }>("/api/employees/:id/catalog", async (request) => ({
+    catalog: await office.getEmployeeCatalog(request.params.id, { refresh: asRecord(request.query).refresh }),
+  }));
 
   app.patch<{ Params: { id: string } }>("/api/employees/:id", async (request) => {
     const body = asRecord(request.body);

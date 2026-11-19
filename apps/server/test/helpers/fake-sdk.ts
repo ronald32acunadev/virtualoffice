@@ -10,7 +10,16 @@ export class FakeSession {
   readonly options: Options;
   interrupted = false;
   closed = false;
+  /** Lists returned by `supportedCommands()` / `supportedAgents()`, like a live SDK session. */
+  liveCommands: object[] = [];
+  liveAgents: object[] = [];
   private readonly entries = new PushQueue<Entry>();
+  private initResolve: (value: unknown) => void = () => {};
+  private initReject: (error: Error) => void = () => {};
+  private readonly initPromise = new Promise<unknown>((resolve, reject) => {
+    this.initResolve = resolve;
+    this.initReject = reject;
+  });
 
   constructor(params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) {
     this.options = params.options ?? {};
@@ -35,6 +44,18 @@ export class FakeSession {
   }
   end(): void {
     this.entries.push({ kind: "end" });
+  }
+
+  /** Settles `initializationResult()` the way the SDK does for a probe or a live session. */
+  resolveInit(result: { commands?: object[]; agents?: object[] }): void {
+    this.initResolve({ commands: [], agents: [], ...result });
+  }
+  rejectInit(error: Error): void {
+    this.initReject(error);
+  }
+  /** Emits the SDK push that replaces the command list. */
+  commandsChanged(commands: object[]): void {
+    this.emit({ type: "system", subtype: "commands_changed", commands, uuid: "u-cc", session_id: "sess-1" });
   }
 
   init(sessionId = "sess-1"): void {
@@ -63,7 +84,11 @@ export class FakeSession {
 
   asQuery() {
     const entries = this.entries;
+    this.initPromise.catch(() => {});
     return {
+      initializationResult: () => this.initPromise,
+      supportedCommands: async () => this.liveCommands,
+      supportedAgents: async () => this.liveAgents,
       interrupt: async () => {
         this.interrupted = true;
       },

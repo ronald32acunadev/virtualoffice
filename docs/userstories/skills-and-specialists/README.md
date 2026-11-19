@@ -4,16 +4,16 @@ Design: [2026-11-19-skills-and-specialists-design.md](../../superpowers/specs/20
 Builds on: [Workspace and import stories](../workspace-and-import/README.md).
 
 Branch: `feature/skills-and-specialists`, created from `feature/workspace-and-import` after backlog approval.
-Execution mode: pending owner choice (all stories or one at a time).
+Execution mode: all stories (approved by the owner on 2026-11-19). Implementer: Claude Sonnet subagents (no local model loaded).
 
 ## Story status
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Know what skills and agents a folder has | — | pending |
-| US-02 | `/` menu in the chat | US-01 | pending |
-| US-03 | Hire a specialist | US-01 | pending |
-| US-04 | Employee toolbox | US-01, US-02 | pending |
+| US-01 | Know what skills and agents a folder has | — | complete |
+| US-02 | `/` menu in the chat | US-01 | in progress: Tab insertion not observed in the test pane (Enter observed) |
+| US-03 | Hire a specialist | US-01 | in progress: Role selector UI and office label not observed |
+| US-04 | Employee toolbox | US-01, US-02 | in progress: popover overflow fixed, re-check pending |
 
 Verification levels: Vitest for server catalog, cache, validation, and adapter options (fake `query` with a fake `initializationResult`, `supportedCommands`, `supportedAgents`); Vitest for pure client modules (filtering, sorting, insertion); manual checks with the real CLI and in the browser.
 
@@ -73,3 +73,5 @@ As the owner, I want a toolbox on each employee showing its skills and agents, s
 | `US-04 / AC-01`–`AC-04` | Client unit tests for toolbox insertion; manual in browser | Pending |
 | Risk: probe leaks CLI processes | Server test asserting the probe is closed on success, failure, and timeout | Pending |
 | Risk: existing hire, chat, import, and resume flows | Existing server and web suites stay green | Pending |
+
+Evidence 2026-11-19: server 134 tests, web 55 tests passed. Manual on a test server with the real CLI: folder catalog 102 commands / 16 agents in 1236 ms, cached 10 ms, no leftover probe process; bad folder 400; unknown role 400; hired `review-risk` specialist answered in that agent's JSON format; `/cognitive-doc-design` sent from the office ran the skill; `/jud` menu listed judgment-day and Enter inserted it. Fixed during verification: highlight split the command name with spaces; toolbox popover overflowed the right edge.
