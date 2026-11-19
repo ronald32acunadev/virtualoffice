@@ -1,6 +1,6 @@
 # Virtual Office API Contract
 
-Version: MVP + workspace-and-import (see `docs/userstories/workspace-and-import/README.md`).
+Version: MVP + workspace-and-import + skills-and-specialists (see `docs/userstories/workspace-and-import/README.md`).
 
 Shared contract between `apps/server` and `apps/web`. All timestamps are ISO 8601 strings. All IDs are strings.
 
@@ -25,6 +25,7 @@ type Employee = {
   name: string;                 // 1-40 chars after trim; not unique
   species: Species;
   importedAt: string | null;    // set when created by an import
+  role: string | null;          // agent name the employee runs as (SDK `agent` option); null = General
   providerSessionId: string | null; status: EmployeeStatus; failureReason: string | null;
   createdAt: string; updatedAt: string;
 };
@@ -35,6 +36,10 @@ type Message = {
   toolName: string | null; toolUseId: string | null; parentToolUseId: string | null; createdAt: string;
   sourceUuid: string | null;    // provider message uuid (imports and catch-up dedupe); null for live-only entries
 };
+
+type SlashCommand = { name: string; description: string; argumentHint: string; aliases?: string[]; builtin?: boolean };
+type AgentInfo = { name: string; description: string; model?: string; builtin: boolean }; // builtin computed by the server from a fixed name list
+type Catalog = { commands: SlashCommand[]; agents: AgentInfo[] }; // commands: non-built-in first; agents: owner's first, built-in last
 
 type ClaudeSessionSummary = {
   sessionId: string; title: string; cwd: string | null; gitBranch: string | null;
@@ -61,7 +66,9 @@ type ApprovalRequest = {
 | --- | --- | --- | --- |
 | `GET /api/state` | — | `200 { bosses: Boss[], employees: Employee[], approvals: ApprovalRequest[] }` (approvals: pending only) | — |
 | `GET /api/employees/:id/messages` | — | `200 { messages: Message[] }` ordered by creation | `404 not_found` |
-| `POST /api/employees` | `{ bossId, task, workingDirectory, name?, species? }` | `201 { employee }` (name/species generated when omitted) | `400 validation_error` with `field` (`task` empty, `workingDirectory` missing / not a directory, unknown `bossId`, `name` empty or > 40, unknown `species`); `409 boss_unavailable` |
+| `POST /api/employees` | `{ bossId, task, workingDirectory, name?, species?, role? }` | `201 { employee }` (name/species generated when omitted) | `400 validation_error` with `field` (`task` empty, `workingDirectory` missing / not a directory, unknown `bossId`, `name` empty or > 40, unknown `species`, `role` not in the folder's agents); `409 boss_unavailable`; `503 catalog_unavailable` (role given but the folder catalog cannot be read) |
+| `GET /api/catalog?workingDirectory=<abs>&refresh=<bool>` | — | `200 { catalog: Catalog }` (cached per folder; `refresh=true` re-probes) | `400 validation_error` (folder missing / not a directory); `503 catalog_unavailable` |
+| `GET /api/employees/:id/catalog?refresh=<bool>` | — | `200 { catalog: Catalog }` (live session lists when the employee has one, else the folder catalog) | `404 not_found`; `503 catalog_unavailable` |
 | `PATCH /api/employees/:id` | `{ name?, species? }` (at least one) | `200 { employee }` | `400 validation_error`; `404 not_found` |
 | `POST /api/employees/:id/messages` | `{ text }` (non-empty) | `202 { message }` | `400 validation_error`; `404 not_found`; `409 working_directory_missing` (employee folder does not exist) |
 | `GET /api/imports/claude/sessions?q=&limit=&offset=` | — | `200 { sessions: ClaudeSessionSummary[], total: number }` newest first; `q` filters title and cwd case-insensitive over all sessions; `limit` default 30, max 100 | `400 validation_error` |
