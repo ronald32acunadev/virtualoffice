@@ -13,6 +13,7 @@ Implementer route: no local model available (LM Studio unreachable, Ollama has n
 | US-02 | Detailed workstations, boss suites, and office props | US-01 | complete |
 | US-03 | Expressive game-style characters and status animations | US-02 | complete |
 | US-04 | Game-like camera controls, lighting mood toggle, and HUD polish | US-01, US-03 | complete |
+| US-05 | Random *The Office* speech bubbles for 3D agents and bosses | US-03, US-04 | complete |
 
 Constraints (confirmed):
 - 100% local / offline rendering: no external CDN textures, fonts, or HDRI downloads (all materials, floor grain, monitor screens, and signage use procedural Three.js geometry/materials or `CanvasTexture`, and text labels continue using `@react-three/drei` `Html`).
@@ -63,6 +64,15 @@ As the owner, I want smooth camera navigation, a quick day/cozy-evening lighting
 - `US-04 / AC-03`: Given the brighter 3D backdrop, then the floating HUD elements (connection indicator, pending-approvals badge, employee details card, department labels, and character nameplates) remain legible with clean contrast and game-like styling.
 - `US-04 / AC-04` (regression): Given pending approvals exist or an employee is clicked without `/workspace` open, then the pending-approvals badge and fallback employee card still work exactly as before.
 
+## US-05 — Random *The Office* speech bubbles for 3D agents and bosses
+
+As the owner, I want the agents and bosses in the 3D office to occasionally say random quotes from *The Office*, so that the office feels alive and entertaining while I work.
+
+- `US-05 / AC-01`: Given the quote catalog (`apps/web/src/scene/officeQuotes.ts`), then it provides a curated pool of iconic *The Office* quotes (with optional status-aware picks for `working`, `waiting_approval`, `idle`, and `failed`) and pure selection helpers that avoid repeating the same quote back-to-back for the same speaker.
+- `US-05 / AC-02`: Given `/office` has at least one active boss or employee and chatter is enabled, then every few seconds (staggered, one speaker at a time) a crisp floating speech bubble (`pointer-events: none`) appears above a character or boss for several seconds and fades out cleanly without obscuring clicks, hover tooltips, or approval/failure markers.
+- `US-05 / AC-03`: Given the `.office-hud` toolbar, then a toggle button (enabled by default, persisted in `localStorage`) lets the owner mute or re-enable the random office quotes at any time.
+- `US-05 / AC-04` (regression): Given speech bubbles are active or muted, then clicking characters, hover tooltips, Day/Evening lighting, Reset view, and all existing tests continue working unchanged.
+
 ---
 
 ## Verification mapping
@@ -75,4 +85,5 @@ Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` (14 files, 1
 | `US-02 / AC-01`–`AC-04` | `apps/web/src/scene/officeTheme.test.ts` (`MONITOR_VISUALS`, `overlapsAnyDesk` against all 4 bosses and `0..8` employee desks); manual WebGL check | Passed. Desks show wood tabletops, legs, ergonomic swivel chairs, keyboards, mice, lamps, mugs, and status-lit screens; active boss has executive suite and seated character; unavailable suites show reserved frosted-glass desks; whiteboard, bookshelves, potted plants, coffee corner, and wall art render with zero desk collisions. |
 | `US-03 / AC-01`–`AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (`CHARACTER_POSES` for all 6 statuses, `hasSpecialistAccessory`), `apps/web/src/state/role.test.ts`; manual WebGL check | Passed. Seated characters (`Ziggy`, `Poppy`) rendered with articulated proportions, species features, status poses/animations, and legible dark rounded `.name-label` pills. |
 | `US-04 / AC-01`–`AC-04` | `apps/web/src/scene/camera.test.ts` (`clampCameraTarget`, `readSavedMood`/`saveMood`); manual WebGL check of orbit/pan, `Reset view`, and `Day / Evening` toggle across reload | Passed. Top-left `.office-hud` shows `☀ Day` (`aria-pressed="false"`) and `Reset view`; toggling switched to `🌙 Evening` (`aria-pressed="true"`) with warm evening lighting and glowing lamps; persisted across `page.reload()`; canvas drag + `Reset view` smoothly restored overview framing with 0 errors. |
+| `US-05 / AC-01`–`AC-04` | `apps/web/src/scene/officeQuotes.test.ts` (quote pool, no-repeat picker, chatter persistence); manual WebGL check of speech bubbles and HUD mute toggle | Passed. 68 web tests green; live `/office` rendered `.speech-bubble` (`"No God, please no!"`, `"Sometimes I'll start a sentence and I don't even know where it's going."`), `"💬 Quotes"` (`aria-pressed="true"`) muted immediately to `"🔇 Muted"` (`aria-pressed="false"`, 0 bubbles), persisted across `page.reload()`, and resumed cleanly on unmute with 0 console errors and 0 external requests. |
 | Risk: existing `/office` ↔ `/workspace` link and tests | Full `apps/server` (134 tests) and `apps/web` (64 tests) suites + `npm run build` + `npm run typecheck` | Passed. |

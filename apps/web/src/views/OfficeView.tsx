@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../api/client";
 import { readSavedMood, saveMood } from "../scene/camera";
+import { readSavedChatter, saveChatter } from "../scene/officeQuotes";
 import { OfficeScene } from "../scene/OfficeScene";
 import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
@@ -15,6 +16,7 @@ export function OfficeView() {
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const [mood, setMood] = useState<LightingMood>(() => readSavedMood());
+  const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
 
   useEffect(() => {
@@ -54,6 +56,14 @@ export function OfficeView() {
     });
   }, []);
 
+  const toggleChatter = useCallback(() => {
+    setChatterEnabled((prev) => {
+      const next = !prev;
+      saveChatter(next);
+      return next;
+    });
+  }, []);
+
   const resetView = useCallback(() => {
     setResetToken((n) => n + 1);
   }, []);
@@ -78,6 +88,7 @@ export function OfficeView() {
           onClear={clear}
           mood={mood}
           resetToken={resetToken}
+          chatterEnabled={chatterEnabled}
         />
       </SceneErrorBoundary>
       <div className="office-hud" role="toolbar" aria-label="Office view controls">
@@ -97,6 +108,15 @@ export function OfficeView() {
           title="Reset camera to full office overview"
         >
           Reset view
+        </button>
+        <button
+          type="button"
+          className="hud-btn"
+          aria-pressed={chatterEnabled}
+          onClick={toggleChatter}
+          title="Toggle random The Office quotes"
+        >
+          {chatterEnabled ? "💬 Quotes" : "🔇 Muted"}
         </button>
       </div>
       <div className={`connection connection-${state.connection}`}>

@@ -15,13 +15,21 @@ type Props = {
   selected: boolean;
   onSelect: (id: string) => void;
   lampOn?: boolean;
+  speechText?: string | null;
 };
 
 const MUTED_SHIRT = "#6e7480";
 const MUTED_HEAD = "#969ba3";
 const BASE_TORSO_Y = 0.6;
 
-export function Character({ employee, position, selected, onSelect, lampOn = false }: Props) {
+export function Character({
+  employee,
+  position,
+  selected,
+  onSelect,
+  lampOn = false,
+  speechText = null,
+}: Props) {
   const rootRef = useRef<Group>(null);
   const torsoRef = useRef<Group>(null);
   const headRef = useRef<Group>(null);
@@ -299,6 +307,13 @@ export function Character({ employee, position, selected, onSelect, lampOn = fal
         <Html position={[0, 1.9, 0]} center zIndexRange={[5, 0]}>
           <div className="name-label">{employeeLabel(employee)}</div>
         </Html>
+        {speechText && !hovered ? (
+          <Html position={[0, marker ? 3.25 : 2.75, 0]} center zIndexRange={[15, 0]}>
+            <div className="speech-bubble" role="status">
+              {speechText}
+            </div>
+          </Html>
+        ) : null}
         {hovered ? (
           <Html position={[0, 2.85, 0]} center zIndexRange={[20, 0]}>
             <div className="tooltip">

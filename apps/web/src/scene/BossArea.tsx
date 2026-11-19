@@ -309,7 +309,15 @@ function BossCharacter({
   );
 }
 
-export function BossArea({ boss, mood = "day" }: { boss: Boss; mood?: LightingMood }) {
+export function BossArea({
+  boss,
+  mood = "day",
+  speechText = null,
+}: {
+  boss: Boss;
+  mood?: LightingMood;
+  speechText?: string | null;
+}) {
   const [cx, cz] = AREA_CENTERS[boss.id];
   const color = AREA_COLORS[boss.id];
   const dim = !boss.available;
@@ -380,6 +388,13 @@ export function BossArea({ boss, mood = "day" }: { boss: Boss; mood?: LightingMo
           {dim ? <span>Coming soon</span> : null}
         </div>
       </Html>
+      {speechText && !dim ? (
+        <Html position={[desk[0], 3.15, desk[2]]} center distanceFactor={14} zIndexRange={[15, 0]}>
+          <div className="speech-bubble" role="status">
+            {speechText}
+          </div>
+        </Html>
+      ) : null}
     </group>
   );
 }

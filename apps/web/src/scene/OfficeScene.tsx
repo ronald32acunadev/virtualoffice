@@ -1,8 +1,8 @@
-import { useEffect, useRef, type ComponentRef } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
-import type { BossId } from "../api/types";
+import type { BossId, EmployeeStatus } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
 import { BossArea } from "./BossArea";
 import {
@@ -12,6 +12,7 @@ import {
 } from "./camera";
 import { Character } from "./Character";
 import { employeeDeskPosition } from "./layout";
+import { pickOfficeQuote, pickSpeaker } from "./officeQuotes";
 import { OfficeRoom } from "./OfficeRoom";
 import { MOOD_PALETTES, type LightingMood } from "./officeTheme";
 
@@ -87,20 +88,87 @@ function CameraRig({ resetToken }: { resetToken: number }) {
   );
 }
 
+type Speaker = { id: string; status?: EmployeeStatus };
+
 export function OfficeScene({
   onSelectEmployee,
   onClear,
   mood = "day",
   resetToken = 0,
+  chatterEnabled = true,
 }: {
   onSelectEmployee: (employeeId: string) => void;
   onClear: () => void;
   mood?: LightingMood;
   resetToken?: number;
+  chatterEnabled?: boolean;
 }) {
   const { state } = useOffice();
   const bosses = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
   const palette = MOOD_PALETTES[mood];
+
+  const [activeSpeech, setActiveSpeech] = useState<{ speakerId: string; text: string } | null>(null);
+  const lastSpeakerIdRef = useRef<string | null>(null);
+  const lastQuoteBySpeakerRef = useRef<Map<string, string>>(new Map());
+
+  const speakers = useMemo<Speaker[]>(() => {
+    const list: Speaker[] = state.employees.map((employee) => ({
+      id: employee.id,
+      status: employee.status,
+    }));
+    for (const boss of bosses) {
+      if (boss.available) {
+        list.push({ id: `boss:${boss.id}`, status: undefined });
+      }
+    }
+    return list;
+  }, [state.employees, bosses]);
+
+  const speakersRef = useRef(speakers);
+  speakersRef.current = speakers;
+  const hasSpeakers = speakers.length > 0;
+
+  useEffect(() => {
+    if (!chatterEnabled || !hasSpeakers) {
+      setActiveSpeech(null);
+      return;
+    }
+
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = (delayMs: number) => {
+      timerId = setTimeout(() => {
+        if (cancelled) return;
+        const speaker = pickSpeaker(speakersRef.current, lastSpeakerIdRef.current);
+        if (!speaker) {
+          setActiveSpeech(null);
+          return;
+        }
+        const lastQuote = lastQuoteBySpeakerRef.current.get(speaker.id) ?? null;
+        const quote = pickOfficeQuote(speaker.status, lastQuote);
+        lastSpeakerIdRef.current = speaker.id;
+        lastQuoteBySpeakerRef.current.set(speaker.id, quote);
+        setActiveSpeech({ speakerId: speaker.id, text: quote });
+
+        timerId = setTimeout(() => {
+          if (cancelled) return;
+          setActiveSpeech(null);
+          const pauseMs = 4500 + Math.random() * 3000;
+          scheduleNext(pauseMs);
+        }, 4800);
+      }, delayMs);
+    };
+
+    scheduleNext(2200);
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [chatterEnabled, hasSpeakers]);
 
   const indexByBoss = new Map<BossId, number>();
   const placed = state.employees.map((employee) => {
@@ -135,7 +203,12 @@ export function OfficeScene({
       <OfficeRoom mood={mood} />
 
       {bosses.map((boss) => (
-        <BossArea key={boss.id} boss={boss} mood={mood} />
+        <BossArea
+          key={boss.id}
+          boss={boss}
+          mood={mood}
+          speechText={activeSpeech?.speakerId === `boss:${boss.id}` ? activeSpeech.text : null}
+        />
       ))}
       {placed.map(({ employee, position }) => (
         <Character
@@ -145,6 +218,7 @@ export function OfficeScene({
           selected={state.selectedId === employee.id}
           onSelect={onSelectEmployee}
           lampOn={mood === "evening"}
+          speechText={activeSpeech?.speakerId === employee.id ? activeSpeech.text : null}
         />
       ))}
       <CameraRig resetToken={resetToken} />
