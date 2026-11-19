@@ -1,0 +1,99 @@
+# Two-Screen Workspace, Named Employees, and Claude Session Import — User Stories
+
+Design: [2026-11-19-workspace-and-import-design.md](../../superpowers/specs/2026-11-19-workspace-and-import-design.md) (approved by the owner on 2026-11-19).
+Builds on: [Virtual Office MVP stories](../virtual-office-mvp/README.md).
+
+Branch: `feature/workspace-and-import`, created from `feature/virtual-office-mvp` after backlog approval.
+Execution mode: pending owner choice (all stories or one at a time).
+
+## Story status
+
+| Story | Title | Depends on | Status |
+| --- | --- | --- | --- |
+| US-01 | Office and workspace as separate views | — | pending |
+| US-02 | Open an employee from the office on the other screen | US-01 | pending |
+| US-03 | Claude-like workspace | US-01 | pending |
+| US-04 | Named characters | US-03 | pending |
+| US-05 | Import existing Claude sessions | US-04 | pending |
+| US-06 | Catch up on terminal turns before resuming | US-05 | pending |
+
+Verification levels: Vitest for server use cases and API (fake SDK functions for `listSessions` and `getSessionMessages`), Vitest for pure client modules; manual checks in the browser for layout and cross-window behavior, and with real Claude sessions for import.
+
+---
+
+## US-01 — Office and workspace as separate views
+
+As the owner, I want the 3D office and the workspace at different addresses, so that I can put one on each monitor.
+
+- `US-01 / AC-01`: Given the server is running, when the owner opens `/office?token=…`, then only the full-screen 3D office (with the connection indicator) is shown.
+- `US-01 / AC-02`: Given the server is running, when the owner opens `/workspace?token=…`, then the workspace is shown with everything needed to work (employees, chat, approvals, new task, import) and a button that opens `/office` in a new window.
+- `US-01 / AC-03`: Given the owner opens `/?token=…`, then the browser is redirected to `/workspace` keeping the token.
+- `US-01 / AC-04`: Given both views are open in two windows, when any server event happens (status change, new message, approval), then both windows show it without reloading.
+- `US-01 / AC-05`: Given the server serves the built client, when `/office` or `/workspace` is loaded directly (or refreshed), then the page loads (no 404).
+
+## US-02 — Open an employee from the office on the other screen
+
+As the owner, I want clicking a character in the office to open its chat in the workspace window, so that the office works as the map for my second screen.
+
+- `US-02 / AC-01`: Given `/office` and `/workspace` are open in the same browser, when the owner clicks a character, then the workspace selects that employee within one second.
+- `US-02 / AC-02`: Given no workspace window is open, when the owner clicks a character, then the office shows a card with name, status, and an "Open in workspace" link that opens `/workspace?employee=<id>` with that employee selected.
+- `US-02 / AC-03`: Given pending approvals exist, when `/office` is shown, then a floating badge shows their count, and clicking it focuses the employee of the oldest pending approval in the workspace.
+
+## US-03 — Claude-like workspace
+
+As the owner, I want the workspace to read like the Claude app, so that following and steering agents feels like a normal chat.
+
+- `US-03 / AC-01`: Given employees exist, when the workspace loads, then the left sidebar lists them grouped by boss, each with species icon, name, status dot, and task title, newest activity first, plus "New task" and "Import from Claude" buttons and a pending-approvals section.
+- `US-03 / AC-02`: Given an employee is selected, when its conversation shows, then owner messages are right-aligned, agent text is rendered as markdown (headings, lists, code blocks), and the header shows name, species, status, folder, rename, and stop.
+- `US-03 / AC-03`: Given the conversation contains tool calls, then each appears as a one-line collapsed row with a readable label (for example "Ran `npm test`", "Edited `src/app.ts`") that expands to show input and result; subagent activity is nested under its row.
+- `US-03 / AC-04`: Given the message box has text, when the owner presses Enter, then it is sent; Shift+Enter inserts a newline; empty text is not sent.
+- `US-03 / AC-05`: Given the selected employee has pending approvals, then they appear at the top of the conversation with the same actions as the MVP inbox (approve, reject, approve for session, answer questions, approve plans).
+- `US-03 / AC-06` (regression): Given the MVP features, when using the workspace, then hiring, chatting, approvals, stopping, and resuming still work as in the MVP stories.
+
+## US-04 — Named characters
+
+As the owner, I want every employee to have its own name and character, so that the office feels like a game with people I recognize.
+
+- `US-04 / AC-01`: Given the owner hires without typing a name, when the employee is created, then it gets a generated name not used by another employee (or name + number when the list is exhausted) and a random species from `wolf, dog, fox, cat, bear, human`.
+- `US-04 / AC-02`: Given the hire form, when the owner types a name and picks a species, then the employee is created with them; a name empty after trim or longer than 40 characters, or an unknown species, is rejected with a validation error and no employee is created.
+- `US-04 / AC-03`: Given an employee, when the owner renames it or changes its species (`PATCH /api/employees/:id`), then the change is persisted and both views update live; invalid values are rejected and nothing changes.
+- `US-04 / AC-04`: Given employees created before this feature, when the server starts, then each one without a name gets a generated name and species.
+- `US-04 / AC-05`: Given the office view, then each character shows its name above it and a color/shape cue per species.
+
+## US-05 — Import existing Claude sessions
+
+As the owner, I want to choose which of my existing Claude conversations join the office, so that I can continue them from here without flooding the office.
+
+- `US-05 / AC-01`: Given the owner opens "Import from Claude", then a picker lists existing sessions newest first with title, folder, branch, and relative date; sessions already linked to an employee are disabled and marked "Already in the office"; a warning says to close a session in the terminal before resuming it here.
+- `US-05 / AC-02`: Given the picker, when the owner types in the search box, then the server filters all sessions (not only loaded ones) by title and folder, case-insensitive; "Load more" pages through results.
+- `US-05 / AC-03`: Given selected sessions, when the owner presses "Import N", then one `idle` Claude employee is created per session with generated name and species, the session's folder, its title as task, and its history (text, tool calls, tool results; nested when the SDK provides parent ids, flat otherwise).
+- `US-05 / AC-04`: Given a selected session is already imported, has no recorded folder, cannot be found, or cannot be read, then it is reported as skipped with reason `already_imported`, `missing_cwd`, `not_found`, or `read_failed`, and the others still import.
+- `US-05 / AC-05`: Given a session whose folder no longer exists, when imported, then it becomes a `failed` employee with reason "Project folder not found: <folder>", its history is readable, and its message box is disabled with that explanation; sending a message through the API returns `409 working_directory_missing`.
+- `US-05 / AC-06`: Given an imported employee with an existing folder, when the owner sends a message, then the session resumes with its full previous context (MVP resume path).
+- `US-05 / AC-07`: Given import, then no Claude session file is modified or deleted by the import itself.
+
+## US-06 — Catch up on terminal turns before resuming
+
+As the owner, I want turns I made in the terminal after importing to appear before I continue, so that I never continue a conversation blind.
+
+- `US-06 / AC-01`: Given an employee whose session gained new turns outside the office, when the owner sends a message and the session is resumed, then the missing messages are appended in order before the new owner message, with no duplicates.
+- `US-06 / AC-02`: Given no new turns exist, when resuming, then no messages are added besides the owner's.
+- `US-06 / AC-03`: Given reading the session fails during catch-up, then the resume continues and a `system` message notes that earlier turns could not be loaded.
+
+---
+
+## Verification mapping
+
+| Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
+| --- | --- | --- |
+| `US-01 / AC-01`–`AC-03` | Manual in browser; client routing unit test for `/` redirect | Pending |
+| `US-01 / AC-04` | Manual: two windows, trigger events with a real employee | Pending |
+| `US-01 / AC-05` | Server API test: SPA fallback for `/office` and `/workspace` | Pending |
+| `US-02 / AC-01`–`AC-03` | Unit test for channel message handling; manual with two windows | Pending |
+| `US-03 / AC-01`–`AC-05` | Unit tests for tool-row labels and sidebar ordering; manual visual check | Pending |
+| `US-03 / AC-06` | Existing MVP server and web suites stay green; manual MVP flow in workspace | Pending |
+| `US-04 / AC-01`–`AC-04` | Server tests: name generation, validation, PATCH, startup backfill | Pending |
+| `US-04 / AC-05` | Manual in a WebGL browser | Pending |
+| `US-05 / AC-01`–`AC-07` | Server tests with fake `listSessions`/`getSessionMessages`; manual import of real sessions | Pending |
+| `US-06 / AC-01`–`AC-03` | Server tests with fake `getSessionMessages` returning extra turns; manual terminal turn then resume | Pending |
+| Risk: schema change breaks existing database | Server test opening an MVP-shaped database and migrating it | Pending |
