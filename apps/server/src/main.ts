@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ClaudeAgentAdapter } from "./agents/claude/claude-agent-adapter.ts";
+import { ClaudeSessionCatalog } from "./agents/claude/claude-session-catalog.ts";
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
 import { createToken } from "./http/security.ts";
@@ -22,8 +23,10 @@ const office = new OfficeService({
   repository,
   adapter: new ClaudeAgentAdapter(),
   events: new InMemoryEventBus(),
+  sessions: new ClaudeSessionCatalog(),
 });
 office.recoverOnStartup();
+office.backfillProfiles();
 
 const app = await buildApp({
   token,

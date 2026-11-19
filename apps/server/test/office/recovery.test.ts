@@ -74,7 +74,7 @@ describe("US-07 keep history and resume employees", () => {
     const second = createHarness(new SqliteOfficeRepository(file));
     second.office.recoverOnStartup();
     expect(statusOf(second, employee.id)).toBe("stopped");
-    second.office.sendMessage(employee.id, "Continue please");
+    await second.office.sendMessage(employee.id, "Continue please");
     expect(statusOf(second, employee.id)).toBe("working");
     await waitFor(() => second.sdk.sessions.length === 1);
     expect(second.sdk.last.options.resume).toBe("sess-keep");
@@ -94,7 +94,7 @@ describe("US-07 keep history and resume employees", () => {
     const second = createHarness(new SqliteOfficeRepository(file));
     second.office.recoverOnStartup();
     expect(statusOf(second, employee.id)).toBe("idle");
-    second.office.sendMessage(employee.id, "More");
+    await second.office.sendMessage(employee.id, "More");
     await waitFor(() => second.sdk.sessions.length === 1);
     expect(second.sdk.last.options.resume).toBe("sess-1");
     second.repository.close();
@@ -113,7 +113,7 @@ describe("US-07 keep history and resume employees", () => {
     const second = createHarness(new SqliteOfficeRepository(file));
     second.office.recoverOnStartup();
     second.sdk.throwOnQuery = new Error("No conversation found with session ID: sess-1");
-    second.office.sendMessage(employee.id, "Are you there?");
+    await second.office.sendMessage(employee.id, "Are you there?");
     await waitFor(() => statusOf(second, employee.id) === "failed");
     expect(second.repository.getEmployee(employee.id)?.failureReason).toContain("No conversation found");
     const contents = second.office.listMessages(employee.id).map((m) => m.content);
@@ -127,7 +127,7 @@ describe("US-07 keep history and resume employees", () => {
     const employee = await hireWorking(h);
     h.sdk.last.fail(new Error("crash"));
     await waitFor(() => statusOf(h, employee.id) === "failed");
-    h.office.sendMessage(employee.id, "retry");
+    await h.office.sendMessage(employee.id, "retry");
     await waitFor(() => h.sdk.sessions.length === 2);
     expect(h.sdk.last.options.resume).toBe("sess-1");
     expect(statusOf(h, employee.id)).toBe("working");

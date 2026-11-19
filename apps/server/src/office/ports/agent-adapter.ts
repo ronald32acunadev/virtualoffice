@@ -6,6 +6,7 @@ export type AgentMessage = {
   toolName?: string | null;
   toolUseId?: string | null;
   parentToolUseId?: string | null;
+  sourceUuid?: string | null;
 };
 
 export type ApprovalPrompt = {

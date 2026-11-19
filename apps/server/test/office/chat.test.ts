@@ -33,7 +33,7 @@ describe("US-03 chat with an employee", () => {
     h.sdk.last.result("success");
     await waitFor(() => statusOf(h, employee.id) === "idle");
 
-    const message = h.office.sendMessage(employee.id, "Now add tests");
+    const message = await h.office.sendMessage(employee.id, "Now add tests");
     expect(message.kind).toBe("user_text");
     await waitFor(() => h.sdk.last.prompts.includes("Now add tests"));
     expect(h.sdk.sessions).toHaveLength(1);
@@ -47,9 +47,9 @@ describe("US-03 chat with an employee", () => {
     ]);
   });
 
-  it("US-03 / AC-03: rejects empty text and unknown employees", () => {
+  it("US-03 / AC-03: rejects empty text and unknown employees", async () => {
     const h = createHarness();
-    expect(() => h.office.sendMessage("nope", "x")).toThrow(/not found/i);
+    await expect(h.office.sendMessage("nope", "x")).rejects.toThrow(/not found/i);
   });
 
   it("US-03 / AC-04: persists completed entries by kind; deltas are live only; unknown types are ignored", async () => {

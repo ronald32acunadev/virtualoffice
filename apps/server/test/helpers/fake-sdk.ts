@@ -1,4 +1,5 @@
-import type { Options, PermissionResult, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import os from "node:os";
+import type { Options, PermissionResult, SDKSessionInfo, SDKUserMessage, SessionMessage } from "@anthropic-ai/claude-agent-sdk";
 import { PushQueue } from "../../src/agents/claude/push-queue.ts";
 import type { QueryFunction } from "../../src/agents/claude/claude-agent-adapter.ts";
 
@@ -110,4 +111,40 @@ export async function waitFor(condition: () => boolean, timeoutMs = 1000): Promi
     if (Date.now() - started > timeoutMs) throw new Error("waitFor timed out");
     await new Promise((resolve) => setTimeout(resolve, 2));
   }
+}
+
+/** Fake `listSessions` / `getSessionMessages`; records every call so tests can prove import only reads. */
+export class FakeSessionStore {
+  sessions: SDKSessionInfo[] = [];
+  history = new Map<string, SessionMessage[]>();
+  /** Session ids whose `getSessionMessages` rejects. */
+  failing = new Set<string>();
+  /** When set, `listSessions` rejects with this error. */
+  listError: Error | null = null;
+  readonly calls: string[] = [];
+
+  readonly list = async (): Promise<SDKSessionInfo[]> => {
+    this.calls.push("listSessions");
+    if (this.listError) throw this.listError;
+    return this.sessions;
+  };
+
+  readonly messages = async (sessionId: string): Promise<SessionMessage[]> => {
+    this.calls.push(`getSessionMessages:${sessionId}`);
+    if (this.failing.has(sessionId)) throw new Error("unreadable");
+    return this.history.get(sessionId) ?? [];
+  };
+
+  addSession(info: Partial<SDKSessionInfo> & { sessionId: string }, messages: SessionMessage[] = []): void {
+    this.sessions.push({ summary: `Summary ${info.sessionId}`, lastModified: 1_000, cwd: os.tmpdir(), ...info });
+    this.history.set(info.sessionId, messages);
+  }
+}
+
+export function userTurn(uuid: string, content: unknown, parent: string | null = null): SessionMessage {
+  return { type: "user", uuid, session_id: "s", message: { content }, parent_tool_use_id: parent, parent_agent_id: null };
+}
+
+export function assistantTurn(uuid: string, content: object[], parent: string | null = null): SessionMessage {
+  return { type: "assistant", uuid, session_id: "s", message: { content }, parent_tool_use_id: parent, parent_agent_id: null };
 }

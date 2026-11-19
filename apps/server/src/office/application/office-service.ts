@@ -3,16 +3,23 @@ import fs from "node:fs";
 import type { AgentAdapter, AgentMessage, AgentSink, ApprovalOutcome, ApprovalPrompt } from "../ports/agent-adapter.ts";
 import type { EventBus } from "../ports/event-bus.ts";
 import type { OfficeRepository } from "../ports/office-repository.ts";
+import type { SessionCatalog } from "../ports/session-catalog.ts";
+import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import {
   BOSSES,
+  MAX_NAME_LENGTH,
   OfficeError,
   isActiveStatus,
   isDecision,
+  isSpecies,
   type ApprovalRequest,
   type Boss,
+  type ClaudeSessionSummary,
   type Decision,
   type Employee,
+  type ImportSkipReason,
   type Message,
+  type Species,
 } from "../domain/types.ts";
 
 export type OfficeDeps = {
@@ -23,7 +30,16 @@ export type OfficeDeps = {
   newId?: () => string;
   /** Returns true when the path exists and is a directory. */
   isDirectory?: (path: string) => boolean;
+  /** Existing provider sessions (import and catch-up). Without it, listing is empty and catch-up is skipped. */
+  sessions?: SessionCatalog;
+  /** Source of randomness for generated names and species; injectable for deterministic tests. */
+  random?: RandomFn;
 };
+
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 100;
+const MAX_IMPORT_BATCH = 100;
+const CATCH_UP_FAILED = "Earlier turns could not be loaded";
 
 type PendingApproval = {
   employeeId: string;
@@ -47,6 +63,10 @@ export class OfficeService {
   private readonly now: () => Date;
   private readonly newId: () => string;
   private readonly isDirectory: (path: string) => boolean;
+  private readonly catalog: SessionCatalog | undefined;
+  private readonly random: RandomFn;
+  /** Per-employee tail of in-flight message deliveries, so concurrent sends keep their order. */
+  private readonly deliveries = new Map<string, Promise<unknown>>();
 
   /** Pending-approval registry: approvalId -> resolver of the agent's waiting promise. */
   private readonly pending = new Map<string, PendingApproval>();
@@ -59,6 +79,8 @@ export class OfficeService {
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
     this.isDirectory = deps.isDirectory ?? defaultIsDirectory;
+    this.catalog = deps.sessions;
+    this.random = deps.random ?? Math.random;
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -84,9 +106,120 @@ export class OfficeService {
     return this.repository.listMessages(employeeId);
   }
 
+  /** Existing Claude sessions, filtered by `q` over title and folder, newest first, then paged. */
+  async listClaudeSessions(query: {
+    q?: unknown;
+    limit?: unknown;
+    offset?: unknown;
+  }): Promise<{ sessions: ClaudeSessionSummary[]; total: number }> {
+    const limit = parseCount(query.limit, "limit", DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    const offset = parseCount(query.offset, "offset", 0, 0, Number.MAX_SAFE_INTEGER);
+    if (query.q !== undefined && typeof query.q !== "string") {
+      throw new OfficeError("validation_error", "q must be a string", "q");
+    }
+    const needle = (query.q ?? "").trim().toLowerCase();
+    const all = this.catalog ? await this.catalog.list() : [];
+    const imported = this.importedSessionIds();
+    const matching = all
+      .filter((s) => needle === "" || s.title.toLowerCase().includes(needle) || (s.cwd ?? "").toLowerCase().includes(needle))
+      .sort((a, b) => b.lastModified - a.lastModified);
+    return {
+      total: matching.length,
+      sessions: matching.slice(offset, offset + limit).map((s) => ({
+        sessionId: s.sessionId,
+        title: s.title,
+        cwd: s.cwd,
+        gitBranch: s.gitBranch,
+        lastModified: new Date(s.lastModified).toISOString(),
+        createdAt: s.createdAt === null ? null : new Date(s.createdAt).toISOString(),
+        alreadyImported: imported.has(s.sessionId),
+      })),
+    };
+  }
+
+  /** Creates one employee per chosen session, with its history. Only reads from the provider. */
+  async importClaudeSessions(
+    sessionIds: unknown,
+  ): Promise<{ imported: Employee[]; skipped: { sessionId: string; reason: ImportSkipReason }[] }> {
+    if (
+      !Array.isArray(sessionIds) ||
+      sessionIds.length < 1 ||
+      sessionIds.length > MAX_IMPORT_BATCH ||
+      sessionIds.some((id) => typeof id !== "string" || id === "")
+    ) {
+      throw new OfficeError("validation_error", `sessionIds must list 1-${MAX_IMPORT_BATCH} session ids`, "sessionIds");
+    }
+    const catalog = this.catalog;
+    let known: Map<string, Awaited<ReturnType<SessionCatalog["list"]>>[number]> | null = null;
+    if (catalog) {
+      try {
+        known = new Map((await catalog.list()).map((s) => [s.sessionId, s]));
+      } catch {
+        known = null;
+      }
+    }
+    const imported: Employee[] = [];
+    const skipped: { sessionId: string; reason: ImportSkipReason }[] = [];
+    for (const sessionId of sessionIds as string[]) {
+      if (this.importedSessionIds().has(sessionId)) {
+        skipped.push({ sessionId, reason: "already_imported" });
+        continue;
+      }
+      if (!catalog || !known) {
+        skipped.push({ sessionId, reason: "read_failed" });
+        continue;
+      }
+      const info = known.get(sessionId);
+      if (!info) {
+        skipped.push({ sessionId, reason: "not_found" });
+        continue;
+      }
+      if (!info.cwd) {
+        skipped.push({ sessionId, reason: "missing_cwd" });
+        continue;
+      }
+      let history;
+      try {
+        history = await catalog.history(sessionId);
+      } catch {
+        skipped.push({ sessionId, reason: "read_failed" });
+        continue;
+      }
+      const timestamp = this.timestamp();
+      const folderExists = this.isDirectory(info.cwd);
+      const employee: Employee = {
+        id: this.newId(),
+        bossId: "claude",
+        hiredBy: null,
+        task: info.title,
+        workingDirectory: info.cwd,
+        name: this.nextName(),
+        species: generateSpecies(this.random),
+        importedAt: timestamp,
+        providerSessionId: sessionId,
+        status: folderExists ? "idle" : "failed",
+        failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      this.repository.insertEmployee(employee);
+      // History is stored silently: clients load it when the employee is opened.
+      for (const entry of history) this.repository.insertMessage(this.buildMessage(employee.id, entry));
+      this.events.publish({ type: "employee_updated", employee });
+      imported.push(employee);
+    }
+    return { imported, skipped };
+  }
+
   // ---- commands ----
 
-  hire(input: { bossId: unknown; task: unknown; workingDirectory: unknown }): Employee {
+  hire(input: {
+    bossId: unknown;
+    task: unknown;
+    workingDirectory: unknown;
+    name?: unknown;
+    species?: unknown;
+  }): Employee {
     const boss = BOSSES.find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
     if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
@@ -96,6 +229,8 @@ export class OfficeService {
     if (typeof input.workingDirectory !== "string" || !this.isDirectory(input.workingDirectory)) {
       throw new OfficeError("validation_error", "Working directory must be an existing folder", "workingDirectory");
     }
+    const name = input.name === undefined ? this.nextName() : parseName(input.name);
+    const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
     const task = input.task.trim();
     const timestamp = this.timestamp();
     const employee: Employee = {
@@ -104,6 +239,9 @@ export class OfficeService {
       hiredBy: null,
       task,
       workingDirectory: input.workingDirectory,
+      name,
+      species,
+      importedAt: null,
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -117,20 +255,71 @@ export class OfficeService {
     return this.requireEmployee(employee.id);
   }
 
-  sendMessage(employeeId: string, text: unknown): Message {
-    const employee = this.requireEmployee(employeeId);
+  /** Renames an employee and/or changes its species. Nothing changes when any value is invalid. */
+  updateProfile(employeeId: string, input: { name?: unknown; species?: unknown }): Employee {
+    this.requireEmployee(employeeId);
+    if (input.name === undefined && input.species === undefined) {
+      throw new OfficeError("validation_error", "Provide a name or a species", "name");
+    }
+    const patch: Partial<Employee> = {};
+    if (input.name !== undefined) patch.name = parseName(input.name);
+    if (input.species !== undefined) patch.species = parseSpecies(input.species);
+    return this.patchEmployee(employeeId, patch);
+  }
+
+  /** Startup: gives every employee created before names existed a generated name and species. */
+  backfillProfiles(): number {
+    let updated = 0;
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.name.trim() !== "") continue;
+      this.repository.updateEmployee({
+        ...employee,
+        name: this.nextName(),
+        species: generateSpecies(this.random),
+        updatedAt: this.timestamp(),
+      });
+      updated += 1;
+    }
+    return updated;
+  }
+
+  async sendMessage(employeeId: string, text: unknown): Promise<Message> {
+    this.requireEmployee(employeeId);
     if (typeof text !== "string" || text.trim() === "") {
       throw new OfficeError("validation_error", "Message text must not be empty", "text");
     }
-    const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
+    const previous = this.deliveries.get(employeeId) ?? Promise.resolve();
+    const run = previous.then(() => this.deliver(employeeId, text));
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.deliveries.set(employeeId, tail);
+    void tail.then(() => {
+      if (this.deliveries.get(employeeId) === tail) this.deliveries.delete(employeeId);
+    });
+    return run;
+  }
+
+  private async deliver(employeeId: string, text: string): Promise<Message> {
+    const employee = this.requireEmployee(employeeId);
     if (this.sessions.get(employeeId)?.active && this.adapter.sendMessage(employeeId, text)) {
+      const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
       if (employee.status === "idle") this.setStatus(employeeId, "working");
       return message;
     }
     const stale = this.sessions.get(employeeId);
     if (stale) stale.active = false;
+    if (!this.isDirectory(employee.workingDirectory)) {
+      throw new OfficeError(
+        "working_directory_missing",
+        `Project folder not found: ${employee.workingDirectory}`,
+      );
+    }
     // No live session: reopen the stored one (or start fresh if none was ever recorded).
     this.setStatus(employeeId, "working", { failureReason: null });
+    await this.catchUp(this.requireEmployee(employeeId));
+    const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
     this.openSession(this.requireEmployee(employeeId), text, employee.providerSessionId ?? undefined);
     return message;
   }
@@ -207,6 +396,55 @@ export class OfficeService {
       }
     }
     for (const id of [...this.pending.keys()]) this.expire(id);
+  }
+
+  /**
+   * Before resuming, appends the stored-session turns this office has not seen (made in a terminal),
+   * in order. A failure to read adds a system note and the resume continues.
+   */
+  private async catchUp(employee: Employee): Promise<void> {
+    const sessionId = employee.providerSessionId;
+    if (!sessionId || !this.catalog) return;
+    const stored = this.repository.listMessages(employee.id);
+    const storedUuids = new Set(stored.flatMap((m) => (m.sourceUuid ? [m.sourceUuid] : [])));
+    // Without any provider uuid on record (a pre-import employee), a diff would re-add everything.
+    if (!employee.importedAt && storedUuids.size === 0) return;
+    let history;
+    try {
+      history = await this.catalog.history(sessionId);
+    } catch {
+      this.appendMessage(employee.id, { kind: "system", content: CATCH_UP_FAILED });
+      return;
+    }
+    // Owner messages sent from the office are stored without a uuid; claim their echo instead of duplicating it.
+    const unnumbered = stored.filter((m) => m.kind === "user_text" && !m.sourceUuid);
+    const claimed = new Set<string>();
+    for (const entry of history) {
+      const uuid = entry.sourceUuid ?? null;
+      if (uuid && (storedUuids.has(uuid) || claimed.has(uuid))) continue;
+      if (uuid && entry.kind === "user_text") {
+        const index = unnumbered.findIndex((m) => m.content === entry.content);
+        if (index >= 0) {
+          this.repository.setMessageSourceUuid(unnumbered[index]!.id, uuid);
+          unnumbered.splice(index, 1);
+          claimed.add(uuid);
+          continue;
+        }
+      }
+      this.appendMessage(employee.id, entry);
+    }
+  }
+
+  private importedSessionIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.providerSessionId) ids.add(employee.providerSessionId);
+    }
+    return ids;
+  }
+
+  private nextName(): string {
+    return generateName(this.repository.listEmployees().map((e) => e.name), this.random);
   }
 
   // ---- session plumbing ----
@@ -335,8 +573,8 @@ export class OfficeService {
     return this.patchEmployee(id, { status, ...patch });
   }
 
-  private appendMessage(employeeId: string, input: AgentMessage): Message {
-    const message: Message = {
+  private buildMessage(employeeId: string, input: AgentMessage): Message {
+    return {
       id: this.newId(),
       employeeId,
       kind: input.kind,
@@ -345,7 +583,12 @@ export class OfficeService {
       toolUseId: input.toolUseId ?? null,
       parentToolUseId: input.parentToolUseId ?? null,
       createdAt: this.timestamp(),
+      sourceUuid: input.sourceUuid ?? null,
     };
+  }
+
+  private appendMessage(employeeId: string, input: AgentMessage): Message {
+    const message = this.buildMessage(employeeId, input);
     this.repository.insertMessage(message);
     this.events.publish({ type: "message_added", message });
     return message;
@@ -354,6 +597,28 @@ export class OfficeService {
   private timestamp(): string {
     return this.now().toISOString();
   }
+}
+
+function parseName(value: unknown): string {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (name === "" || name.length > MAX_NAME_LENGTH) {
+    throw new OfficeError("validation_error", `Name must be 1-${MAX_NAME_LENGTH} characters`, "name");
+  }
+  return name;
+}
+
+function parseSpecies(value: unknown): Species {
+  if (!isSpecies(value)) throw new OfficeError("validation_error", "Unknown species", "species");
+  return value;
+}
+
+function parseCount(value: unknown, field: string, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback;
+  const n = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new OfficeError("validation_error", `${field} must be an integer from ${min} to ${max}`, field);
+  }
+  return n;
 }
 
 function parseAnswers(value: unknown): Record<string, string> | null {

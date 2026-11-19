@@ -8,6 +8,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentAdapter, AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
 import { approvalKindFor, summarizeToolInput } from "./approval-mapping.ts";
+import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 import { PushQueue } from "./push-queue.ts";
 
 /** The subset of the SDK `query` function this adapter needs; tests inject a fake. */
@@ -24,19 +25,11 @@ type Session = {
 };
 
 /** Loosely typed view of the SDK messages we care about; the real union is large and open. */
-type LooseBlock = {
-  type?: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  input?: unknown;
-  tool_use_id?: string;
-  content?: unknown;
-};
 type LooseMessage = {
   type?: string;
   subtype?: string;
   session_id?: string;
+  uuid?: string;
   parent_tool_use_id?: string | null;
   message?: { content?: unknown };
   event?: { type?: string; delta?: { type?: string; text?: string } };
@@ -193,34 +186,13 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private mapAssistant(message: LooseMessage, sink: AgentSink): void {
-    const parentToolUseId = message.parent_tool_use_id ?? null;
-    for (const block of asBlocks(message.message?.content)) {
-      if (block.type === "text" && typeof block.text === "string" && block.text.trim() !== "") {
-        sink.onMessage({ kind: "agent_text", content: block.text, parentToolUseId });
-      } else if (block.type === "tool_use") {
-        sink.onMessage({
-          kind: "tool_call",
-          content: JSON.stringify(block.input ?? {}),
-          toolName: block.name ?? null,
-          toolUseId: block.id ?? null,
-          parentToolUseId,
-        });
-      }
-    }
+    const ctx = { parentToolUseId: message.parent_tool_use_id ?? null, sourceUuid: message.uuid ?? null };
+    for (const mapped of mapAssistantContent(message.message?.content, ctx)) sink.onMessage(mapped);
   }
 
   private mapUser(message: LooseMessage, sink: AgentSink): void {
-    const parentToolUseId = message.parent_tool_use_id ?? null;
-    for (const block of asBlocks(message.message?.content)) {
-      if (block.type === "tool_result") {
-        sink.onMessage({
-          kind: "tool_result",
-          content: toolResultText(block.content),
-          toolUseId: block.tool_use_id ?? null,
-          parentToolUseId,
-        });
-      }
-    }
+    const ctx = { parentToolUseId: message.parent_tool_use_id ?? null, sourceUuid: message.uuid ?? null };
+    for (const mapped of mapUserContent(message.message?.content, ctx)) sink.onMessage(mapped);
   }
 
   private mapStreamEvent(message: LooseMessage, sink: AgentSink): void {
@@ -245,21 +217,6 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     sink.onTurnFinished();
     return "ok";
   }
-}
-
-function asBlocks(content: unknown): LooseBlock[] {
-  return Array.isArray(content) ? (content as LooseBlock[]) : [];
-}
-
-function toolResultText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    const texts = (content as LooseBlock[])
-      .filter((block) => block.type === "text" && typeof block.text === "string")
-      .map((block) => block.text as string);
-    if (texts.length > 0) return texts.join("\n");
-  }
-  return JSON.stringify(content ?? "");
 }
 
 function resultReason(message: LooseMessage): string {

@@ -8,6 +8,8 @@ export interface OfficeRepository {
 
   insertMessage(message: Message): void;
   listMessages(employeeId: string): Message[];
+  /** Records the provider uuid of a message that was stored without one. */
+  setMessageSourceUuid(messageId: string, sourceUuid: string): void;
 
   insertApproval(approval: ApprovalRequest): void;
   updateApproval(approval: ApprovalRequest): void;

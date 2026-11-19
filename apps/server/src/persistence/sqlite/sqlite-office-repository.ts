@@ -10,6 +10,7 @@ import type {
   ApprovalKind,
   ApprovalStatus,
   Decision,
+  Species,
 } from "../../office/domain/types.ts";
 
 type Row = Record<string, unknown>;
@@ -26,7 +27,10 @@ CREATE TABLE IF NOT EXISTS employees (
   failure_reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  seq INTEGER
+  seq INTEGER,
+  name TEXT,
+  species TEXT,
+  imported_at TEXT
 );
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +41,8 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_name TEXT,
   tool_use_id TEXT,
   parent_tool_use_id TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  source_uuid TEXT
 );
 CREATE INDEX IF NOT EXISTS messages_employee ON messages (employee_id, seq);
 CREATE TABLE IF NOT EXISTS approvals (
@@ -57,6 +62,14 @@ CREATE TABLE IF NOT EXISTS approvals (
 );
 `;
 
+/** Columns added after the MVP schema; `CREATE TABLE IF NOT EXISTS` never adds them to an existing table. */
+const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
+  { table: "employees", column: "name", type: "TEXT" },
+  { table: "employees", column: "species", type: "TEXT" },
+  { table: "employees", column: "imported_at", type: "TEXT" },
+  { table: "messages", column: "source_uuid", type: "TEXT" },
+];
+
 const str = (value: unknown): string => String(value);
 const nullableStr = (value: unknown): string | null => (value === null || value === undefined ? null : String(value));
 
@@ -67,6 +80,9 @@ function toEmployee(row: Row): Employee {
     hiredBy: nullableStr(row.hired_by),
     task: str(row.task),
     workingDirectory: str(row.working_directory),
+    name: nullableStr(row.name) ?? "",
+    species: (nullableStr(row.species) ?? "human") as Species,
+    importedAt: nullableStr(row.imported_at),
     providerSessionId: nullableStr(row.provider_session_id),
     status: str(row.status) as EmployeeStatus,
     failureReason: nullableStr(row.failure_reason),
@@ -85,6 +101,7 @@ function toMessage(row: Row): Message {
     toolUseId: nullableStr(row.tool_use_id),
     parentToolUseId: nullableStr(row.parent_tool_use_id),
     createdAt: str(row.created_at),
+    sourceUuid: nullableStr(row.source_uuid),
   };
 }
 
@@ -113,24 +130,62 @@ export class SqliteOfficeRepository implements OfficeRepository {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /** Idempotent: adds any column an older database is missing. */
+  private migrate(): void {
+    for (const { table, column, type } of ADDED_COLUMNS) {
+      const columns = this.db.prepare(`PRAGMA table_info(${table})`).all();
+      if (!columns.some((info) => info.name === column)) {
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      }
+    }
   }
 
   insertEmployee(e: Employee): void {
     this.db
       .prepare(
-        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
+        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
       )
-      .run(e.id, e.bossId, e.hiredBy, e.task, e.workingDirectory, e.providerSessionId, e.status, e.failureReason, e.createdAt, e.updatedAt);
+      .run(
+        e.id,
+        e.bossId,
+        e.hiredBy,
+        e.task,
+        e.workingDirectory,
+        e.providerSessionId,
+        e.status,
+        e.failureReason,
+        e.createdAt,
+        e.updatedAt,
+        e.name,
+        e.species,
+        e.importedAt,
+      );
   }
 
   updateEmployee(e: Employee): void {
     this.db
       .prepare(
         `UPDATE employees SET boss_id = ?, hired_by = ?, task = ?, working_directory = ?, provider_session_id = ?,
-         status = ?, failure_reason = ?, updated_at = ? WHERE id = ?`,
+         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ? WHERE id = ?`,
       )
-      .run(e.bossId, e.hiredBy, e.task, e.workingDirectory, e.providerSessionId, e.status, e.failureReason, e.updatedAt, e.id);
+      .run(
+        e.bossId,
+        e.hiredBy,
+        e.task,
+        e.workingDirectory,
+        e.providerSessionId,
+        e.status,
+        e.failureReason,
+        e.updatedAt,
+        e.name,
+        e.species,
+        e.importedAt,
+        e.id,
+      );
   }
 
   getEmployee(id: string): Employee | undefined {
@@ -145,14 +200,18 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertMessage(m: Message): void {
     this.db
       .prepare(
-        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at, source_uuid)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(m.id, m.employeeId, m.kind, m.content, m.toolName, m.toolUseId, m.parentToolUseId, m.createdAt);
+      .run(m.id, m.employeeId, m.kind, m.content, m.toolName, m.toolUseId, m.parentToolUseId, m.createdAt, m.sourceUuid);
   }
 
   listMessages(employeeId: string): Message[] {
     return this.db.prepare("SELECT * FROM messages WHERE employee_id = ? ORDER BY seq").all(employeeId).map(toMessage);
+  }
+
+  setMessageSourceUuid(messageId: string, sourceUuid: string): void {
+    this.db.prepare("UPDATE messages SET source_uuid = ? WHERE id = ?").run(sourceUuid, messageId);
   }
 
   insertApproval(a: ApprovalRequest): void {

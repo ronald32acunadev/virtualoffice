@@ -9,12 +9,24 @@ export type EmployeeStatus =
   | "stopped"
   | "failed";
 
+export const SPECIES = ["wolf", "dog", "fox", "cat", "bear", "human"] as const;
+export type Species = (typeof SPECIES)[number];
+
+export function isSpecies(value: unknown): value is Species {
+  return typeof value === "string" && (SPECIES as readonly string[]).includes(value);
+}
+
+export const MAX_NAME_LENGTH = 40;
+
 export type Employee = {
   id: string;
   bossId: BossId;
   hiredBy: string | null;
   task: string;
   workingDirectory: string;
+  name: string;
+  species: Species;
+  importedAt: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
@@ -32,7 +44,21 @@ export type Message = {
   toolUseId: string | null;
   parentToolUseId: string | null;
   createdAt: string;
+  /** Provider message uuid (imports and catch-up dedupe); null for entries the provider never numbered. */
+  sourceUuid: string | null;
 };
+
+export type ClaudeSessionSummary = {
+  sessionId: string;
+  title: string;
+  cwd: string | null;
+  gitBranch: string | null;
+  lastModified: string;
+  createdAt: string | null;
+  alreadyImported: boolean;
+};
+
+export type ImportSkipReason = "already_imported" | "missing_cwd" | "not_found" | "read_failed";
 
 export type ApprovalKind = "permission" | "question" | "plan";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
@@ -81,7 +107,12 @@ export function isActiveStatus(status: EmployeeStatus): boolean {
 
 export class OfficeError extends Error {
   constructor(
-    readonly code: "validation_error" | "not_found" | "boss_unavailable" | "approval_not_pending",
+    readonly code:
+      | "validation_error"
+      | "not_found"
+      | "boss_unavailable"
+      | "approval_not_pending"
+      | "working_directory_missing",
     message: string,
     readonly field?: string,
   ) {

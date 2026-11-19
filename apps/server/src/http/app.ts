@@ -21,6 +21,7 @@ const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
   not_found: 404,
   boss_unavailable: 409,
   approval_not_pending: 409,
+  working_directory_missing: 409,
 };
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string, field?: string) {
@@ -61,7 +62,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .code(204)
         .header("access-control-allow-origin", origin)
         .header("access-control-allow-headers", "authorization, content-type")
-        .header("access-control-allow-methods", "GET, POST, OPTIONS")
+        .header("access-control-allow-methods", "GET, POST, PATCH, OPTIONS")
         .send();
     }
     // 3. Token check.
@@ -90,7 +91,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return sendError(reply, 500, "internal_error", "Internal error");
   });
 
-  app.setNotFoundHandler((_request, reply) => sendError(reply, 404, "not_found", "Not found"));
+  // Client routes (/office, /workspace, ...) are answered with index.html when the client is served.
+  const serveClient = Boolean(staticRoot && fs.existsSync(staticRoot));
+  app.setNotFoundHandler((request, reply) => {
+    const pathname = new URL(request.url, "http://office.local").pathname;
+    if (serveClient && request.method === "GET" && !isProtectedPath(pathname)) {
+      return reply.sendFile("index.html");
+    }
+    return sendError(reply, 404, "not_found", "Not found");
+  });
 
   await app.register(websocket);
 
@@ -106,12 +115,26 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       bossId: body.bossId,
       task: body.task,
       workingDirectory: body.workingDirectory,
+      name: body.name,
+      species: body.species,
     });
     return reply.code(201).send({ employee });
   });
 
+  app.patch<{ Params: { id: string } }>("/api/employees/:id", async (request) => {
+    const body = asRecord(request.body);
+    return { employee: office.updateProfile(request.params.id, { name: body.name, species: body.species }) };
+  });
+
+  app.get("/api/imports/claude/sessions", async (request) => {
+    const query = asRecord(request.query);
+    return office.listClaudeSessions({ q: query.q, limit: query.limit, offset: query.offset });
+  });
+
+  app.post("/api/imports/claude", async (request) => office.importClaudeSessions(asRecord(request.body).sessionIds));
+
   app.post<{ Params: { id: string } }>("/api/employees/:id/messages", async (request, reply) => {
-    const message = office.sendMessage(request.params.id, asRecord(request.body).text);
+    const message = await office.sendMessage(request.params.id, asRecord(request.body).text);
     return reply.code(202).send({ message });
   });
 
