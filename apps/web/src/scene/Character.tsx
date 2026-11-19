@@ -13,9 +13,10 @@ type Props = {
   position: Vec3;
   selected: boolean;
   onSelect: (id: string) => void;
+  lampOn?: boolean;
 };
 
-export function Character({ employee, position, selected, onSelect }: Props) {
+export function Character({ employee, position, selected, onSelect, lampOn = false }: Props) {
   const group = useRef<Group>(null);
   const body = useRef<MeshStandardMaterial>(null);
   const armL = useRef<Mesh>(null);
@@ -52,7 +53,7 @@ export function Character({ employee, position, selected, onSelect }: Props) {
 
   return (
     <group position={position}>
-      <Desk position={[0, 0, 0]} color="#8a6d4b" />
+      <Desk position={[0, 0, 0]} color="#c49a6c" status={status} lampOn={lampOn} />
       <group
         ref={group}
         position={[0, 0, 0.9]}
@@ -63,7 +64,7 @@ export function Character({ employee, position, selected, onSelect }: Props) {
         }}
         onPointerOut={() => setHovered(false)}
       >
-        <mesh position={[0, 0.85, 0]}>
+        <mesh position={[0, 0.85, 0]} castShadow>
           <capsuleGeometry args={[0.3, 0.6, 4, 12]} />
           <meshStandardMaterial
             ref={body}

@@ -3,7 +3,9 @@ import { OrbitControls } from "@react-three/drei";
 import { useOffice } from "../state/OfficeProvider";
 import { BossArea } from "./BossArea";
 import { Character } from "./Character";
+import { OfficeRoom } from "./OfficeRoom";
 import { employeeDeskPosition } from "./layout";
+import { MOOD_PALETTES, type LightingMood } from "./officeTheme";
 import type { BossId } from "../api/types";
 
 const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
@@ -16,12 +18,15 @@ const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
 export function OfficeScene({
   onSelectEmployee,
   onClear,
+  mood = "day",
 }: {
   onSelectEmployee: (employeeId: string) => void;
   onClear: () => void;
+  mood?: LightingMood;
 }) {
   const { state } = useOffice();
   const bosses = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
+  const palette = MOOD_PALETTES[mood];
 
   const indexByBoss = new Map<BossId, number>();
   const placed = state.employees.map((employee) => {
@@ -31,16 +36,32 @@ export function OfficeScene({
   });
 
   return (
-    <Canvas camera={{ position: [0, 17, 21], fov: 45 }} onPointerMissed={onClear}>
-      <color attach="background" args={["#1a1d24"]} />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[8, 14, 6]} intensity={1.1} />
-      <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[28, 28]} />
-        <meshStandardMaterial color="#2b2f3a" />
-      </mesh>
+    <Canvas shadows camera={{ position: [0, 17, 21], fov: 42 }} onPointerMissed={onClear}>
+      <color attach="background" args={[palette.sky]} />
+      <fog attach="fog" args={[palette.fog, palette.fogNear, palette.fogFar]} />
+
+      <ambientLight intensity={palette.ambientIntensity} />
+      <hemisphereLight args={[palette.hemiSky, palette.hemiGround, palette.hemiIntensity]} />
+      <directionalLight
+        castShadow
+        position={palette.sunPosition}
+        intensity={palette.sunIntensity}
+        color={palette.sunColor}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-near={1}
+        shadow-camera-far={60}
+        shadow-camera-left={-18}
+        shadow-camera-right={18}
+        shadow-camera-top={18}
+        shadow-camera-bottom={-18}
+        shadow-bias={-0.0004}
+      />
+      <directionalLight position={[-12, 10, -10]} intensity={palette.fillIntensity} color={palette.fillColor} />
+
+      <OfficeRoom mood={mood} />
+
       {bosses.map((boss) => (
-        <BossArea key={boss.id} boss={boss} />
+        <BossArea key={boss.id} boss={boss} mood={mood} />
       ))}
       {placed.map(({ employee, position }) => (
         <Character
@@ -49,6 +70,7 @@ export function OfficeScene({
           position={position}
           selected={state.selectedId === employee.id}
           onSelect={onSelectEmployee}
+          lampOn={mood === "evening"}
         />
       ))}
       <OrbitControls
