@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../api/client";
+import { readSavedMood, saveMood } from "../scene/camera";
 import { OfficeScene } from "../scene/OfficeScene";
+import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
-import { RoleBadge } from "../ui/RoleBadge";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
+import { RoleBadge } from "../ui/RoleBadge";
 
 export function OfficeView() {
   const { state, actions } = useOffice();
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
+  const [mood, setMood] = useState<LightingMood>(() => readSavedMood());
+  const [resetToken, setResetToken] = useState(0);
 
   useEffect(() => {
     const channel = openWindowChannel();
@@ -42,6 +46,18 @@ export function OfficeView() {
     setCardId(null);
   }, [actions]);
 
+  const toggleMood = useCallback(() => {
+    setMood((prev) => {
+      const next: LightingMood = prev === "day" ? "evening" : "day";
+      saveMood(next);
+      return next;
+    });
+  }, []);
+
+  const resetView = useCallback(() => {
+    setResetToken((n) => n + 1);
+  }, []);
+
   const oldestApproval = useMemo(
     () =>
       [...state.approvals].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))[0],
@@ -57,8 +73,32 @@ export function OfficeView() {
   return (
     <div className="office-view">
       <SceneErrorBoundary>
-        <OfficeScene onSelectEmployee={(id) => void focusEmployee(id)} onClear={clear} />
+        <OfficeScene
+          onSelectEmployee={(id) => void focusEmployee(id)}
+          onClear={clear}
+          mood={mood}
+          resetToken={resetToken}
+        />
       </SceneErrorBoundary>
+      <div className="office-hud" role="toolbar" aria-label="Office view controls">
+        <button
+          type="button"
+          className="hud-btn"
+          aria-pressed={mood === "evening"}
+          onClick={toggleMood}
+          title={mood === "day" ? "Switch to cozy evening lighting" : "Switch to daylight"}
+        >
+          {mood === "day" ? "☀ Day" : "🌙 Evening"}
+        </button>
+        <button
+          type="button"
+          className="hud-btn"
+          onClick={resetView}
+          title="Reset camera to full office overview"
+        >
+          Reset view
+        </button>
+      </div>
       <div className={`connection connection-${state.connection}`}>
         {state.connection === "online"
           ? "Connected"
