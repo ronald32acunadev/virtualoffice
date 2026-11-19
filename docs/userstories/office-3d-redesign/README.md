@@ -9,10 +9,10 @@ Implementer route: no local model available (LM Studio unreachable, Ollama has n
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Cozy architectural office environment and natural lighting | — | pending |
-| US-02 | Detailed workstations, boss suites, and office props | US-01 | pending |
-| US-03 | Expressive game-style characters and status animations | US-02 | pending |
-| US-04 | Game-like camera controls, lighting mood toggle, and HUD polish | US-01, US-03 | pending |
+| US-01 | Cozy architectural office environment and natural lighting | — | complete |
+| US-02 | Detailed workstations, boss suites, and office props | US-01 | complete |
+| US-03 | Expressive game-style characters and status animations | US-02 | complete |
+| US-04 | Game-like camera controls, lighting mood toggle, and HUD polish | US-01, US-03 | complete |
 
 Constraints (confirmed):
 - 100% local / offline rendering: no external CDN textures, fonts, or HDRI downloads (all materials, floor grain, monitor screens, and signage use procedural Three.js geometry/materials or `CanvasTexture`, and text labels continue using `@react-three/drei` `Html`).
@@ -67,10 +67,12 @@ As the owner, I want smooth camera navigation, a quick day/cozy-evening lighting
 
 ## Verification mapping
 
+Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` (14 files, 134 tests passed), `npm run test -w apps/web` (13 files, 64 tests passed), `npm run typecheck` (0 errors), `npm run build` (succeeded). Manual: WebGL browser verification on live server (`http://127.0.0.1:4319/office`) with screenshot inspection, zero console/page errors, and zero external network requests.
+
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-04` | Pure tests for floor/room geometry bounds & mood palette; manual WebGL check of `/office` (screenshot + zero external network requests) | Pending |
-| `US-02 / AC-01`–`AC-04` | Pure tests verifying prop placements do not overlap boss desks or employee desk grid (`0..8`); manual WebGL check of desks, boss suites, and monitor glow states | Pending |
-| `US-03 / AC-01`–`AC-03` | Pure tests for character visual/pose state mapping and `employeeLabel`; manual WebGL check of species, specialist cue, animations, hover tooltip, and click-to-select | Pending |
-| `US-04 / AC-01`–`AC-04` | Pure tests for camera target clamping and lighting mood persistence; manual WebGL check of pan/zoom/reset, Day/Evening toggle across reload, and HUD contrast | Pending |
-| Risk: existing `/office` ↔ `/workspace` link and tests | Full `apps/server` and `apps/web` test suites + `npm run build` + `npm run typecheck` | Pending |
+| `US-01 / AC-01`–`AC-04` | `apps/web/src/scene/officeTheme.test.ts` (day/evening palettes, bounds); manual WebGL `/office` check | Passed. Full-viewport `<canvas>` (`1015×858`) rendered daylight sky, warm wood-plank floor, cutaway beige walls with windows and exterior pine trees, 4 quadrant rugs, real-time shadows; 0 console errors, 0 external requests (all 4 requests local to `127.0.0.1:4319`). |
+| `US-02 / AC-01`–`AC-04` | `apps/web/src/scene/officeTheme.test.ts` (`MONITOR_VISUALS`, `overlapsAnyDesk` against all 4 bosses and `0..8` employee desks); manual WebGL check | Passed. Desks show wood tabletops, legs, ergonomic swivel chairs, keyboards, mice, lamps, mugs, and status-lit screens; active boss has executive suite and seated character; unavailable suites show reserved frosted-glass desks; whiteboard, bookshelves, potted plants, coffee corner, and wall art render with zero desk collisions. |
+| `US-03 / AC-01`–`AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (`CHARACTER_POSES` for all 6 statuses, `hasSpecialistAccessory`), `apps/web/src/state/role.test.ts`; manual WebGL check | Passed. Seated characters (`Ziggy`, `Poppy`) rendered with articulated proportions, species features, status poses/animations, and legible dark rounded `.name-label` pills. |
+| `US-04 / AC-01`–`AC-04` | `apps/web/src/scene/camera.test.ts` (`clampCameraTarget`, `readSavedMood`/`saveMood`); manual WebGL check of orbit/pan, `Reset view`, and `Day / Evening` toggle across reload | Passed. Top-left `.office-hud` shows `☀ Day` (`aria-pressed="false"`) and `Reset view`; toggling switched to `🌙 Evening` (`aria-pressed="true"`) with warm evening lighting and glowing lamps; persisted across `page.reload()`; canvas drag + `Reset view` smoothly restored overview framing with 0 errors. |
+| Risk: existing `/office` ↔ `/workspace` link and tests | Full `apps/server` (134 tests) and `apps/web` (64 tests) suites + `npm run build` + `npm run typecheck` | Passed. |
