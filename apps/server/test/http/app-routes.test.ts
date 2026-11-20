@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/http/app.ts";
 import { DesktopError, OpenCodeWebHost } from "../../src/desktop/opencode-web-host.ts";
+import { DesktopAppHost, type DesktopAppId, type DesktopAppInstance } from "../../src/desktop/desktop-app-host.ts";
 import type { Employee } from "../../src/office/domain/types.ts";
 import { SqliteOfficeRepository } from "../../src/persistence/sqlite/sqlite-office-repository.ts";
 import { createHarness } from "../helpers/harness.ts";
@@ -54,6 +55,58 @@ class FakeOpenCodeWebHost extends OpenCodeWebHost {
   }
 }
 
+class FakeDesktopAppHost extends DesktopAppHost {
+  constructor() {
+    super({ profilesRoot: "/tmp/unused" });
+  }
+  startCalls: DesktopAppId[] = [];
+  stopCalls: DesktopAppId[] = [];
+  relaunchCalls: DesktopAppId[] = [];
+  running = false;
+  failWith: DesktopError | null = null;
+
+  override async start(appId: DesktopAppId): Promise<DesktopAppInstance> {
+    this.startCalls.push(appId);
+    if (this.failWith) {
+      throw this.failWith;
+    }
+    return { appId, display: 60, rfbPort: 5960, status: "running" };
+  }
+
+  override get(appId: DesktopAppId): DesktopAppInstance | undefined {
+    return this.running ? { appId, display: 60, rfbPort: 5960, status: "running" } : undefined;
+  }
+
+  override stop(appId: DesktopAppId): boolean {
+    this.stopCalls.push(appId);
+    return true;
+  }
+
+  override relaunch(appId: DesktopAppId): boolean {
+    this.relaunchCalls.push(appId);
+    return true;
+  }
+}
+
+async function setupDesktop(employees: Partial<Employee>[]) {
+  const repository = new SqliteOfficeRepository(":memory:");
+  const h = createHarness(repository);
+  for (const employee of employees) {
+    h.repository.insertEmployee(makeEmployee(employee));
+  }
+  const host = new FakeDesktopAppHost();
+  const app = await buildApp({
+    token: TOKEN,
+    port: PORT,
+    repository: h.repository,
+    office: h.office,
+    desktopApps: host,
+  });
+  apps.push(app);
+  await app.ready();
+  return { app, host };
+}
+
 async function setup(options: { withHost?: boolean; employee?: Partial<Employee> } = {}) {
   const repository = new SqliteOfficeRepository(":memory:");
   const h = createHarness(repository);
@@ -79,6 +132,14 @@ function post(app: FastifyInstance, url: string) {
   });
 }
 
+function get(app: FastifyInstance, url: string) {
+  return app.inject({
+    method: "GET",
+    url,
+    headers: { host: HOST, authorization: `Bearer ${TOKEN}` },
+  });
+}
+
 afterEach(async () => {
   for (const app of apps) {
     await app.close();
@@ -91,7 +152,7 @@ describe("US-01 Embedded OpenCode web app", () => {
     const { app, host } = await setup();
     const res = await post(app, "/api/employees/emp-oc/app/start");
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ app: { kind: "web", url: "http://127.0.0.1:5101/" } });
+    expect(res.json()).toEqual({ app: { kind: "web", running: true, url: "http://127.0.0.1:5101/" } });
     expect(host.startCalls).toEqual(["/work/app"]);
   });
 
@@ -151,5 +212,63 @@ describe("US-01 Embedded OpenCode web app", () => {
     expect(noHostRes.statusCode).toBe(409);
     expect(noHostRes.json().error.code).toBe("app_not_available");
     expect(noHost.host.startCalls).toEqual([]);
+  });
+});
+
+describe("US-04 Embedded desktop app routes", () => {
+  it("US-04 / AC-01: starts the desktop app mapped to the boss", async () => {
+    const { app, host } = await setupDesktop([
+      { id: "emp-claude", bossId: "claude" },
+      { id: "emp-codex", bossId: "codex" },
+      { id: "emp-gemini", bossId: "gemini" },
+    ]);
+    const claude = await post(app, "/api/employees/emp-claude/app/start");
+    expect(claude.statusCode).toBe(200);
+    expect(claude.json()).toEqual({ app: { kind: "vnc", appId: "claude_desktop", running: true } });
+    const codex = await post(app, "/api/employees/emp-codex/app/start");
+    expect(codex.json()).toEqual({ app: { kind: "vnc", appId: "chatgpt", running: true } });
+    const gemini = await post(app, "/api/employees/emp-gemini/app/start");
+    expect(gemini.json()).toEqual({ app: { kind: "vnc", appId: "antigravity", running: true } });
+    expect(host.startCalls).toEqual(["claude_desktop", "chatgpt", "antigravity"]);
+  });
+
+  it("US-04 / AC-01: reports the app status", async () => {
+    const { app, host } = await setupDesktop([
+      { id: "emp-claude", bossId: "claude" },
+      { id: "emp-oc", bossId: "opencode" },
+    ]);
+    host.running = true;
+    const claude = await get(app, "/api/employees/emp-claude/app");
+    expect(claude.statusCode).toBe(200);
+    expect(claude.json()).toEqual({ app: { kind: "vnc", appId: "claude_desktop", running: true } });
+    const opencode = await get(app, "/api/employees/emp-oc/app");
+    expect(opencode.statusCode).toBe(200);
+    expect(opencode.json()).toEqual({ app: { kind: "web", running: false, url: null } });
+  });
+
+  it("US-04 / AC-03: stop and relaunch reach the desktop host", async () => {
+    const { app, host } = await setupDesktop([{ id: "emp-claude", bossId: "claude" }]);
+    const stopRes = await post(app, "/api/employees/emp-claude/app/stop");
+    expect(stopRes.statusCode).toBe(200);
+    expect(stopRes.json()).toEqual({ stopped: true });
+    const relaunchRes = await post(app, "/api/employees/emp-claude/app/relaunch");
+    expect(relaunchRes.statusCode).toBe(200);
+    expect(relaunchRes.json()).toEqual({ relaunched: true });
+    expect(host.stopCalls).toEqual(["claude_desktop"]);
+    expect(host.relaunchCalls).toEqual(["claude_desktop"]);
+  });
+
+  it("US-04 / AC-05: a missing display server is reported", async () => {
+    const { app, host } = await setupDesktop([{ id: "emp-claude", bossId: "claude" }]);
+    host.failWith = new DesktopError(
+      "display_server_missing",
+      "Install the display server: sudo apt install tigervnc-standalone-server",
+    );
+    const res = await post(app, "/api/employees/emp-claude/app/start");
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toEqual({
+      code: "display_server_missing",
+      message: "Install the display server: sudo apt install tigervnc-standalone-server",
+    });
   });
 });

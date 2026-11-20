@@ -18,12 +18,23 @@ import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
+import { AppPanel } from "./AppPanel";
 
 const STOPPABLE = new Set(["starting", "working", "waiting_approval"]);
 const FOLDER_MISSING_TEXT =
   "This session's project folder no longer exists, so it can't be resumed. You can still read its history.";
 
-function Header({ employeeId, onInsertSkill, onOpenTerminal }: { employeeId: string; onInsertSkill: (name: string) => void; onOpenTerminal: () => void }) {
+function Header({
+  employeeId,
+  onInsertSkill,
+  onOpenTerminal,
+  onOpenApp,
+}: {
+  employeeId: string;
+  onInsertSkill: (name: string) => void;
+  onOpenTerminal: () => void;
+  onOpenApp: () => void;
+}) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
   const [editing, setEditing] = useState(false);
@@ -156,7 +167,12 @@ function Header({ employeeId, onInsertSkill, onOpenTerminal }: { employeeId: str
           ))}
         </select>
         <Toolbox employeeId={employee.id} onInsertSkill={onInsertSkill} />
-        <OpenExternalMenu employeeId={employee.id} onError={setError} onOpenEmbeddedTerminal={onOpenTerminal} />
+        <OpenExternalMenu
+          employeeId={employee.id}
+          onError={setError}
+          onOpenEmbeddedTerminal={onOpenTerminal}
+          onOpenEmbeddedApp={onOpenApp}
+        />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop
@@ -426,11 +442,11 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
   const live = state.liveText[employeeId] ?? "";
   const timeline = useMemo(() => buildTimeline(messages ?? []), [messages]);
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
-  const employeeStatus = state.employees.find((e) => e.id === employeeId)?.status;
-  const busy = STOPPABLE.has(employeeStatus ?? "");
+  const employee = state.employees.find((e) => e.id === employeeId);
+  const busy = STOPPABLE.has(employee?.status ?? "");
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
-  const [view, setView] = useState<"chat" | "terminal">("chat");
+  const [view, setView] = useState<"chat" | "terminal" | "app">("chat");
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
@@ -438,13 +454,21 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
 
   return (
     <section className="conversation-pane">
-      <Header employeeId={employeeId} onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })} onOpenTerminal={() => setView("terminal")} />
+      <Header
+        employeeId={employeeId}
+        onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })}
+        onOpenTerminal={() => setView("terminal")}
+        onOpenApp={() => setView("app")}
+      />
       <div className="conv-tabs" role="tablist" aria-label="Conversation view">
         <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "conv-tab active" : "conv-tab"} onClick={() => setView("chat")}>
           Chat
         </button>
         <button type="button" role="tab" aria-selected={view === "terminal"} className={view === "terminal" ? "conv-tab active" : "conv-tab"} onClick={() => setView("terminal")}>
           Terminal
+        </button>
+        <button type="button" role="tab" aria-selected={view === "app"} className={view === "app" ? "conv-tab active" : "conv-tab"} onClick={() => setView("app")}>
+          App
         </button>
       </div>
       <div className="conv-scroll" hidden={view !== "chat"}>
@@ -480,6 +504,7 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
       {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} /> : null}
+      {view === "app" && employee ? <AppPanel key={employeeId} employeeId={employeeId} bossId={employee.bossId} /> : null}
     </section>
   );
 }

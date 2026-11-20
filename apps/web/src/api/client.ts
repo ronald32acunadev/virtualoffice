@@ -12,6 +12,7 @@ import type {
   Species,
   StateSnapshot,
 } from "./types";
+import type { EmbeddedAppStatus } from "../state/desktopApp";
 
 const TOKEN_KEY = "virtualoffice.token";
 
@@ -147,6 +148,14 @@ export const api = {
       `/api/employees/${encodeURIComponent(employeeId)}/launch`,
       { targetId },
     ),
+  getApp: (employeeId: string) =>
+    request<{ app: EmbeddedAppStatus }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/app`),
+  startApp: (employeeId: string) =>
+    request<{ app: EmbeddedAppStatus }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/start`),
+  stopApp: (employeeId: string) =>
+    request<{ stopped: boolean }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/stop`),
+  relaunchApp: (employeeId: string) =>
+    request<{ relaunched: boolean }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/relaunch`),
 };
 
 export type SocketHandlers = {
