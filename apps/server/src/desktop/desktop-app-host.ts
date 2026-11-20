@@ -8,9 +8,9 @@ import {
   defaultWaitForPort,
   type HostSpawn,
   type HostedProcess,
-} from "./opencode-web-host.ts";
+} from "./process-utils.ts";
 
-export type DesktopAppId = "claude_desktop" | "chatgpt" | "antigravity";
+export type DesktopAppId = "claude_desktop" | "chatgpt" | "antigravity" | "opencode_desktop";
 
 export const DESKTOP_APPS: Record<
   DesktopAppId,
@@ -30,6 +30,11 @@ export const DESKTOP_APPS: Record<
     label: "Antigravity",
     binary: "antigravity",
     args: (dir) => [`--user-data-dir=${dir}`, "--new-window"],
+  },
+  opencode_desktop: {
+    label: "OpenCode",
+    binary: "/opt/OpenCode/ai.opencode",
+    args: (dir) => ["--ozone-platform=x11", `--user-data-dir=${dir}`],
   },
 };
 

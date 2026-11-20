@@ -10,7 +10,7 @@ import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
 import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
-import { DesktopError, type OpenCodeWebHost } from "../desktop/opencode-web-host.ts";
+import { DesktopError } from "../desktop/process-utils.ts";
 import { DESKTOP_APPS, type DesktopAppHost, type DesktopAppId } from "../desktop/desktop-app-host.ts";
 
 export type BuildAppOptions = {
@@ -22,7 +22,6 @@ export type BuildAppOptions = {
   staticRoot?: string;
   devOrigin?: string;
   terminals?: TerminalSessionManager;
-  openCodeWeb?: OpenCodeWebHost;
   desktopApps?: DesktopAppHost;
 };
 
@@ -49,7 +48,7 @@ function asRecord(body: unknown): Record<string, unknown> {
   return typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
 }
 
-/** The desktop app embedded for a boss; OpenCode is embedded as its web UI instead. */
+/** The desktop app embedded for a boss. */
 function desktopAppFor(bossId: string): DesktopAppId | undefined {
   switch (bossId) {
     case "claude":
@@ -58,13 +57,15 @@ function desktopAppFor(bossId: string): DesktopAppId | undefined {
       return "chatgpt";
     case "gemini":
       return "antigravity";
+    case "opencode":
+      return "opencode_desktop";
     default:
       return undefined;
   }
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { token, port, office, staticRoot, devOrigin, terminals, openCodeWeb, desktopApps } = options;
+  const { token, port, office, staticRoot, devOrigin, terminals, desktopApps } = options;
   const launcher = options.launcher ?? new ExternalLauncherService();
 
   const app = Fastify({ logger: false });
@@ -352,9 +353,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     if (!employee) {
       return sendError(reply, 404, "not_found", "Employee not found");
     }
-    if (employee.bossId === "opencode") {
-      return { app: { kind: "web", running: openCodeWeb?.isRunning(employee.workingDirectory) ?? false, url: null } };
-    }
     const appId = desktopAppFor(employee.bossId);
     if (appId === undefined) {
       return sendError(reply, 409, "app_not_available", "Embedded app is not available for this boss yet");
@@ -366,20 +364,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     const employee = options.repository.getEmployee(request.params.id);
     if (!employee) {
       return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    if (employee.bossId === "opencode") {
-      if (openCodeWeb === undefined) {
-        return sendError(reply, 409, "app_not_available", "Embedded app is not enabled");
-      }
-      try {
-        const webApp = await openCodeWeb.start(employee.workingDirectory);
-        return reply.code(200).send({ app: { kind: "web", running: true, url: webApp.url } });
-      } catch (err) {
-        if (err instanceof DesktopError) {
-          return sendError(reply, err.status, err.code, err.message);
-        }
-        throw err;
-      }
     }
     const appId = desktopAppFor(employee.bossId);
     if (appId === undefined) {
@@ -404,9 +388,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     if (!employee) {
       return sendError(reply, 404, "not_found", "Employee not found");
     }
-    if (employee.bossId === "opencode") {
-      return { stopped: openCodeWeb?.stop(employee.workingDirectory) ?? false };
-    }
     const appId = desktopAppFor(employee.bossId);
     if (appId === undefined) {
       return { stopped: false };
@@ -419,7 +400,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     if (!employee) {
       return sendError(reply, 404, "not_found", "Employee not found");
     }
-    const appId = employee.bossId === "opencode" ? undefined : desktopAppFor(employee.bossId);
+    const appId = desktopAppFor(employee.bossId);
     if (appId === undefined) {
       return { relaunched: false };
     }

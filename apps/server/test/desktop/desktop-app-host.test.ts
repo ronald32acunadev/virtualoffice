@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DesktopAppHost } from "../../src/desktop/desktop-app-host.ts";
-import type { HostSpawn, HostedProcess } from "../../src/desktop/opencode-web-host.ts";
+import type { HostSpawn, HostedProcess } from "../../src/desktop/process-utils.ts";
 
 class FakeProcess implements HostedProcess {
   kills: Array<NodeJS.Signals | undefined> = [];
@@ -225,5 +225,37 @@ describe("DesktopAppHost", () => {
         "/data/profiles/chatgpt",
       ]),
     );
+  });
+
+  it("US-01 / AC-01: runs OpenCode Desktop on its own display", async () => {
+    const { host, spawned } = setup({
+      binaries: [...DEFAULT_BINARIES, "/opt/OpenCode/ai.opencode"],
+    });
+
+    const result = await host.start("opencode_desktop");
+
+    expect(result).toEqual({
+      appId: "opencode_desktop",
+      display: 61,
+      rfbPort: 5961,
+      status: "running",
+    });
+    const app = spawned.find((s) => s.command === "/opt/OpenCode/ai.opencode");
+    expect(app?.args).toEqual([
+      "--ozone-platform=x11",
+      "--user-data-dir=/data/profiles/opencode_desktop",
+    ]);
+    expect(app?.env.DISPLAY).toBe(":61");
+  });
+
+  it("US-01 / AC-02: reports OpenCode as not installed", async () => {
+    const { host, spawned } = setup({ binaries: ["Xvnc"] });
+
+    await expect(host.start("opencode_desktop")).rejects.toMatchObject({
+      code: "app_not_installed",
+      status: 409,
+      message: "OpenCode is not installed",
+    });
+    expect(spawned).toEqual([]);
   });
 });

@@ -13,12 +13,11 @@ import { OpenCodeAgentAdapter } from "./agents/opencode/opencode-agent-adapter.t
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
 import { TerminalSessionManager } from "./terminal/terminal-session-manager.ts";
-import { allowedOrigins, createToken } from "./http/security.ts";
+import { createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
 import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
-import { OpenCodeWebHost } from "./desktop/opencode-web-host.ts";
 import { DesktopAppHost } from "./desktop/desktop-app-host.ts";
 
 export type StartOfficeServerOptions = {
@@ -85,10 +84,6 @@ export async function startOfficeServer(
   office.recoverOnStartup();
   office.backfillProfiles();
 
-  const openCodeWeb = new OpenCodeWebHost({
-    allowedOrigins: allowedOrigins(port, devOrigin),
-  });
-
   const desktopProfilesRoot = path.join(
     path.dirname(dbPath === ":memory:" ? path.join(repoRoot, "data", "x") : dbPath),
     "desktop-profiles"
@@ -107,7 +102,6 @@ export async function startOfficeServer(
     ...(fs.existsSync(webDist) ? { staticRoot: webDist } : {}),
     ...(devOrigin ? { devOrigin } : {}),
     terminals,
-    openCodeWeb,
     desktopApps,
   });
 
@@ -132,7 +126,6 @@ export async function startOfficeServer(
         await office.shutdown();
         await app.close();
         terminals.killAll();
-        openCodeWeb.stopAll();
         desktopApps.stopAll();
         repository.close();
       } finally {

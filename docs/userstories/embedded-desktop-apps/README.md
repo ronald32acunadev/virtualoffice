@@ -9,10 +9,10 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Embedded OpenCode web app | — | blocked (owner decision, 2026-11-20) |
+| US-01 | Embedded OpenCode Desktop (streamed) | US-02, US-03 | complete |
 | US-02 | Virtual display host for desktop apps (server) | — | complete |
 | US-03 | Authenticated desktop stream channel (VNC over the office WebSocket) | US-02 | complete |
-| US-04 | "App" tab with the embedded desktop app in the workspace | US-01, US-03 | complete (OpenCode pending on US-01) |
+| US-04 | "App" tab with the embedded desktop app in the workspace | US-03 | complete |
 
 ## Confirmed facts & scope boundaries
 
@@ -23,9 +23,9 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
   - Host: Ubuntu 26.04.1 LTS with a Wayland session. `xpra` has no apt candidate; `tigervnc-standalone-server` 1.15.0 (provides `Xvnc`, a virtual X display with a built-in VNC server), `xvfb`, `x11vnc`, `novnc`, and `websockify` are available from apt. None of them is installed yet.
   - `@novnc/novnc` 1.7.0 is the current noVNC browser client on npm.
 - **Decisions**:
-  - OpenCode embeds its real web UI through an `<iframe>` (no streaming). Claude Desktop, ChatGPT, and Antigravity are streamed: each runs on its own `Xvnc` virtual display, and the browser shows it with the noVNC client.
+  - All four apps are streamed: each runs on its own `Xvnc` virtual display, and the browser shows it with the noVNC client. (OpenCode was first framed through `opencode serve`; revised to streaming on 2026-11-20 because the framed UI requires pairing.)
   - The office server proxies the browser WebSocket to the VNC TCP port itself (no `websockify`), so the stream reuses the existing per-run token, Host and Origin checks; `Xvnc` listens only on `127.0.0.1`.
-  - Boss → embedded app: `claude` → Claude Desktop, `codex` → ChatGPT, `gemini` → Antigravity, `opencode` → OpenCode web.
+  - Boss → embedded app: `claude` → Claude Desktop, `codex` → ChatGPT, `gemini` → Antigravity, `opencode` → OpenCode Desktop.
 - **Assumptions (verified first in the story that needs them; the backlog pauses for an owner decision if one fails)**:
   - The owner installs the display server once with `sudo apt install tigervnc-standalone-server`; the agent never installs system packages.
   - Electron apps (Claude Desktop, ChatGPT) and the Antigravity snap start and render on an `Xvnc` display through `DISPLAY=:<n>` without a GPU (falling back to software rendering, adding `--disable-gpu` if needed).
@@ -42,14 +42,15 @@ Verification levels: Vitest unit and HTTP/WebSocket integration tests in `apps/s
 
 ---
 
-## US-01 — Embedded OpenCode web app
+## US-01 — Embedded OpenCode Desktop (streamed)
 
-As the owner, I want OpenCode's own web interface inside the workspace for OpenCode employees, so that I use the real OpenCode app without leaving Virtual Office.
+As the owner, I want OpenCode Desktop inside the workspace for OpenCode employees, so that I use the real OpenCode app without leaving Virtual Office.
 
-- `US-01 / AC-01`: Given an OpenCode employee, when the owner opens its embedded app, then the server starts (or reuses) one `opencode serve --hostname 127.0.0.1 --port <free port> --cors <office origin>` process for the employee's `workingDirectory` and returns the URL the page frames; a second request for the same folder reuses the running process.
-- `US-01 / AC-02`: Given the process is starting, when its HTTP port is not ready yet, then the page shows "Starting OpenCode…"; given it does not answer within 20 seconds or exits, then the page shows the error and a "Retry" button, and no orphan process remains.
-- `US-01 / AC-03`: Given the framed UI, then it loads without the owner typing the server password (the office supplies it as verified in this story), and the process is stopped when the owner chooses "Stop app" or the server `close()` runs.
-- `US-01 / AC-04`: Given `opencode` is not installed, then the embedded app reports "OpenCode is not installed" and starts nothing.
+Revised 2026-11-20 (owner chose "Stream Desktop app"): the framed OpenCode web UI requires pairing with OpenCode's service server, so OpenCode is streamed like the other desktop apps instead of framed. The `opencode serve` web host and its routes are removed.
+
+- `US-01 / AC-01`: Given an OpenCode employee, when the owner starts its embedded app, then `DesktopAppHost` runs OpenCode Desktop (`/opt/OpenCode/ai.opencode --ozone-platform=x11 --user-data-dir=<data>/desktop-profiles/opencode_desktop`) on its own `Xvnc` display with the same lifecycle as the other apps (`appId` `opencode_desktop`, label "OpenCode").
+- `US-01 / AC-02`: Given OpenCode Desktop is not installed at that path, then starting it reports `409 app_not_installed` "OpenCode is not installed" and spawns nothing.
+- `US-01 / AC-03`: Given the App tab of an OpenCode employee, then it shows the streamed OpenCode Desktop exactly like the other bosses (no iframe), and the removed `opencode serve` host leaves no process or route behind.
 
 ---
 
@@ -91,7 +92,7 @@ As the owner, I want an "App" tab next to Chat and Terminal that shows the boss'
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-04` | `apps/server/test/desktop/opencode-web-host.test.ts` (6 tests: spawn args with `--cors`, reuse incl. concurrent starts, readiness timeout kills, early exit → `start_failed`, stop/stopAll and exit after ready, missing CLI/folder with zero spawns) + `apps/server/test/http/app-routes.test.ts` (6 tests: `POST /api/employees/:id/app/start` → `{ app: { kind: "web", url } }`, `DesktopError` → status, stop, other boss/unknown employee/no host rejected, token required) + live check of the real CLI. The page-level texts of `AC-02` ("Starting OpenCode…", Retry) are verified with the App tab in US-04. | Passed. RED first (`Cannot find module '../../src/desktop/opencode-web-host.ts'`; routes answered `404`), then 12/12 green; server 31 files / 247 tests; `tsc --noEmit` 0 errors. Live: `OpenCodeWebHost.start()` on a scratch folder ran real `opencode serve`, was ready in 262 ms, `GET` of its URL answered `200` with no `X-Frame-Options`, a second start reused the same URL, and `stopAll()` left no `opencode serve` process of ours. Verified on 127.0.0.1: the API answers `200` without the server password, so the office does not pass one (`AC-03`). Implementer: `pumbastudio` (`zai-org/glm-4.7-flash`) with one correction per answer; the route answer's NEW block was applied without its OLD markers. |
+| `US-01 / AC-01`–`AC-03` (revised) | `apps/server/test/desktop/desktop-app-host.test.ts` (OpenCode Desktop arguments and missing binary), `apps/server/test/http/app-routes.test.ts` (opencode employee → `opencode_desktop`), `apps/web/src/state/desktopApp.test.ts` (opencode → vnc) + live App tab check. Earlier evidence for the removed `opencode serve` host: framed UI asked for pairing; links from `opencode pair --url` were rejected (`401`); live probe of OpenCode Desktop on `Xvnc :64` with an isolated profile rendered its session screen without pairing. | Passed. RED first (server 4 failing: no `opencode_desktop` spec, route 409, status still web; web 1 failing), then server 32 files / 257 tests and web 20 files / 105 tests green; `tsc --noEmit` 0 errors in both; `vite build` succeeded; no `OpenCodeWebHost`/`openCodeWeb` reference remains. Live (port 4399, snapshot DB): Otto's App tab → Start app streamed OpenCode Desktop with status "Connected"; server shutdown left no `Xvnc` or profile process. The orphaned `.app-frame` CSS rule was removed. Implementer: hosted fallback (Haiku, high effort). |
 | `US-02 / AC-01`–`AC-04` | `apps/server/test/desktop/desktop-app-host.test.ts` (8 tests: Xvnc/window manager/app arguments and env, no window manager, reuse incl. concurrent starts, missing display server/app with zero spawns, readiness timeout kills, stop kills display + wm + profile processes, display exit cleanup, relaunch and stopAll) + live check through `DesktopAppHost` | Passed. RED first (`Cannot find module '../../src/desktop/desktop-app-host.ts'`), then 8/8 green; server 32 files / 255 tests; `tsc --noEmit` 0 errors. Live: `DesktopAppHost.start("chatgpt")` with real `Xvnc` returned display `:60` and a free RFB port, the display was captured with ChatGPT rendered, and `stop()` left no `Xvnc` or profile process. Server wiring: `desktopApps.stopAll()` in `close()`; the profiles folder `<db dir>/desktop-profiles` is created at startup (needed as the processes' working directory — added by the implementer, beyond the design). Implementer: hosted fallback (Haiku, high effort) after the local model failed twice to return applicable edit blocks for the helper exports. |
 | `US-02 / AC-05` | Live check per app (2026-11-20, `Xvnc` 1.15 installed by the owner): each app on its own display (`:61`–`:63`, `-localhost -SecurityTypes None -ac`), `DISPLAY` set, `WAYLAND_DISPLAY` unset, isolated `--user-data-dir`; frame captured with `ffmpeg -f x11grab` after 15 s | Passed for all three. Claude Desktop rendered its "Claude for Linux / Get started" screen (isolated profile, sign-in needed; logs "WebGL1 blocklisted", harmless); ChatGPT (`/usr/lib/chatgpt/ChatGPT`, the Codex app) rendered its workspace with the owner's projects (it reads `~/.codex`); Antigravity (snap) rendered its onboarding dialog. Findings: the launchers exit at once and the apps detach from the launcher's process group (killing the group left them running); killing `Xvnc` ended most app processes but left 8 alive, and `pkill -f <profile dir>` removed the rest; without a window manager Claude Desktop's window stays at its default size, centered. |
 | `US-03 / AC-01`–`AC-03` | `apps/server/test/http/desktop-ws.test.ts` (5 tests against a local fake VNC TCP server: byte relay both ways as binary frames, bad token / wrong token / foreign origin rejected with zero TCP connections, `desktop_unavailable` 1011 / `unknown_app` 1008 / `app_not_running` 1008 error frames, browser close destroys TCP without stopping the app, VNC close → browser close 1000); live relay with noVNC is checked in US-04 | Passed. RED first (`Unexpected server response: 404`), then 5/5 green; server 33 files / 260 tests; `tsc --noEmit` 0 errors. Implementers: `pumbastudio` wrote the tests and the route (one correction each: invalid type-as-value, literal `token=...`, missing message handler, check order, `readyState` misuse); hosted fallback (Haiku, high effort) finished the remaining typing and test fixes (ws `RawData` and TCP chunk conversion, wrong-token case). US-02 review: `review assess` → high / `review_due`; the owner chose "Skip this time" for that candidate (`declined_this_candidate`). |

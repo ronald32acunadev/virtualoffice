@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/http/app.ts";
-import { DesktopError, OpenCodeWebHost } from "../../src/desktop/opencode-web-host.ts";
+import { DesktopError } from "../../src/desktop/process-utils.ts";
 import { DesktopAppHost, type DesktopAppId, type DesktopAppInstance } from "../../src/desktop/desktop-app-host.ts";
 import type { Employee } from "../../src/office/domain/types.ts";
 import { SqliteOfficeRepository } from "../../src/persistence/sqlite/sqlite-office-repository.ts";
@@ -31,28 +31,6 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
     updatedAt: "2026-01-01T00:00:00.000Z",
     ...overrides,
   };
-}
-
-class FakeOpenCodeWebHost extends OpenCodeWebHost {
-  constructor() {
-    super({ allowedOrigins: [] });
-  }
-  startCalls: string[] = [];
-  stopCalls: string[] = [];
-  failWith: DesktopError | null = null;
-
-  override async start(dir: string): Promise<{ url: string; port: number }> {
-    this.startCalls.push(dir);
-    if (this.failWith) {
-      throw this.failWith;
-    }
-    return { url: "http://127.0.0.1:5101/", port: 5101 };
-  }
-
-  override stop(dir: string): boolean {
-    this.stopCalls.push(dir);
-    return true;
-  }
 }
 
 class FakeDesktopAppHost extends DesktopAppHost {
@@ -107,21 +85,21 @@ async function setupDesktop(employees: Partial<Employee>[]) {
   return { app, host };
 }
 
-async function setup(options: { withHost?: boolean; employee?: Partial<Employee> } = {}) {
+async function setupWithoutDesktop(employees: Partial<Employee>[]) {
   const repository = new SqliteOfficeRepository(":memory:");
   const h = createHarness(repository);
-  h.repository.insertEmployee(makeEmployee(options.employee));
-  const host = new FakeOpenCodeWebHost();
+  for (const employee of employees) {
+    h.repository.insertEmployee(makeEmployee(employee));
+  }
   const app = await buildApp({
     token: TOKEN,
     port: PORT,
     repository: h.repository,
     office: h.office,
-    ...(options.withHost === false ? {} : { openCodeWeb: host }),
   });
   apps.push(app);
   await app.ready();
-  return { app, host };
+  return { app };
 }
 
 function post(app: FastifyInstance, url: string) {
@@ -147,56 +125,17 @@ afterEach(async () => {
   apps.length = 0;
 });
 
-describe("US-01 Embedded OpenCode web app", () => {
-  it("US-01 / AC-01: starts the OpenCode web app for an OpenCode employee", async () => {
-    const { app, host } = await setup();
+describe("US-01 Embedded OpenCode Desktop routes", () => {
+  it("US-01 / AC-01: an OpenCode employee starts OpenCode Desktop", async () => {
+    const { app, host } = await setupDesktop([{ id: "emp-oc", bossId: "opencode" }]);
     const res = await post(app, "/api/employees/emp-oc/app/start");
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ app: { kind: "web", running: true, url: "http://127.0.0.1:5101/" } });
-    expect(host.startCalls).toEqual(["/work/app"]);
-  });
-
-  it("US-01 / AC-02: host failures map to their status codes", async () => {
-    const { app, host } = await setup();
-    host.failWith = new DesktopError("start_timeout", "OpenCode did not start in time");
-    const res = await post(app, "/api/employees/emp-oc/app/start");
-    expect(res.statusCode).toBe(504);
-    expect(res.json().error).toEqual({ code: "start_timeout", message: "OpenCode did not start in time" });
-  });
-
-  it("US-01 / AC-03: stop stops the folder's process", async () => {
-    const { app, host } = await setup();
-    const res = await post(app, "/api/employees/emp-oc/app/stop");
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ stopped: true });
-    expect(host.stopCalls).toEqual(["/work/app"]);
-  });
-
-  it("US-01 / AC-04: missing CLI is reported as 409 app_not_installed", async () => {
-    const { app, host } = await setup();
-    host.failWith = new DesktopError("app_not_installed", "OpenCode is not installed");
-    const res = await post(app, "/api/employees/emp-oc/app/start");
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.code).toBe("app_not_installed");
-  });
-
-  it("US-01: other bosses, unknown employees and a missing host are rejected without starting", async () => {
-    const { app, host } = await setup({ employee: { bossId: "claude" } });
-    const startRes = await post(app, "/api/employees/emp-oc/app/start");
-    expect(startRes.statusCode).toBe(409);
-    expect(startRes.json().error.code).toBe("app_not_available");
-    expect(host.startCalls).toEqual([]);
-    const stopRes = await post(app, "/api/employees/emp-oc/app/stop");
-    expect(stopRes.statusCode).toBe(200);
-    expect(stopRes.json()).toEqual({ stopped: false });
-    const unknownRes = await post(app, "/api/employees/nope/app/start");
-    expect(unknownRes.statusCode).toBe(404);
-    const unknownStopRes = await post(app, "/api/employees/nope/app/stop");
-    expect(unknownStopRes.statusCode).toBe(404);
+    expect(res.json()).toEqual({ app: { kind: "vnc", appId: "opencode_desktop", running: true } });
+    expect(host.startCalls).toEqual(["opencode_desktop"]);
   });
 
   it("US-01: the routes require the token", async () => {
-    const { app, host } = await setup();
+    const { app, host } = await setupDesktop([{ id: "emp-oc", bossId: "opencode" }]);
     const res = await app.inject({
       method: "POST",
       url: "/api/employees/emp-oc/app/start",
@@ -206,12 +145,20 @@ describe("US-01 Embedded OpenCode web app", () => {
     expect(host.startCalls).toEqual([]);
   });
 
-  it("US-01: missing host case", async () => {
-    const noHost = await setup({ withHost: false });
-    const noHostRes = await post(noHost.app, "/api/employees/emp-oc/app/start");
-    expect(noHostRes.statusCode).toBe(409);
-    expect(noHostRes.json().error.code).toBe("app_not_available");
-    expect(noHost.host.startCalls).toEqual([]);
+  it("US-01: unknown employees are rejected", async () => {
+    const { app, host } = await setupDesktop([{ id: "emp-oc", bossId: "opencode" }]);
+    const unknownRes = await post(app, "/api/employees/nope/app/start");
+    expect(unknownRes.statusCode).toBe(404);
+    const unknownStopRes = await post(app, "/api/employees/nope/app/stop");
+    expect(unknownStopRes.statusCode).toBe(404);
+    expect(host.startCalls).toEqual([]);
+  });
+
+  it("US-01: a missing desktop host is reported as app_not_available", async () => {
+    const { app } = await setupWithoutDesktop([{ id: "emp-oc", bossId: "opencode" }]);
+    const res = await post(app, "/api/employees/emp-oc/app/start");
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe("app_not_available");
   });
 });
 
@@ -241,9 +188,10 @@ describe("US-04 Embedded desktop app routes", () => {
     const claude = await get(app, "/api/employees/emp-claude/app");
     expect(claude.statusCode).toBe(200);
     expect(claude.json()).toEqual({ app: { kind: "vnc", appId: "claude_desktop", running: true } });
+    host.running = false;
     const opencode = await get(app, "/api/employees/emp-oc/app");
     expect(opencode.statusCode).toBe(200);
-    expect(opencode.json()).toEqual({ app: { kind: "web", running: false, url: null } });
+    expect(opencode.json()).toEqual({ app: { kind: "vnc", appId: "opencode_desktop", running: false } });
   });
 
   it("US-04 / AC-03: stop and relaunch reach the desktop host", async () => {

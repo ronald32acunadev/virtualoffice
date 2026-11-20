@@ -1,25 +1,21 @@
 import type { BossId } from "../api/types";
 
-export type DesktopAppId = "claude_desktop" | "chatgpt" | "antigravity";
+export type DesktopAppId = "claude_desktop" | "chatgpt" | "antigravity" | "opencode_desktop";
 
-export type EmbeddedAppTarget =
-  | { kind: "web"; label: string }
-  | { kind: "vnc"; appId: DesktopAppId; label: string };
+export type EmbeddedAppTarget = { kind: "vnc"; appId: DesktopAppId; label: string };
 
-export type EmbeddedAppStatus =
-  | { kind: "web"; running: boolean; url: string | null }
-  | { kind: "vnc"; appId: DesktopAppId; running: boolean };
+export type EmbeddedAppStatus = { kind: "vnc"; appId: DesktopAppId; running: boolean };
 
 export function embeddedAppFor(bossId: BossId): EmbeddedAppTarget {
   switch (bossId) {
-    case "opencode":
-      return { kind: "web", label: "OpenCode" };
     case "claude":
       return { kind: "vnc", appId: "claude_desktop", label: "Claude Desktop" };
     case "codex":
       return { kind: "vnc", appId: "chatgpt", label: "ChatGPT" };
     case "gemini":
       return { kind: "vnc", appId: "antigravity", label: "Antigravity" };
+    case "opencode":
+      return { kind: "vnc", appId: "opencode_desktop", label: "OpenCode" };
     default:
       throw new Error(`Unknown bossId: ${bossId}`);
   }

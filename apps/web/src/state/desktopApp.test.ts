@@ -9,7 +9,8 @@ import {
 describe("desktopApp", () => {
   it("US-04 / AC-01: maps each boss to its embedded app", () => {
     expect(embeddedAppFor("opencode")).toEqual({
-      kind: "web",
+      kind: "vnc",
+      appId: "opencode_desktop",
       label: "OpenCode",
     });
     expect(embeddedAppFor("claude")).toEqual({

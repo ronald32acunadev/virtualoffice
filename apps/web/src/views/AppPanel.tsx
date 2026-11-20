@@ -10,7 +10,7 @@ type Phase =
   | { name: "checking" }
   | { name: "stopped" }
   | { name: "starting" }
-  | { name: "running"; url: string | null }
+  | { name: "running" }
   | { name: "error"; message: string };
 
 type StreamState = "connecting" | "connected" | "disconnected";
@@ -37,11 +37,9 @@ async function readClipboard(): Promise<string | null> {
   }
 }
 
-/** The "App" tab: the boss's embedded app, an OpenCode web UI frame or a noVNC desktop stream. */
+/** The "App" tab: the boss's embedded desktop app, streamed over noVNC. */
 export function AppPanel({ employeeId, bossId }: Props) {
-  const target = embeddedAppFor(bossId);
-  const { label } = target;
-  const appId = target.kind === "vnc" ? target.appId : null;
+  const { appId, label } = embeddedAppFor(bossId);
   const [phase, setPhase] = useState<Phase>({ name: "checking" });
   const [stream, setStream] = useState<StreamState>("connecting");
   const [streamKey, setStreamKey] = useState(0);
@@ -61,7 +59,7 @@ export function AppPanel({ employeeId, bossId }: Props) {
         .then((res) => {
           if (!isCurrentEmployee(requestEmployeeId, activeEmployeeRef.current)) return;
           setStreamKey((key) => key + 1);
-          setPhase({ name: "running", url: res.app.kind === "web" ? res.app.url : null });
+          setPhase({ name: "running" });
         })
         .catch((err: unknown) => {
           if (!isCurrentEmployee(requestEmployeeId, activeEmployeeRef.current)) return;
@@ -72,7 +70,7 @@ export function AppPanel({ employeeId, bossId }: Props) {
   );
 
   // Checks the app on mount and whenever the employee changes. A running app is started again only to
-  // obtain its URL (OpenCode) or to reuse its display (desktop apps); the start call never spawns a second one.
+  // reuse its display; the start call never spawns a second one.
   useEffect(() => {
     const requestEmployeeId = employeeId;
     setPhase({ name: "checking" });
@@ -94,7 +92,7 @@ export function AppPanel({ employeeId, bossId }: Props) {
 
   // The noVNC stream exists only while a desktop app runs. Leaving the tab or switching employee closes the stream, never the app.
   useEffect(() => {
-    if (appId === null || !running) return;
+    if (!running) return;
     const host = hostRef.current;
     if (host === null) return;
 
@@ -165,7 +163,6 @@ export function AppPanel({ employeeId, bossId }: Props) {
       case "error":
         return "Error";
       case "running":
-        if (target.kind === "web") return "Running";
         if (stream === "connected") return "Connected";
         return stream === "connecting" ? "Connecting…" : "Stream disconnected";
     }
@@ -194,14 +191,6 @@ export function AppPanel({ employeeId, bossId }: Props) {
         </button>
       </div>
     );
-  } else if (target.kind === "web") {
-    body = phase.url ? (
-      <div className="app-host">
-        <iframe className="app-frame" src={phase.url} title={label} />
-      </div>
-    ) : (
-      <p className="app-message">{startingText(label)}</p>
-    );
   } else {
     body = (
       <>
@@ -226,7 +215,7 @@ export function AppPanel({ employeeId, bossId }: Props) {
       <div className="app-toolbar">
         <span className="app-label">{label}</span>
         <span className="app-status">{statusText()}</span>
-        {running && appId !== null ? (
+        {running ? (
           <button type="button" className="secondary" onClick={pasteIntoApp}>
             Paste into app
           </button>
