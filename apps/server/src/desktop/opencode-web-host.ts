@@ -18,7 +18,8 @@ export type DesktopErrorCode =
   | "app_not_installed"
   | "folder_missing"
   | "start_timeout"
-  | "start_failed";
+  | "start_failed"
+  | "display_server_missing";
 
 export class DesktopError extends Error {
   readonly code: DesktopErrorCode;
@@ -169,7 +170,7 @@ export class OpenCodeWebHost {
   }
 }
 
-function defaultSpawn(
+export function defaultSpawn(
   command: string,
   args: string[],
   options: { cwd: string; env: Record<string, string | undefined> }
@@ -191,7 +192,7 @@ function defaultSpawn(
   };
 }
 
-function defaultFindFreePort(): Promise<number> {
+export function defaultFindFreePort(): Promise<number> {
   return new Promise((resolve) => {
     const srv = net.createServer();
     srv.listen(0, "127.0.0.1", () => {
@@ -201,7 +202,7 @@ function defaultFindFreePort(): Promise<number> {
   });
 }
 
-function defaultWaitForPort(port: number, timeoutMs: number): Promise<boolean> {
+export function defaultWaitForPort(port: number, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const deadline = Date.now() + timeoutMs;
     const interval = setInterval(() => {

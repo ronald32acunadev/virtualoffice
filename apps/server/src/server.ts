@@ -19,6 +19,7 @@ import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
 import { OpenCodeWebHost } from "./desktop/opencode-web-host.ts";
+import { DesktopAppHost } from "./desktop/desktop-app-host.ts";
 
 export type StartOfficeServerOptions = {
   port?: number;
@@ -88,6 +89,16 @@ export async function startOfficeServer(
     allowedOrigins: allowedOrigins(port, devOrigin),
   });
 
+  const desktopProfilesRoot = path.join(
+    path.dirname(dbPath === ":memory:" ? path.join(repoRoot, "data", "x") : dbPath),
+    "desktop-profiles"
+  );
+  if (dbPath !== ":memory:") {
+    // The app processes run with this folder as their working directory, so it must exist.
+    fs.mkdirSync(desktopProfilesRoot, { recursive: true });
+  }
+  const desktopApps = new DesktopAppHost({ profilesRoot: desktopProfilesRoot });
+
   const app = await buildApp({
     token,
     port,
@@ -121,6 +132,7 @@ export async function startOfficeServer(
         await app.close();
         terminals.killAll();
         openCodeWeb.stopAll();
+        desktopApps.stopAll();
         repository.close();
       } finally {
       }
