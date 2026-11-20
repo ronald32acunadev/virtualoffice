@@ -1,0 +1,806 @@
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import type { AgentAdapter, AgentMessage, AgentSink, ApprovalOutcome, ApprovalPrompt } from "../ports/agent-adapter.ts";
+import type { CatalogProvider } from "../ports/catalog-provider.ts";
+import type { EventBus } from "../ports/event-bus.ts";
+import type { OfficeRepository } from "../ports/office-repository.ts";
+import type { SessionCatalog } from "../ports/session-catalog.ts";
+import { buildCatalog } from "../domain/catalog.ts";
+import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
+import {
+  BOSSES,
+  MAX_NAME_LENGTH,
+  OfficeError,
+  isActiveStatus,
+  isDecision,
+  isSpecies,
+  type ApprovalRequest,
+  type Boss,
+  type BossId,
+  type Catalog,
+  type ClaudeSessionSummary,
+  type Decision,
+  type Employee,
+  type ImportSkipReason,
+  type Message,
+  type ProviderCatalog,
+  type Species,
+} from "../domain/types.ts";
+
+export type OfficeDeps = {
+  repository: OfficeRepository;
+  /** Single Claude adapter shortcut (kept for backward compatibility with existing tests). */
+  adapter?: AgentAdapter;
+  /** Per-boss adapters; takes precedence over `adapter` when both are provided. */
+  adapters?: Partial<Record<BossId, AgentAdapter>>;
+  events: EventBus;
+  now?: () => Date;
+  newId?: () => string;
+  /** Returns true when the path exists and is a directory. */
+  isDirectory?: (path: string) => boolean;
+  /** Existing provider sessions (import and catch-up). Without it, listing is empty and catch-up is skipped. */
+  sessions?: SessionCatalog;
+  /** Source of randomness for generated names and species; injectable for deterministic tests. */
+  random?: RandomFn;
+  /** Reads a folder's commands and agents without an employee. Without it, catalogs come only from live sessions. */
+  catalogProvider?: CatalogProvider;
+  /** Optional display name overrides for boss suites (e.g. `{ gemini: "Antigravity" }`). */
+  bossNames?: Partial<Record<BossId, string>>;
+};
+
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 100;
+const MAX_IMPORT_BATCH = 100;
+const CATCH_UP_FAILED = "Earlier turns could not be loaded";
+
+type PendingApproval = {
+  employeeId: string;
+  resolve: (outcome: ApprovalOutcome) => void;
+};
+
+type LiveSession = { active: boolean };
+
+const SIGNAL_INTERRUPTED = "Session interrupted: the agent process was terminated. Send a message to resume.";
+
+/** True when a failure reason says the agent process died from SIGINT/SIGTERM (exit code 130/143 or a signal message). */
+export function isSignalTermination(reason: string): boolean {
+  if (/exited with code (130|143)\b/i.test(reason)) return true;
+  return /\b(terminated|killed)\b/i.test(reason) && /\bSIG(TERM|INT)\b/i.test(reason);
+}
+
+function defaultIsDirectory(path: string): boolean {
+  try {
+    return fs.statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export class OfficeService {
+  private shuttingDown = false;
+  private readonly repository: OfficeRepository;
+  private readonly adapters: Partial<Record<BossId, AgentAdapter>>;
+  private readonly events: EventBus;
+  private readonly now: () => Date;
+  private readonly newId: () => string;
+  private readonly isDirectory: (path: string) => boolean;
+  private readonly catalog: SessionCatalog | undefined;
+  private readonly random: RandomFn;
+  private readonly catalogProvider: CatalogProvider | undefined;
+  private readonly bossNames: Partial<Record<BossId, string>>;
+  /** Catalogs per absolute folder; only successful reads are stored. */
+  private readonly catalogCache = new Map<string, Catalog>();
+  /** In-flight probes per folder, so concurrent requests share one. */
+  private readonly probes = new Map<string, Promise<Catalog>>();
+  /** Per-employee tail of in-flight message deliveries, so concurrent sends keep their order. */
+  private readonly deliveries = new Map<string, Promise<unknown>>();
+
+  /** Pending-approval registry: approvalId -> resolver of the agent's waiting promise. */
+  private readonly pending = new Map<string, PendingApproval>();
+  private readonly sessions = new Map<string, LiveSession>();
+
+  constructor(deps: OfficeDeps) {
+    this.repository = deps.repository;
+    this.adapters = {
+      ...(deps.adapter ? { claude: deps.adapter } : {}),
+      ...(deps.adapters ?? {}),
+    };
+    this.events = deps.events;
+    this.now = deps.now ?? (() => new Date());
+    this.newId = deps.newId ?? randomUUID;
+    this.isDirectory = deps.isDirectory ?? defaultIsDirectory;
+    this.catalog = deps.sessions;
+    this.random = deps.random ?? Math.random;
+    this.catalogProvider = deps.catalogProvider;
+    this.bossNames = deps.bossNames ?? {};
+  }
+
+  subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
+    return this.events.subscribe(listener);
+  }
+
+  // ---- queries ----
+
+  listBosses(): Boss[] {
+    return BOSSES.map((boss) => ({
+      ...boss,
+      name: this.bossNames[boss.id] ?? boss.name,
+      available: Boolean(this.adapters[boss.id]),
+    }));
+  }
+
+  private adapterFor(bossId: BossId): AgentAdapter | undefined {
+    return this.adapters[bossId];
+  }
+
+  getState(): { bosses: Boss[]; employees: Employee[]; approvals: ApprovalRequest[] } {
+    return {
+      bosses: this.listBosses(),
+      employees: this.repository.listEmployees(),
+      approvals: this.repository.listPendingApprovals(),
+    };
+  }
+
+  listMessages(employeeId: string): Message[] {
+    this.requireEmployee(employeeId);
+    return this.repository.listMessages(employeeId);
+  }
+
+  /** Commands and agents of a folder: cached, or probed on a miss or when `refresh` is true. */
+  async getCatalog(query: { workingDirectory?: unknown; refresh?: unknown }): Promise<Catalog> {
+    const folder = this.requireFolder(query.workingDirectory);
+    return this.folderCatalog(folder, parseRefresh(query.refresh));
+  }
+
+  /** An employee's catalog: the live session's lists when it has one, else its folder's. */
+  async getEmployeeCatalog(employeeId: string, query: { refresh?: unknown }): Promise<Catalog> {
+    const employee = this.requireEmployee(employeeId);
+    const refresh = parseRefresh(query.refresh);
+    const adapter = this.adapterFor(employee.bossId);
+    if (this.sessions.get(employeeId)?.active && adapter) {
+      const live = await adapter.fetchCatalog(employeeId);
+      if (live) return this.cacheCatalog(employee.workingDirectory, live);
+    }
+    if (!this.isDirectory(employee.workingDirectory)) {
+      throw new OfficeError("catalog_unavailable", `Project folder not found: ${employee.workingDirectory}`);
+    }
+    return this.folderCatalog(path.resolve(employee.workingDirectory), refresh);
+  }
+
+  /** Existing Claude sessions, filtered by `q` over title and folder, newest first, then paged. */
+  async listClaudeSessions(query: {
+    q?: unknown;
+    limit?: unknown;
+    offset?: unknown;
+  }): Promise<{ sessions: ClaudeSessionSummary[]; total: number }> {
+    const limit = parseCount(query.limit, "limit", DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    const offset = parseCount(query.offset, "offset", 0, 0, Number.MAX_SAFE_INTEGER);
+    if (query.q !== undefined && typeof query.q !== "string") {
+      throw new OfficeError("validation_error", "q must be a string", "q");
+    }
+    const needle = (query.q ?? "").trim().toLowerCase();
+    const all = this.catalog ? await this.catalog.list() : [];
+    const imported = this.importedSessionIds();
+    const matching = all
+      .filter((s) => needle === "" || s.title.toLowerCase().includes(needle) || (s.cwd ?? "").toLowerCase().includes(needle))
+      .sort((a, b) => b.lastModified - a.lastModified);
+    return {
+      total: matching.length,
+      sessions: matching.slice(offset, offset + limit).map((s) => ({
+        sessionId: s.sessionId,
+        title: s.title,
+        cwd: s.cwd,
+        gitBranch: s.gitBranch,
+        lastModified: new Date(s.lastModified).toISOString(),
+        createdAt: s.createdAt === null ? null : new Date(s.createdAt).toISOString(),
+        alreadyImported: imported.has(s.sessionId),
+      })),
+    };
+  }
+
+  /** Creates one employee per chosen session, with its history. Only reads from the provider. */
+  async importClaudeSessions(
+    sessionIds: unknown,
+  ): Promise<{ imported: Employee[]; skipped: { sessionId: string; reason: ImportSkipReason }[] }> {
+    if (
+      !Array.isArray(sessionIds) ||
+      sessionIds.length < 1 ||
+      sessionIds.length > MAX_IMPORT_BATCH ||
+      sessionIds.some((id) => typeof id !== "string" || id === "")
+    ) {
+      throw new OfficeError("validation_error", `sessionIds must list 1-${MAX_IMPORT_BATCH} session ids`, "sessionIds");
+    }
+    const catalog = this.catalog;
+    let known: Map<string, Awaited<ReturnType<SessionCatalog["list"]>>[number]> | null = null;
+    if (catalog) {
+      try {
+        known = new Map((await catalog.list()).map((s) => [s.sessionId, s]));
+      } catch {
+        known = null;
+      }
+    }
+    const imported: Employee[] = [];
+    const skipped: { sessionId: string; reason: ImportSkipReason }[] = [];
+    for (const sessionId of sessionIds as string[]) {
+      if (this.importedSessionIds().has(sessionId)) {
+        skipped.push({ sessionId, reason: "already_imported" });
+        continue;
+      }
+      if (!catalog || !known) {
+        skipped.push({ sessionId, reason: "read_failed" });
+        continue;
+      }
+      const info = known.get(sessionId);
+      if (!info) {
+        skipped.push({ sessionId, reason: "not_found" });
+        continue;
+      }
+      if (!info.cwd) {
+        skipped.push({ sessionId, reason: "missing_cwd" });
+        continue;
+      }
+      let history;
+      try {
+        history = await catalog.history(sessionId);
+      } catch {
+        skipped.push({ sessionId, reason: "read_failed" });
+        continue;
+      }
+      const timestamp = this.timestamp();
+      const folderExists = this.isDirectory(info.cwd);
+      const employee: Employee = {
+        id: this.newId(),
+        bossId: "claude",
+        hiredBy: null,
+        task: info.title,
+        workingDirectory: info.cwd,
+        name: this.nextName(),
+        species: generateSpecies(this.random),
+        importedAt: timestamp,
+        role: null,
+        providerSessionId: sessionId,
+        status: folderExists ? "idle" : "failed",
+        failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      this.repository.insertEmployee(employee);
+      // History is stored silently: clients load it when the employee is opened.
+      for (const entry of history) this.repository.insertMessage(this.buildMessage(employee.id, entry));
+      this.events.publish({ type: "employee_updated", employee });
+      imported.push(employee);
+    }
+    return { imported, skipped };
+  }
+
+  // ---- commands ----
+
+  /**
+   * Hire as the HTTP layer receives it: a role is checked against the folder's agents (probing when
+   * the catalog is not cached) before anyone is created; every other rule is checked first.
+   */
+  async hireFromRequest(input: HireInput): Promise<Employee> {
+    this.validateHire(input);
+    const role = parseRole(input.role);
+    if (role !== null && input.bossId !== "claude") {
+      throw new OfficeError("validation_error", "Roles are only supported for Claude employees", "role");
+    }
+    if (role !== null) {
+      const catalog = await this.folderCatalog(path.resolve(input.workingDirectory as string), false);
+      if (!catalog.agents.some((agent) => agent.name === role)) {
+        throw new OfficeError("validation_error", `Unknown role: ${role}`, "role");
+      }
+    }
+    return this.hire(input);
+  }
+
+  hire(input: HireInput): Employee {
+    const { boss, task, workingDirectory } = this.validateHire(input);
+    const role = parseRole(input.role);
+    const name = input.name === undefined ? this.nextName() : parseName(input.name);
+    const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
+    const timestamp = this.timestamp();
+    const employee: Employee = {
+      id: this.newId(),
+      bossId: boss.id,
+      hiredBy: null,
+      task,
+      workingDirectory,
+      name,
+      species,
+      importedAt: null,
+      role,
+      providerSessionId: null,
+      status: "starting",
+      failureReason: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    this.repository.insertEmployee(employee);
+    this.events.publish({ type: "employee_updated", employee });
+    this.appendMessage(employee.id, { kind: "user_text", content: task });
+    this.openSession(employee, task);
+    return this.requireEmployee(employee.id);
+  }
+
+  /** Checks the rules every hire shares and returns the parsed values. */
+  private validateHire(input: HireInput): { boss: Boss; task: string; workingDirectory: string } {
+    const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
+    if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
+    if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
+    if (typeof input.task !== "string" || input.task.trim() === "") {
+      throw new OfficeError("validation_error", "Task must not be empty", "task");
+    }
+    return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
+  }
+
+  /** Renames an employee and/or changes its species. Nothing changes when any value is invalid. */
+  updateProfile(employeeId: string, input: { name?: unknown; species?: unknown }): Employee {
+    this.requireEmployee(employeeId);
+    if (input.name === undefined && input.species === undefined) {
+      throw new OfficeError("validation_error", "Provide a name or a species", "name");
+    }
+    const patch: Partial<Employee> = {};
+    if (input.name !== undefined) patch.name = parseName(input.name);
+    if (input.species !== undefined) patch.species = parseSpecies(input.species);
+    return this.patchEmployee(employeeId, patch);
+  }
+
+  /** Startup: gives every employee created before names existed a generated name and species. */
+  backfillProfiles(): number {
+    let updated = 0;
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.name.trim() !== "") continue;
+      this.repository.updateEmployee({
+        ...employee,
+        name: this.nextName(),
+        species: generateSpecies(this.random),
+        updatedAt: this.timestamp(),
+      });
+      updated += 1;
+    }
+    return updated;
+  }
+
+  async sendMessage(employeeId: string, text: unknown): Promise<Message> {
+    this.requireEmployee(employeeId);
+    if (typeof text !== "string" || text.trim() === "") {
+      throw new OfficeError("validation_error", "Message text must not be empty", "text");
+    }
+    const previous = this.deliveries.get(employeeId) ?? Promise.resolve();
+    const run = previous.then(() => this.deliver(employeeId, text));
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.deliveries.set(employeeId, tail);
+    void tail.then(() => {
+      if (this.deliveries.get(employeeId) === tail) this.deliveries.delete(employeeId);
+    });
+    return run;
+  }
+
+  private async deliver(employeeId: string, text: string): Promise<Message> {
+    const employee = this.requireEmployee(employeeId);
+    const adapter = this.adapterFor(employee.bossId);
+    if (!adapter) {
+      throw new OfficeError("boss_unavailable", `Boss ${employee.bossId} is not available`);
+    }
+    if (this.sessions.get(employeeId)?.active && adapter.sendMessage(employeeId, text)) {
+      const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
+      if (employee.status === "idle") this.setStatus(employeeId, "working");
+      return message;
+    }
+    const stale = this.sessions.get(employeeId);
+    if (stale) stale.active = false;
+    if (!this.isDirectory(employee.workingDirectory)) {
+      throw new OfficeError(
+        "working_directory_missing",
+        `Project folder not found: ${employee.workingDirectory}`,
+      );
+    }
+    // No live session: reopen the stored one (or start fresh if none was ever recorded).
+    this.setStatus(employeeId, "working", { failureReason: null });
+    await this.catchUp(this.requireEmployee(employeeId));
+    const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
+    this.openSession(this.requireEmployee(employeeId), text, employee.providerSessionId ?? undefined);
+    return message;
+  }
+
+  async stop(employeeId: string): Promise<Employee> {
+    const employee = this.requireEmployee(employeeId);
+    if (!isActiveStatus(employee.status)) return employee;
+    const session = this.sessions.get(employeeId);
+    if (session) session.active = false;
+    this.expireApprovalsOf(employeeId);
+    try {
+      await this.adapterFor(employee.bossId)?.stop(employeeId);
+    } finally {
+      this.sessions.delete(employeeId);
+    }
+    return this.setStatus(employeeId, "stopped");
+  }
+
+  decide(approvalId: string, input: { decision: unknown; answers?: unknown }): ApprovalRequest {
+    if (!isDecision(input.decision)) {
+      throw new OfficeError("validation_error", "Unknown decision", "decision");
+    }
+    const decision: Decision = input.decision;
+    const stored = this.repository.getApproval(approvalId);
+    if (!stored) throw new OfficeError("not_found", "Approval not found");
+    const waiting = this.pending.get(approvalId);
+    if (stored.status !== "pending" || !waiting) {
+      throw new OfficeError("approval_not_pending", "Approval is no longer pending");
+    }
+    if (decision === "approve_for_session" && !stored.canApproveForSession) {
+      throw new OfficeError("validation_error", "Approve for session is not available for this request", "decision");
+    }
+    let answers: Record<string, string> | null = null;
+    if (stored.kind === "question" && decision !== "reject") {
+      answers = parseAnswers(input.answers);
+      if (!answers) throw new OfficeError("validation_error", "Question requests need answers", "answers");
+    }
+    const updated: ApprovalRequest = {
+      ...stored,
+      status: decision === "reject" ? "rejected" : "approved",
+      decision,
+      answers,
+      decidedAt: this.timestamp(),
+    };
+    this.repository.updateApproval(updated);
+    this.pending.delete(approvalId);
+    this.events.publish({ type: "approval_updated", approval: updated });
+    this.resumeWorkingIfUnblocked(stored.employeeId);
+    waiting.resolve(decision === "reject" ? { decision } : { decision, ...(answers ? { answers } : {}) });
+    return updated;
+  }
+
+  /** Startup recovery: interrupted employees become stopped and pending approvals expire. */
+  recoverOnStartup(): { stopped: number; expired: number } {
+    let stopped = 0;
+    for (const employee of this.repository.listEmployees()) {
+      if (isActiveStatus(employee.status)) {
+        this.repository.updateEmployee({ ...employee, status: "stopped", updatedAt: this.timestamp() });
+        stopped += 1;
+      }
+    }
+    const expired = this.repository.expirePendingApprovals(this.timestamp());
+    return { stopped, expired };
+  }
+
+  /** Marks the server as shutting down so agent process deaths are not reported as failures. */
+  beginShutdown(): void {
+    this.shuttingDown = true;
+  }
+
+  /** Server shutdown: expire every pending request (agents get deny) and stop live sessions. */
+  async shutdown(): Promise<void> {
+    this.beginShutdown();
+    const ids = [...this.sessions.keys()];
+    for (const id of ids) {
+      try {
+        await this.stop(id);
+      } catch {
+        // keep shutting down the rest
+      }
+    }
+    for (const id of [...this.pending.keys()]) this.expire(id);
+  }
+
+  /**
+   * Before resuming, appends the stored-session turns this office has not seen (made in a terminal),
+   * in order. A failure to read adds a system note and the resume continues.
+   */
+  private async catchUp(employee: Employee): Promise<void> {
+    if (employee.bossId !== "claude") return;
+    const sessionId = employee.providerSessionId;
+    if (!sessionId || !this.catalog) return;
+    const stored = this.repository.listMessages(employee.id);
+    const storedUuids = new Set(stored.flatMap((m) => (m.sourceUuid ? [m.sourceUuid] : [])));
+    // Without any provider uuid on record (a pre-import employee), a diff would re-add everything.
+    if (!employee.importedAt && storedUuids.size === 0) return;
+    let history;
+    try {
+      history = await this.catalog.history(sessionId);
+    } catch {
+      this.appendMessage(employee.id, { kind: "system", content: CATCH_UP_FAILED });
+      return;
+    }
+    // Owner messages sent from the office are stored without a uuid; claim their echo instead of duplicating it.
+    const unnumbered = stored.filter((m) => m.kind === "user_text" && !m.sourceUuid);
+    const claimed = new Set<string>();
+    for (const entry of history) {
+      const uuid = entry.sourceUuid ?? null;
+      if (uuid && (storedUuids.has(uuid) || claimed.has(uuid))) continue;
+      if (uuid && entry.kind === "user_text") {
+        const index = unnumbered.findIndex((m) => m.content === entry.content);
+        if (index >= 0) {
+          this.repository.setMessageSourceUuid(unnumbered[index]!.id, uuid);
+          unnumbered.splice(index, 1);
+          claimed.add(uuid);
+          continue;
+        }
+      }
+      this.appendMessage(employee.id, entry);
+    }
+  }
+
+  private importedSessionIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.providerSessionId) ids.add(employee.providerSessionId);
+    }
+    return ids;
+  }
+
+  private nextName(): string {
+    return generateName(this.repository.listEmployees().map((e) => e.name), this.random);
+  }
+
+  // ---- session plumbing ----
+
+  private openSession(employee: Employee, prompt: string, resume?: string): void {
+    const session: LiveSession = { active: true };
+    this.sessions.set(employee.id, session);
+    const sink = this.createSink(employee.id, session);
+    const adapter = this.adapterFor(employee.bossId);
+    if (!adapter) {
+      sink.onFailed(`Boss ${employee.bossId} is not available`);
+      return;
+    }
+    try {
+      adapter.start({ employee, prompt, ...(resume ? { resume } : {}) }, sink);
+    } catch (error) {
+      sink.onFailed(errorReason(error));
+    }
+  }
+
+  private createSink(employeeId: string, session: LiveSession): AgentSink {
+    return {
+      onSessionStarted: (providerSessionId) => {
+        if (!session.active) return;
+        this.patchEmployee(employeeId, { providerSessionId });
+        const current = this.repository.getEmployee(employeeId);
+        if (current?.status === "starting") this.setStatus(employeeId, "working");
+      },
+      onMessage: (message) => {
+        if (!session.active) return;
+        this.appendMessage(employeeId, message);
+      },
+      onDelta: (text) => {
+        if (!session.active) return;
+        this.events.publish({ type: "message_delta", employeeId, text });
+      },
+      onTurnFinished: () => {
+        if (!session.active) return;
+        const current = this.repository.getEmployee(employeeId);
+        if (current && (current.status === "working" || current.status === "starting")) {
+          this.setStatus(employeeId, "idle");
+        }
+      },
+      onFailed: (reason) => {
+        if (!session.active) return;
+        session.active = false;
+        this.sessions.delete(employeeId);
+        this.expireApprovalsOf(employeeId);
+        if (this.shuttingDown) {
+          this.setStatus(employeeId, "stopped");
+          return;
+        }
+        if (isSignalTermination(reason)) {
+          this.appendMessage(employeeId, { kind: "system", content: SIGNAL_INTERRUPTED });
+          this.setStatus(employeeId, "stopped");
+          return;
+        }
+        this.appendMessage(employeeId, { kind: "system", content: `Employee failed: ${reason}` });
+        this.setStatus(employeeId, "failed", { failureReason: reason });
+      },
+      onCatalog: (catalog) => {
+        if (!session.active) return;
+        const employee = this.repository.getEmployee(employeeId);
+        if (employee) this.cacheCatalog(employee.workingDirectory, catalog);
+      },
+      requestApproval: (prompt, signal) => this.requestApproval(employeeId, session, prompt, signal),
+    };
+  }
+
+  private requestApproval(
+    employeeId: string,
+    session: LiveSession,
+    prompt: ApprovalPrompt,
+    signal: AbortSignal,
+  ): Promise<ApprovalOutcome> {
+    if (!session.active || signal.aborted) return Promise.resolve({ decision: "expired" });
+    const approval: ApprovalRequest = {
+      id: this.newId(),
+      employeeId,
+      kind: prompt.kind,
+      toolName: prompt.toolName,
+      summary: prompt.summary,
+      input: prompt.input,
+      status: "pending",
+      decision: null,
+      answers: null,
+      canApproveForSession: prompt.canApproveForSession,
+      createdAt: this.timestamp(),
+      decidedAt: null,
+    };
+    return new Promise<ApprovalOutcome>((resolve) => {
+      this.repository.insertApproval(approval);
+      this.pending.set(approval.id, { employeeId, resolve });
+      signal.addEventListener("abort", () => this.expire(approval.id), { once: true });
+      this.events.publish({ type: "approval_requested", approval });
+      this.setStatus(employeeId, "waiting_approval");
+    });
+  }
+
+  /** Resolves a pending request as expired (the agent receives deny). */
+  private expire(approvalId: string): void {
+    const waiting = this.pending.get(approvalId);
+    if (!waiting) return;
+    this.pending.delete(approvalId);
+    const stored = this.repository.getApproval(approvalId);
+    if (stored && stored.status === "pending") {
+      const expired: ApprovalRequest = { ...stored, status: "expired", decidedAt: this.timestamp() };
+      this.repository.updateApproval(expired);
+      this.events.publish({ type: "approval_updated", approval: expired });
+    }
+    this.resumeWorkingIfUnblocked(waiting.employeeId);
+    waiting.resolve({ decision: "expired" });
+  }
+
+  private expireApprovalsOf(employeeId: string): void {
+    for (const [id, waiting] of [...this.pending]) {
+      if (waiting.employeeId === employeeId) this.expire(id);
+    }
+  }
+
+  private resumeWorkingIfUnblocked(employeeId: string): void {
+    const stillWaiting = [...this.pending.values()].some((entry) => entry.employeeId === employeeId);
+    const employee = this.repository.getEmployee(employeeId);
+    if (!stillWaiting && employee?.status === "waiting_approval" && this.sessions.get(employeeId)?.active) {
+      this.setStatus(employeeId, "working");
+    }
+  }
+
+  // ---- helpers ----
+
+  /** The folder as an absolute path, or a validation error when it is not an existing directory. */
+  private requireFolder(value: unknown): string {
+    if (typeof value !== "string" || !this.isDirectory(value)) {
+      throw new OfficeError("validation_error", "Working directory must be an existing folder", "workingDirectory");
+    }
+    return value;
+  }
+
+  private cacheCatalog(folder: string, provided: ProviderCatalog): Catalog {
+    const catalog = buildCatalog(provided);
+    this.catalogCache.set(path.resolve(folder), catalog);
+    return catalog;
+  }
+
+  private async folderCatalog(folder: string, refresh: boolean): Promise<Catalog> {
+    const key = path.resolve(folder);
+    if (!refresh) {
+      const cached = this.catalogCache.get(key);
+      if (cached) return cached;
+    }
+    const running = this.probes.get(key);
+    if (running) return running;
+    const provider = this.catalogProvider;
+    if (!provider) throw new OfficeError("catalog_unavailable", "Skills and agents cannot be read for this folder");
+    const probe = (async () => {
+      try {
+        return this.cacheCatalog(key, await provider.probe(key));
+      } catch (error) {
+        throw new OfficeError("catalog_unavailable", `Skills and agents could not be read: ${errorReason(error)}`);
+      }
+    })();
+    this.probes.set(key, probe);
+    try {
+      return await probe;
+    } finally {
+      if (this.probes.get(key) === probe) this.probes.delete(key);
+    }
+  }
+
+  private requireEmployee(id: string): Employee {
+    const employee = this.repository.getEmployee(id);
+    if (!employee) throw new OfficeError("not_found", "Employee not found");
+    return employee;
+  }
+
+  private patchEmployee(id: string, patch: Partial<Employee>): Employee {
+    const next: Employee = { ...this.requireEmployee(id), ...patch, updatedAt: this.timestamp() };
+    this.repository.updateEmployee(next);
+    this.events.publish({ type: "employee_updated", employee: next });
+    return next;
+  }
+
+  private setStatus(id: string, status: Employee["status"], patch: Partial<Employee> = {}): Employee {
+    return this.patchEmployee(id, { status, ...patch });
+  }
+
+  private buildMessage(employeeId: string, input: AgentMessage): Message {
+    return {
+      id: this.newId(),
+      employeeId,
+      kind: input.kind,
+      content: input.content,
+      toolName: input.toolName ?? null,
+      toolUseId: input.toolUseId ?? null,
+      parentToolUseId: input.parentToolUseId ?? null,
+      createdAt: this.timestamp(),
+      sourceUuid: input.sourceUuid ?? null,
+    };
+  }
+
+  private appendMessage(employeeId: string, input: AgentMessage): Message {
+    const message = this.buildMessage(employeeId, input);
+    this.repository.insertMessage(message);
+    this.events.publish({ type: "message_added", message });
+    return message;
+  }
+
+  private timestamp(): string {
+    return this.now().toISOString();
+  }
+}
+
+type HireInput = {
+  bossId: unknown;
+  task: unknown;
+  workingDirectory: unknown;
+  name?: unknown;
+  species?: unknown;
+  role?: unknown;
+};
+
+/** `undefined` and `null` mean General; anything else must be a non-empty agent name. */
+function parseRole(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new OfficeError("validation_error", "Role must be an agent name", "role");
+  }
+  return value;
+}
+
+function parseRefresh(value: unknown): boolean {
+  if (value === undefined || value === false || value === "false") return false;
+  if (value === true || value === "true") return true;
+  throw new OfficeError("validation_error", "refresh must be true or false", "refresh");
+}
+
+function parseName(value: unknown): string {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (name === "" || name.length > MAX_NAME_LENGTH) {
+    throw new OfficeError("validation_error", `Name must be 1-${MAX_NAME_LENGTH} characters`, "name");
+  }
+  return name;
+}
+
+function parseSpecies(value: unknown): Species {
+  if (!isSpecies(value)) throw new OfficeError("validation_error", "Unknown species", "species");
+  return value;
+}
+
+function parseCount(value: unknown, field: string, fallback: number, min: number, max: number): number {
+  if (value === undefined) return fallback;
+  const n = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new OfficeError("validation_error", `${field} must be an integer from ${min} to ${max}`, field);
+  }
+  return n;
+}
+
+function parseAnswers(value: unknown): Record<string, string> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (entries.length === 0 || entries.some(([, answer]) => typeof answer !== "string")) return null;
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

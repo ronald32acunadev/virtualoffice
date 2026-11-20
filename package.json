@@ -1,0 +1,13 @@
+{
+  "name": "virtualoffice",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/server", "apps/web"],
+  "scripts": {
+    "build": "npm run build -w apps/web",
+    "start": "npm run build && npm run start -w apps/server",
+    "test": "npm run test -w apps/server && npm run test -w apps/web",
+    "typecheck": "npm run typecheck -w apps/server && npm run typecheck -w apps/web"
+  },
+  "engines": { "node": ">=22.13" }
+}
