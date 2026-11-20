@@ -305,3 +305,15 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 
 .input-with-action { display: flex; gap: 0.5rem; align-items: center; }
 .input-with-action > input { flex: 1; min-width: 0; }
+
+/* Workspace external launcher menu */
+.launch-menu { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+.launch-menu-popover { position: absolute; top: calc(100% + 6px); right: 0; min-width: 240px; max-width: min(340px, 90vw); display: flex; flex-direction: column; gap: 2px; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); z-index: 30; }
+.launch-menu-item { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; padding: 7px 10px; border-radius: 7px; background: transparent; color: var(--text); text-align: left; font-size: 13px; transition: background .12s ease; }
+.launch-menu-item:hover:not(:disabled) { background: var(--card); }
+.launch-menu-item:disabled { opacity: .55; cursor: not-allowed; }
+.launch-menu-item-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.launch-menu-label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.launch-menu-kind { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--card); border: 1px solid var(--border); color: var(--muted); font-size: 11px; font-weight: 500; line-height: 16px; }
+.launch-menu-reason { color: var(--muted); font-size: 11.5px; line-height: 1.35; }
+.launch-feedback { padding: 2px 8px; border-radius: 999px; background: rgba(91, 191, 122, .16); border: 1px solid rgba(91, 191, 122, .35); color: var(--ok); font-size: 12px; font-weight: 500; white-space: nowrap; }

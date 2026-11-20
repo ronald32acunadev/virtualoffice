@@ -13,6 +13,7 @@ import { RoleBadge } from "../ui/RoleBadge";
 import { UsageRing } from "../ui/UsageRing";
 import { ApprovalCard } from "../ui/ApprovalCard";
 import { toFormError } from "../ui/errors";
+import { OpenExternalMenu } from "./OpenExternalMenu";
 import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { Toolbox } from "./Toolbox";
@@ -154,6 +155,7 @@ function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSki
           ))}
         </select>
         <Toolbox employeeId={employee.id} onInsertSkill={onInsertSkill} />
+        <OpenExternalMenu employeeId={employee.id} onError={setError} />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop

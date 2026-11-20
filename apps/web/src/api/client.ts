@@ -6,6 +6,7 @@ import type {
   Decision,
   ImportResult,
   Employee,
+  LaunchTarget,
   Message,
   ServerEvent,
   Species,
@@ -137,6 +138,14 @@ export const api = {
       "POST",
       `/api/approvals/${encodeURIComponent(approvalId)}/decision`,
       answers ? { decision, answers } : { decision },
+    ),
+  getLaunchTargets: (employeeId: string) =>
+    request<{ targets: LaunchTarget[] }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/launch-targets`),
+  launchExternal: (employeeId: string, targetId: string) =>
+    request<{ launched: true; targetId: string }>(
+      "POST",
+      `/api/employees/${encodeURIComponent(employeeId)}/launch`,
+      { targetId },
     ),
 };
 

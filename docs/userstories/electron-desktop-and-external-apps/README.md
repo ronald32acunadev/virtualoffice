@@ -3,7 +3,7 @@
 Builds on: [Claude-Style Chat UI, Agent Usage, Break Time, and Employee Job Titles](../claude-chat-usage-and-break/README.md).
 Branch: `feature/electron-desktop-and-external-apps`, created from `feature/claude-chat-usage-and-break` after backlog approval.
 Execution mode: all stories (approved by the owner on 2026-11-20).
-Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight hosted fallback); planner reviews and verifies.
+Implementer route: `US-01` via `pumbastudio` (`zai-org/glm-4.7-flash`); `US-02`–`US-04` via lightweight hosted fallback (`flash`, reasoning effort not separately configurable in `invoke_subagent`) after local model looped without a code block under `--think` and `pumbalama` had no model loaded. Planner reviewed and verified every story.
 
 ## Story status
 
@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Programmatic server bootstrap & graceful lifecycle for desktop embedding | — | complete |
 | US-02 | Electron desktop shell (`apps/desktop`) with workspace, 3D office window, and native folder picker | US-01 | complete |
 | US-03 | External agent launcher catalog & backend launch API | — | complete |
-| US-04 | Workspace "Open in..." external launcher picker UI | US-03 | pending |
+| US-04 | Workspace "Open in..." external launcher picker UI | US-03 | complete |
 
 ## Confirmed facts & scope boundaries
 
@@ -91,5 +91,5 @@ As the owner, I want an "Open in..." selector in each employee's conversation he
 | `US-01 / AC-01`–`AC-03` | `apps/server/test/http/server-bootstrap.test.ts` (ephemeral port startup, idempotent `close()`, existing `apps/server` test suite) | Passed (`apps/server`: 24/24 files, 191/191 tests; `typecheck`: 0 errors). |
 | `US-02 / AC-01`–`AC-04` | `apps/desktop/test/window-policy.test.ts` (same-origin `/office` allowlist, external `http(s)` openExternal, unknown scheme deny, shutdown cleanup) + `startDesktopServer` bridge smoke check | Passed (`apps/desktop`: 5/5 tests; `typecheck`: 0 errors across all 3 workspaces; `build`: web + desktop succeeded; `BRIDGE_SMOKE: 200` + clean shutdown). |
 | `US-03 / AC-01`–`AC-04` | `apps/server/test/office/external-launcher.test.ts` (10 tests) & `apps/server/test/http/launch-routes.test.ts` (3 tests) | Passed (`apps/server`: 26/26 files, 204/204 tests; `typecheck`: 0 errors). |
-| `US-04 / AC-01`–`AC-03` | `apps/web/src/state/launchMenu.test.ts` (target grouping/selection/error handling) + `npm run typecheck` + `npm run build` | Pending |
-| Shared-code regression risk (`main.ts`, `ConversationPane.tsx`, `NewTaskModal.tsx`, HTTP routes) | `npm run test`, `npm run typecheck`, `npm run build` | Pending |
+| `US-04 / AC-01`–`AC-03` | `apps/web/src/state/launchMenu.test.ts` (4 tests) + `npm run typecheck` + `npm run build` | Passed (`apps/web`: 18/18 files, 90/90 tests; `typecheck`: 0 errors; `vite build`: succeeded). |
+| Shared-code regression risk (`main.ts`, `ConversationPane.tsx`, `NewTaskModal.tsx`, HTTP routes) | `npm run test`, `npm run typecheck`, `npm run build` | Passed (`apps/server`: 204/204, `apps/web`: 90/90, `apps/desktop`: 5/5; `typecheck`: 0 errors; `build`: web + desktop succeeded). |
