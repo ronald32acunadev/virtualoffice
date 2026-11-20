@@ -10,7 +10,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Server PTY session manager for allowlisted agent CLIs | — | complete |
-| US-02 | Authenticated terminal WebSocket channel with scrollback replay | US-01 | pending |
+| US-02 | Authenticated terminal WebSocket channel with scrollback replay | US-01 | complete |
 | US-03 | Embedded terminal panel (xterm.js) in the workspace conversation view | US-02 | pending |
 | US-04 | Session-conflict guard between office turns and the embedded terminal | US-01, US-03 | pending |
 
@@ -85,7 +85,7 @@ As the owner, I want the office and the embedded terminal not to drive the same 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
 | `US-01 / AC-01`–`AC-04` | `apps/server/test/terminal/terminal-session-manager.test.ts` (12 tests, fake PTY factory: spawn args per boss, resume args, reuse, scrollback bound, exit, rejections, `killAll`) | Passed. RED first (`Cannot find module '../../src/terminal/agent-cli-command.ts'`), then 12/12 green; `apps/server` `tsc --noEmit`: 0 errors. Implementer: `pumbastudio` (`zai-org/glm-4.7-flash`), 2 correction rounds on the manager (scrollback limit/total mix-up, disposables registered as listeners, slot not freed on exit, getter/field name clash). Known deviation: an oversized single chunk is trimmed by UTF-16 characters, not bytes. |
-| `US-02 / AC-01`–`AC-04` | `apps/server/test/http/terminal-ws.test.ts` (token/origin rejection, replay then live output, input/resize, malformed frames, exit frame, reconnect) | Pending |
+| `US-02 / AC-01`–`AC-04` | `apps/server/test/http/terminal-ws.test.ts` (11 tests: protocol parsing, token/origin rejection with zero spawns, unknown employee error frame + close `1008`, query size, replay then live output, input/resize with bad frames ignored, exit frame + close `1000`, reconnect replay with no kill, `terminal_unavailable` + close `1011`); server `close()` → `terminals.killAll()` wiring checked in the final live smoke test | Passed. RED first (`Cannot find module '../../src/terminal/terminal-protocol.ts'`), then 11/11 green; `apps/server` 28 files / 227 tests green; `tsc --noEmit`: 0 errors. Implementer: `pumbastudio` (`zai-org/glm-4.7-flash`); corrections: test setup misuse and invented `getServer()` API, unsubscribe functions called as disposables, query object typing. |
 | `US-03 / AC-01`–`AC-05` | `apps/web/src/state/terminalChannel.test.ts` (message encoding, resize debounce, employee switch closes socket) + live browser smoke test with real `claude` in `/workspace` | Pending |
 | `US-04 / AC-01`–`AC-03` | `apps/server/test/office/terminal-conflict.test.ts` (`409 terminal_active`, release after exit) + composer state test | Pending |
 | Shared-code regression risk (`app.ts` auth hook, `ExternalLauncherService`, `ConversationPane.tsx`, office message route) | `npm run test`, `npm run typecheck`, `npm run build` | Pending |

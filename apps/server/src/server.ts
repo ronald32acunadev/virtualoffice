@@ -12,6 +12,7 @@ import { GeminiAgentAdapter } from "./agents/gemini/gemini-agent-adapter.ts";
 import { OpenCodeAgentAdapter } from "./agents/opencode/opencode-agent-adapter.ts";
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
+import { TerminalSessionManager } from "./terminal/terminal-session-manager.ts";
 import { createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
 import type { BossId } from "./office/domain/types.ts";
@@ -76,6 +77,10 @@ export async function startOfficeServer(
   office.recoverOnStartup();
   office.backfillProfiles();
 
+  const terminals = new TerminalSessionManager({
+    getEmployee: (id) => repository.getEmployee(id) ?? null,
+  });
+
   const app = await buildApp({
     token,
     port,
@@ -83,6 +88,7 @@ export async function startOfficeServer(
     office,
     ...(fs.existsSync(webDist) ? { staticRoot: webDist } : {}),
     ...(devOrigin ? { devOrigin } : {}),
+    terminals,
   });
 
   await app.listen({ host: "127.0.0.1", port });
@@ -105,6 +111,7 @@ export async function startOfficeServer(
         office.beginShutdown();
         await office.shutdown();
         await app.close();
+        terminals.killAll();
         repository.close();
       } finally {
       }

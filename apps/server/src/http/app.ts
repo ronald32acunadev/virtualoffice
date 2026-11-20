@@ -7,6 +7,8 @@ import { ExternalLauncherService, LaunchError } from "../office/application/exte
 import type { OfficeRepository } from "../office/ports/office-repository.ts";
 import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
+import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
+import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
 
 export type BuildAppOptions = {
   token: string;
@@ -16,6 +18,7 @@ export type BuildAppOptions = {
   launcher?: ExternalLauncherService;
   staticRoot?: string;
   devOrigin?: string;
+  terminals?: TerminalSessionManager;
 };
 
 const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
@@ -33,7 +36,7 @@ function sendError(reply: FastifyReply, status: number, code: string, message: s
 }
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname === "/ws" || pathname === "/api" || pathname.startsWith("/api/");
+  return pathname === "/ws" || pathname === "/api" || pathname.startsWith("/api/") || pathname.startsWith("/ws/");
 }
 
 function asRecord(body: unknown): Record<string, unknown> {
@@ -41,7 +44,7 @@ function asRecord(body: unknown): Record<string, unknown> {
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { token, port, office, staticRoot, devOrigin } = options;
+  const { token, port, office, staticRoot, devOrigin, terminals } = options;
   const launcher = options.launcher ?? new ExternalLauncherService();
 
   const app = Fastify({ logger: false });
@@ -80,7 +83,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     }
     // 3. Token check.
     const provided =
-      url.pathname === "/ws"
+      url.pathname === "/ws" || url.pathname.startsWith("/ws/")
         ? (url.searchParams.get("token") ?? undefined)
         : request.headers.authorization?.startsWith("Bearer ")
           ? request.headers.authorization.slice("Bearer ".length)
@@ -215,6 +218,58 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     socket.on("close", unsubscribe);
     socket.on("error", unsubscribe);
   });
+
+  app.get<{ Params: { employeeId: string }; Querystring: Record<string, unknown> }>(
+    "/ws/terminal/:employeeId",
+    { websocket: true },
+    (socket, request) => {
+      const send = (message: TerminalServerMessage) => {
+        if (socket.readyState === 1) socket.send(JSON.stringify(message));
+      };
+
+      if (terminals === undefined) {
+        send({ type: "error", code: "terminal_unavailable", message: "Embedded terminal is not enabled" });
+        socket.close(1011, "terminal_unavailable");
+        return;
+      }
+
+      let session: TerminalSession;
+      try {
+        session = terminals.open(request.params.employeeId, parseTerminalSize(request.query));
+      } catch (err) {
+        if (err instanceof TerminalError) {
+          send({ type: "error", code: err.code, message: err.message });
+          socket.close(1008, err.code);
+        } else {
+          send({ type: "error", code: "internal_error", message: "Internal error" });
+          socket.close(1011, "internal_error");
+        }
+        return;
+      }
+
+      const scrollback = session.scrollback();
+      if (scrollback !== "") {
+        send({ type: "output", data: scrollback });
+      }
+      const offData = session.onData((data) => send({ type: "output", data }));
+      const offExit = session.onExit((code) => {
+        send({ type: "exit", code });
+        socket.close(1000, "exit");
+      });
+      const cleanup = () => {
+        offData();
+        offExit();
+      };
+      socket.on("close", cleanup);
+      socket.on("error", cleanup);
+      socket.on("message", (raw: Buffer) => {
+        const message = parseClientMessage(raw.toString());
+        if (!message) return;
+        if (message.type === "input") session.write(message.data);
+        else session.resize(message.cols, message.rows);
+      });
+    },
+  );
 
   if (staticRoot && fs.existsSync(staticRoot)) {
     await app.register(fastifyStatic, { root: staticRoot, prefix: "/" });
