@@ -45,6 +45,8 @@ export type OfficeDeps = {
   random?: RandomFn;
   /** Reads a folder's commands and agents without an employee. Without it, catalogs come only from live sessions. */
   catalogProvider?: CatalogProvider;
+  /** Optional display name overrides for boss suites (e.g. `{ gemini: "Antigravity" }`). */
+  bossNames?: Partial<Record<BossId, string>>;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -86,6 +88,7 @@ export class OfficeService {
   private readonly catalog: SessionCatalog | undefined;
   private readonly random: RandomFn;
   private readonly catalogProvider: CatalogProvider | undefined;
+  private readonly bossNames: Partial<Record<BossId, string>>;
   /** Catalogs per absolute folder; only successful reads are stored. */
   private readonly catalogCache = new Map<string, Catalog>();
   /** In-flight probes per folder, so concurrent requests share one. */
@@ -110,6 +113,7 @@ export class OfficeService {
     this.catalog = deps.sessions;
     this.random = deps.random ?? Math.random;
     this.catalogProvider = deps.catalogProvider;
+    this.bossNames = deps.bossNames ?? {};
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -119,7 +123,11 @@ export class OfficeService {
   // ---- queries ----
 
   listBosses(): Boss[] {
-    return BOSSES.map((boss) => ({ ...boss, available: Boolean(this.adapters[boss.id]) }));
+    return BOSSES.map((boss) => ({
+      ...boss,
+      name: this.bossNames[boss.id] ?? boss.name,
+      available: Boolean(this.adapters[boss.id]),
+    }));
   }
 
   private adapterFor(bossId: BossId): AgentAdapter | undefined {

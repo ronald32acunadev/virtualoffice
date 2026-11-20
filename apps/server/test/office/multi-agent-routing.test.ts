@@ -94,6 +94,21 @@ describe("US-01 multi-agent routing and dynamic boss availability", () => {
     expect(none.listBosses().every((b) => !b.available)).toBe(true);
   });
 
+  it("allows bossNames to override display names in listBosses", () => {
+    const gemini = new RecordingAdapter();
+    const { office } = createOffice({
+      adapters: { gemini },
+      bossNames: { gemini: "Antigravity" },
+    });
+
+    expect(office.listBosses()).toEqual([
+      { id: "claude", name: "Claude", available: false },
+      { id: "codex", name: "Codex", available: false },
+      { id: "opencode", name: "OpenCode", available: false },
+      { id: "gemini", name: "Antigravity", available: true },
+    ]);
+  });
+
   it("US-01 / AC-02: routes start, sendMessage, fetchCatalog, and stop to each employee's own bossId adapter", async () => {
     const claude = new RecordingAdapter();
     const codex = new RecordingAdapter();

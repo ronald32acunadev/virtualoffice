@@ -13,6 +13,7 @@ Implementer route: no local model available (LM Studio unreachable, Ollama has n
 | US-02 | Codex CLI agent adapter | US-01 | complete |
 | US-03 | OpenCode CLI agent adapter | US-01 | complete |
 | US-04 | Gemini CLI agent adapter | US-01 | complete |
+| US-05 | Google Antigravity CLI (`agy`) adapter for the 4th boss suite | US-01 | complete |
 
 Environment facts (verified 2026-11-19):
 - `codex` is installed (`/home/pumba/.local/bin/codex`, `codex-cli 0.170.0`) and supports `codex exec --json` and `codex exec resume <session_id> --json`.
@@ -59,6 +60,15 @@ As the owner, I want a Gemini CLI adapter wired into the office, so that as soon
 - `US-04 / AC-03`: Given a running Gemini CLI employee, when Stop is requested or the process fails unexpectedly, then the child process is terminated cleanly on stop and unexpected errors/non-zero exits report `onFailed(reason)`.
 - `US-04 / AC-04`: Given `gemini` is not installed on `PATH`, then `Gemini CLI` appears unavailable (`available: false`, `409 boss_unavailable` on hire); given `gemini` is detected on `PATH`, then `Gemini CLI` automatically reports `available: true`.
 
+## US-05 — Google Antigravity CLI (`agy`) adapter for the 4th boss suite
+
+As the owner, I want the 4th boss suite (`gemini` slot) to run Google Antigravity CLI (`agy`) when `agy` is installed on `PATH`, so that all four departments in my office are live and usable with the tools I actually have installed.
+
+- `US-05 / AC-01`: Given a new Antigravity employee is started in `workingDirectory` with `prompt`, then `AntigravityAgentAdapter` spawns `agy -p <prompt> --output-format stream-json` with `cwd: workingDirectory` and maps real `agy` NDJSON events (`event: "init"` → `onSessionStarted(conversation_id)`, `step_update` `agent_response` `text_delta` → `onDelta` + flushed `agent_text`, tool step updates → `tool_call`/`tool_result`, `event: "result"` → `onTurnFinished` on `SUCCESS` or `onFailed` on error).
+- `US-05 / AC-02`: Given an idle Antigravity employee with a stored `providerSessionId`, when a follow-up message is sent, then the adapter resumes via `agy --conversation <providerSessionId> -p <prompt> --output-format stream-json` in `workingDirectory`.
+- `US-05 / AC-03`: Given server startup (`main.ts`), when `agy` is installed on `PATH`, then the 4th boss slot (`id: "gemini"`) registers `AntigravityAgentAdapter`, reports `available: true`, and displays the boss name `"Antigravity"` (falling back to `GeminiAgentAdapter` / `"Gemini CLI"` if only `gemini` is installed).
+- `US-05 / AC-04`: Given real `agy` (`1.5.11`) on the host, a live smoke test hiring an Antigravity employee completes a turn, stores its `conversation_id`, and records the assistant response; all 4 boss suites (`Claude`, `Codex`, `OpenCode`, `Antigravity`) are active in `/workspace` and `/office`.
+
 ---
 
 ## Verification mapping
@@ -71,4 +81,5 @@ Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` (19 files, 1
 | `US-02 / AC-01`–`AC-04` | `apps/server/test/agents/codex-agent-adapter.test.ts` (5 tests); live `codex` CLI smoke test | Passed. Real Codex employee hired (`201`), ran turn to `idle`, recorded `providerSessionId: "01a1f64e-b0ec-7fa2-b19d-25fbb694eca0"`, and answered `["ok"]`. |
 | `US-03 / AC-01`–`AC-04` | `apps/server/test/agents/opencode-agent-adapter.test.ts` (3 tests); live `opencode` CLI smoke test | Passed. Real OpenCode employee hired (`201`), ran turn to `idle`, recorded `providerSessionId: "ses_e09b14e47ffetksjnKoCi3ZAEX"`, and answered `["ok"]`. |
 | `US-04 / AC-01`–`AC-04` | `apps/server/test/agents/gemini-agent-adapter.test.ts` (5 tests), `apps/server/test/agents/binary-availability.test.ts`; live `gemini` hire rejection check | Passed. Fake `stream-json` start, delta streaming, tool use/result, resume, error, and stop tests green; live server without `gemini` on `PATH` reported `available: false` and rejected hire with `409 boss_unavailable`. |
+| `US-05 / AC-01`–`AC-04` | `apps/server/test/agents/antigravity-agent-adapter.test.ts` (6 tests), `multi-agent-routing.test.ts` (`bossNames`); live `agy` CLI smoke test and `/api/state` check | Passed. 169 server tests + 68 web tests green; live `GET /api/state` reported all 4 bosses `available: true` (`Claude`, `Codex`, `OpenCode`, `Antigravity`); real Antigravity employee hired (`201`), ran turn to `idle`, recorded `providerSessionId: "10815823-484f-4b09-9777-2561be20805b"`, and answered `["ok"]`. |
 | Risk: existing Claude hire, chat, catalog, import, approvals, and shutdown flows | Full `apps/server` (162 tests) and `apps/web` (68 tests) suites + `npm run typecheck` + `npm run build` | Passed. |

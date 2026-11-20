@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { AntigravityAgentAdapter } from "./agents/antigravity/antigravity-agent-adapter.ts";
 import { isBinaryAvailable } from "./agents/binary-availability.ts";
 import { ClaudeAgentAdapter } from "./agents/claude/claude-agent-adapter.ts";
 import { ClaudeCatalogProvider } from "./agents/claude/claude-catalog-provider.ts";
@@ -24,13 +25,20 @@ const webDist = path.join(repoRoot, "apps", "web", "dist");
 
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
+const hasAgy = isBinaryAvailable("agy");
+const hasGemini = !hasAgy && isBinaryAvailable("gemini");
+
 const token = createToken();
 const repository = new SqliteOfficeRepository(dbPath);
 const adapters: Partial<Record<BossId, AgentAdapter>> = {
   claude: new ClaudeAgentAdapter(),
   ...(isBinaryAvailable("codex") ? { codex: new CodexAgentAdapter() } : {}),
   ...(isBinaryAvailable("opencode") ? { opencode: new OpenCodeAgentAdapter() } : {}),
-  ...(isBinaryAvailable("gemini") ? { gemini: new GeminiAgentAdapter() } : {}),
+  ...(hasAgy
+    ? { gemini: new AntigravityAgentAdapter() }
+    : hasGemini
+      ? { gemini: new GeminiAgentAdapter() }
+      : {}),
 };
 const office = new OfficeService({
   repository,
@@ -38,6 +46,7 @@ const office = new OfficeService({
   events: new InMemoryEventBus(),
   sessions: new ClaudeSessionCatalog(),
   catalogProvider: new ClaudeCatalogProvider(),
+  ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
 });
 office.recoverOnStartup();
 office.backfillProfiles();
