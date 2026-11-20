@@ -17,12 +17,13 @@ import { OpenExternalMenu } from "./OpenExternalMenu";
 import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { Toolbox } from "./Toolbox";
+import { TerminalPanel } from "./TerminalPanel";
 
 const STOPPABLE = new Set(["starting", "working", "waiting_approval"]);
 const FOLDER_MISSING_TEXT =
   "This session's project folder no longer exists, so it can't be resumed. You can still read its history.";
 
-function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSkill: (name: string) => void }) {
+function Header({ employeeId, onInsertSkill, onOpenTerminal }: { employeeId: string; onInsertSkill: (name: string) => void; onOpenTerminal: () => void }) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
   const [editing, setEditing] = useState(false);
@@ -155,7 +156,7 @@ function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSki
           ))}
         </select>
         <Toolbox employeeId={employee.id} onInsertSkill={onInsertSkill} />
-        <OpenExternalMenu employeeId={employee.id} onError={setError} />
+        <OpenExternalMenu employeeId={employee.id} onError={setError} onOpenEmbeddedTerminal={onOpenTerminal} />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop
@@ -423,6 +424,7 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
+  const [view, setView] = useState<"chat" | "terminal">("chat");
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
@@ -430,8 +432,16 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
 
   return (
     <section className="conversation-pane">
-      <Header employeeId={employeeId} onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })} />
-      <div className="conv-scroll">
+      <Header employeeId={employeeId} onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })} onOpenTerminal={() => setView("terminal")} />
+      <div className="conv-tabs" role="tablist" aria-label="Conversation view">
+        <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "conv-tab active" : "conv-tab"} onClick={() => setView("chat")}>
+          Chat
+        </button>
+        <button type="button" role="tab" aria-selected={view === "terminal"} className={view === "terminal" ? "conv-tab active" : "conv-tab"} onClick={() => setView("terminal")}>
+          Terminal
+        </button>
+      </div>
+      <div className="conv-scroll" hidden={view !== "chat"}>
         <div className="conv-column">
           {approvals.length > 0 ? (
             <ul className="approval-list conv-approvals">
@@ -462,7 +472,8 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
           <div ref={endRef} />
         </div>
       </div>
-      <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} />
+      {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
+      {view === "terminal" ? <TerminalPanel employeeId={employeeId} /> : null}
     </section>
   );
 }

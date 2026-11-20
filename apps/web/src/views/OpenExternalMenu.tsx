@@ -9,10 +9,11 @@ const FEEDBACK_DURATION_MS = 2500;
 type Props = {
   employeeId: string;
   onError: (message: string | null) => void;
+  onOpenEmbeddedTerminal: () => void;
 };
 
 /** Dropdown menu for opening the active employee workspace in an external app, CLI, or folder. */
-export function OpenExternalMenu({ employeeId, onError }: Props) {
+export function OpenExternalMenu({ employeeId, onError, onOpenEmbeddedTerminal }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [targets, setTargets] = useState<LaunchTarget[]>([]);
@@ -157,6 +158,20 @@ export function OpenExternalMenu({ employeeId, onError }: Props) {
       ) : null}
       {open ? (
         <div className="launch-menu-popover" role="menu" aria-label="Open workspace externally">
+          <button
+            type="button"
+            role="menuitem"
+            className="launch-menu-item"
+            onClick={() => {
+              setOpen(false);
+              onOpenEmbeddedTerminal();
+            }}
+          >
+            <span className="launch-menu-item-row">
+              <span className="launch-menu-label">Embedded terminal</span>
+              <span className="launch-menu-kind">Built-in</span>
+            </span>
+          </button>
           {loading ? (
             <p className="menu-note menu-loading">Loading...</p>
           ) : targets.length === 0 ? (

@@ -5,7 +5,8 @@ export const DEFAULT_TERMINAL_SIZE: TerminalSize = { cols: 80, rows: 24 };
 
 export type TerminalClientMessage =
   | { type: "input"; data: string }
-  | { type: "resize"; cols: number; rows: number };
+  | { type: "resize"; cols: number; rows: number }
+  | { type: "kill" };
 
 export type TerminalServerMessage =
   | { type: "output"; data: string }
@@ -45,6 +46,8 @@ export function parseClientMessage(raw: string): TerminalClientMessage | null {
           return null;
         }
         return { type: "resize", cols: parsed.cols, rows: parsed.rows };
+      case "kill":
+        return { type: "kill" };
       default:
         return null;
     }

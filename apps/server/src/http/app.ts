@@ -266,7 +266,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         const message = parseClientMessage(raw.toString());
         if (!message) return;
         if (message.type === "input") session.write(message.data);
-        else session.resize(message.cols, message.rows);
+        else if (message.type === "resize") session.resize(message.cols, message.rows);
+        else if (message.type === "kill") session.kill();
       });
     },
   );

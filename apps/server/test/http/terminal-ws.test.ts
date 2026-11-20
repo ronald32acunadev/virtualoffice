@@ -158,6 +158,10 @@ describe("terminal protocol", () => {
     expect(parseClientMessage('{"type":"resize","cols":1.5,"rows":5}')).toBeNull();
   });
 
+  it("US-03 / AC-03: parses the kill frame", () => {
+    expect(parseClientMessage('{"type":"kill"}')).toEqual({ type: "kill" });
+  });
+
   it("US-02 / AC-01: reads the size from the query with defaults", () => {
     expect(parseTerminalSize({ cols: "120", rows: "40" })).toEqual({ cols: 120, rows: 40 });
     expect(parseTerminalSize({})).toEqual({ cols: 80, rows: 24 });
@@ -256,5 +260,14 @@ describe("/ws/terminal/:employeeId", () => {
     await waitFor(() => closed.code !== null);
     expect(messages).toEqual([{ type: "error", code: "terminal_unavailable", message: "Embedded terminal is not enabled" }]);
     expect(closed.code).toBe(1011);
+  });
+
+  it("US-03 / AC-03: a kill frame ends the PTY", async () => {
+    const { app, ptys } = await setup();
+    const { ws } = await connect(app, "/ws/terminal/emp-ws-1?token=" + TOKEN);
+    await waitFor(() => ptys.length === 1);
+    ws.send('{"type":"kill"}');
+    await waitFor(() => ptys[0]!.kills === 1);
+    expect(ptys[0]!.kills).toBe(1);
   });
 });
