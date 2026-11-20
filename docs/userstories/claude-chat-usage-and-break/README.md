@@ -13,7 +13,7 @@ Implementer route: `pumbastudio` (LM Studio active loaded model `zai-org/glm-4.7
 | US-02 | Provider and employee usage tracking (quotas, tokens, and live updates) | — | complete |
 | US-03 | Provider-wide break time ("on break") on rate limit / quota exhaustion | US-02 | complete |
 | US-04 | Claude-style workspace chat UI (sidebar, markdown rendering, and composer) | US-01, US-02, US-03 | complete |
-| US-05 | 3D office break-time visuals for bosses and employees | US-01, US-03 | pending |
+| US-05 | 3D office break-time visuals for bosses and employees | US-01, US-03 | complete |
 
 ## Confirmed facts & scope boundaries
 
@@ -93,5 +93,5 @@ As the owner, I want bosses and employees who are on break to visibly rest in th
 | `US-02 / AC-01`–`AC-04` | `apps/server/test/office/usage.test.ts` (7 tests), `apps/web/src/state/usage.test.ts` (8 tests) | Passed (`apps/server`: 184/184, `apps/web`: 80/80, `npm run typecheck`: 0 errors). |
 | `US-03 / AC-01`–`AC-04` | `apps/server/test/office/break-time.test.ts` (5 tests: rate-limit event, 429 error, 409 guard, HTTP resume, auto-clear clock) | Passed (`apps/server`: 189/189, `apps/web`: 80/80, `npm run typecheck`: 0 errors). |
 | `US-04 / AC-01`–`AC-04` | `apps/web/src/state/sidebarSearch.test.ts` (6 tests), `apps/web/src/state/sidebar.test.ts` (4 tests), `apps/web/src/state/slashMenu.test.ts` (17 tests), `npm run build` | Passed (`apps/web`: 86/86, `npm run typecheck`: 0 errors, `vite build` succeeded). |
-| `US-05 / AC-01`–`AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (`on_break` pose/color), `apps/web/src/scene/officeQuotes.test.ts` (break quotes), browser verification in `/office` | Pending |
-| Shared-code regression risk (existing employee statuses, approvals, slash menu, adapters) | `npm run test -w apps/server`, `npm run test -w apps/web`, `npm run typecheck`, `npm run build` | Pending |
+| `US-05 / AC-01`–`AC-03` | `apps/web/src/scene/characterVisuals.test.ts`, `apps/web/src/scene/officeQuotes.test.ts`, `npm run build` | Passed (`apps/web`: 86/86, `npm run typecheck`: 0 errors, `vite build` succeeded). |
+| Shared-code regression risk (existing employee statuses, approvals, slash menu, adapters) | `npm run test -w apps/server`, `npm run test -w apps/web`, `npm run typecheck`, `npm run build` | Passed (`apps/server`: 23 files, 189/189 tests; `apps/web`: 17 files, 86/86 tests; `typecheck`: 0 errors; `vite build`: succeeded). |

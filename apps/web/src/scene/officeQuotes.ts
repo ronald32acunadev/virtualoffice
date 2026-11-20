@@ -38,6 +38,12 @@ export const STATUS_QUOTES: Partial<Record<EmployeeStatus, readonly string[]>> =
     "I talk a lot, so I've learned to tune myself out.",
     "I'm not superstitious, but I am a little stitious.",
   ],
+  on_break: [
+    "Coffee break! Back right after the quota resets.",
+    "It's Pretzel Day break — recharging for the next sprint.",
+    "Even Dundie winners need a breather.",
+    "Stepping away from the keyboard while limits cool down.",
+  ],
   failed: [
     "Why are you the way that you are?",
     "No God, please no!",

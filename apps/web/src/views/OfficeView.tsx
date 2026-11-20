@@ -149,10 +149,20 @@ export function OfficeView() {
           <span className={`status status-${card.status}`}>{card.status.replace("_", " ")}</span>
           {card.jobTitle ? <span className="job-title-badge">{card.jobTitle}</span> : null}
           <RoleBadge role={card.role} />
+          {card.status === "on_break" && card.failureReason ? (
+            <p className="muted">☕ {card.failureReason}</p>
+          ) : null}
           <p className="muted">{card.task}</p>
-          <button type="button" onClick={() => openWorkspace(card.id)}>
-            Open in workspace
-          </button>
+          <div className="actions">
+            <button type="button" onClick={() => openWorkspace(card.id)}>
+              Open in workspace
+            </button>
+            {card.status === "on_break" ? (
+              <button type="button" className="break-resume-btn" onClick={() => void actions.resumeBoss(card.bossId)}>
+                Resume break
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

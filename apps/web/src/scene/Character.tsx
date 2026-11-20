@@ -142,6 +142,8 @@ export function Character({
   const marker =
     status === "waiting_approval" ? (
       <div className="marker marker-approval">!</div>
+    ) : status === "on_break" ? (
+      <div className="marker marker-break" title="On break">☕</div>
     ) : status === "failed" ? (
       <div className="marker marker-failed">x</div>
     ) : null;
