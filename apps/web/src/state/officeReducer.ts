@@ -68,6 +68,8 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
 
 function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
   switch (event.type) {
+    case "boss_updated":
+      return { ...state, bosses: upsertById(state.bosses, event.boss) };
     case "employee_updated":
       return { ...state, employees: upsertById(state.employees, event.employee) };
     case "message_added": {

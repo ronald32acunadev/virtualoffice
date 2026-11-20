@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { AgentAdapter, AgentMessage, AgentSink, ApprovalOutcome, ApprovalPrompt } from "../ports/agent-adapter.ts";
+import type {
+  AgentAdapter,
+  AgentMessage,
+  AgentSink,
+  ApprovalOutcome,
+  ApprovalPrompt,
+  UsageUpdate,
+} from "../ports/agent-adapter.ts";
 import type { CatalogProvider } from "../ports/catalog-provider.ts";
 import type { EventBus } from "../ports/event-bus.ts";
 import type { OfficeRepository } from "../ports/office-repository.ts";
@@ -19,10 +26,12 @@ import {
   type ApprovalRequest,
   type Boss,
   type BossId,
+  type BossUsage,
   type Catalog,
   type ClaudeSessionSummary,
   type Decision,
   type Employee,
+  type EmployeeUsage,
   type ImportSkipReason,
   type Message,
   type ProviderCatalog,
@@ -121,14 +130,44 @@ export class OfficeService {
     return this.events.subscribe(listener);
   }
 
+  private readonly bossUsage = new Map<BossId, BossUsage>();
+  private readonly employeeUsage = new Map<string, EmployeeUsage>();
+
   // ---- queries ----
 
+  private getOrCreateBossUsage(bossId: BossId): BossUsage {
+    const existing = this.bossUsage.get(bossId);
+    if (existing) return existing;
+    const initial: BossUsage = {
+      remainingPercent: null,
+      utilizationPercent: null,
+      resetsAt: null,
+      windowLabel: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      updatedAt: null,
+    };
+    this.bossUsage.set(bossId, initial);
+    return initial;
+  }
+
+  private decorateEmployee(employee: Employee): Employee {
+    const usage = this.employeeUsage.get(employee.id);
+    return usage ? { ...employee, usage } : employee;
+  }
+
+  private buildBoss(bossId: BossId): Boss {
+    const base = BOSSES.find((b) => b.id === bossId)!;
+    return {
+      ...base,
+      name: this.bossNames[bossId] ?? base.name,
+      available: Boolean(this.adapters[bossId]),
+      usage: { ...this.getOrCreateBossUsage(bossId) },
+    };
+  }
+
   listBosses(): Boss[] {
-    return BOSSES.map((boss) => ({
-      ...boss,
-      name: this.bossNames[boss.id] ?? boss.name,
-      available: Boolean(this.adapters[boss.id]),
-    }));
+    return BOSSES.map((boss) => this.buildBoss(boss.id));
   }
 
   private adapterFor(bossId: BossId): AgentAdapter | undefined {
@@ -138,7 +177,7 @@ export class OfficeService {
   getState(): { bosses: Boss[]; employees: Employee[]; approvals: ApprovalRequest[] } {
     return {
       bosses: this.listBosses(),
-      employees: this.repository.listEmployees(),
+      employees: this.repository.listEmployees().map((e) => this.decorateEmployee(e)),
       approvals: this.repository.listPendingApprovals(),
     };
   }
@@ -609,6 +648,10 @@ export class OfficeService {
         const employee = this.repository.getEmployee(employeeId);
         if (employee) this.cacheCatalog(employee.workingDirectory, catalog);
       },
+      onUsage: (update) => {
+        if (!session.active) return;
+        this.recordUsage(employeeId, update);
+      },
       requestApproval: (prompt, signal) => this.requestApproval(employeeId, session, prompt, signal),
     };
   }
@@ -719,11 +762,73 @@ export class OfficeService {
     return employee;
   }
 
+  private recordUsage(employeeId: string, update: UsageUpdate): void {
+    const employee = this.repository.getEmployee(employeeId);
+    if (!employee) return;
+    const timestamp = this.timestamp();
+    const bossUsage = this.getOrCreateBossUsage(employee.bossId);
+    let bossChanged = false;
+    let employeeChanged = false;
+
+    if (update.rateLimit) {
+      const { utilizationPercent, resetsAt, windowLabel } = update.rateLimit;
+      if (utilizationPercent !== null) {
+        bossUsage.utilizationPercent = utilizationPercent;
+        bossUsage.remainingPercent = Math.round(Math.max(0, Math.min(100, 100 - utilizationPercent)) * 10) / 10;
+      }
+      if (resetsAt !== null) bossUsage.resetsAt = resetsAt;
+      if (windowLabel !== null) bossUsage.windowLabel = windowLabel;
+      bossUsage.updatedAt = timestamp;
+      bossChanged = true;
+    }
+
+    if (update.tokens) {
+      const prev = this.employeeUsage.get(employeeId) ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        contextUsed: null,
+        contextWindow: null,
+        costUsd: null,
+        updatedAt: null,
+      };
+      const deltaIn = update.tokens.cumulative
+        ? Math.max(0, update.tokens.inputTokens - prev.inputTokens)
+        : update.tokens.inputTokens;
+      const deltaOut = update.tokens.cumulative
+        ? Math.max(0, update.tokens.outputTokens - prev.outputTokens)
+        : update.tokens.outputTokens;
+      const nextEmployeeUsage: EmployeeUsage = {
+        inputTokens: update.tokens.cumulative ? update.tokens.inputTokens : prev.inputTokens + update.tokens.inputTokens,
+        outputTokens: update.tokens.cumulative
+          ? update.tokens.outputTokens
+          : prev.outputTokens + update.tokens.outputTokens,
+        contextUsed: update.tokens.contextUsed !== undefined ? update.tokens.contextUsed : prev.contextUsed,
+        contextWindow: update.tokens.contextWindow !== undefined ? update.tokens.contextWindow : prev.contextWindow,
+        costUsd: update.tokens.costUsd !== undefined ? update.tokens.costUsd : prev.costUsd,
+        updatedAt: timestamp,
+      };
+      this.employeeUsage.set(employeeId, nextEmployeeUsage);
+      bossUsage.inputTokens += deltaIn;
+      bossUsage.outputTokens += deltaOut;
+      bossUsage.updatedAt = timestamp;
+      bossChanged = true;
+      employeeChanged = true;
+    }
+
+    if (bossChanged) {
+      this.events.publish({ type: "boss_updated", boss: this.buildBoss(employee.bossId) });
+    }
+    if (employeeChanged) {
+      this.events.publish({ type: "employee_updated", employee: this.decorateEmployee(employee) });
+    }
+  }
+
   private patchEmployee(id: string, patch: Partial<Employee>): Employee {
     const next: Employee = { ...this.requireEmployee(id), ...patch, updatedAt: this.timestamp() };
     this.repository.updateEmployee(next);
-    this.events.publish({ type: "employee_updated", employee: next });
-    return next;
+    const decorated = this.decorateEmployee(next);
+    this.events.publish({ type: "employee_updated", employee: decorated });
+    return decorated;
   }
 
   private setStatus(id: string, status: Employee["status"], patch: Partial<Employee> = {}): Employee {

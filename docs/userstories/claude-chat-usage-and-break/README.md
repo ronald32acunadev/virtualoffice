@@ -10,7 +10,7 @@ Implementer route: `pumbastudio` (LM Studio active loaded model `zai-org/glm-4.7
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Employee job title (`jobTitle`) across domain, persistence, workspace, and 3D office | — | complete |
-| US-02 | Provider and employee usage tracking (quotas, tokens, and live updates) | — | pending |
+| US-02 | Provider and employee usage tracking (quotas, tokens, and live updates) | — | complete |
 | US-03 | Provider-wide break time ("on break") on rate limit / quota exhaustion | US-02 | pending |
 | US-04 | Claude-style workspace chat UI (sidebar, markdown rendering, and composer) | US-01, US-02, US-03 | pending |
 | US-05 | 3D office break-time visuals for bosses and employees | US-01, US-03 | pending |
@@ -90,7 +90,7 @@ As the owner, I want bosses and employees who are on break to visibly rest in th
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
 | `US-01 / AC-01`–`AC-04` | `apps/server/test/persistence/migration.test.ts`, `apps/server/test/office/job-title.test.ts` (7 tests), `apps/web/src/state/jobTitle.test.ts` (4 tests) | Passed (`apps/server`: 177/177, `apps/web`: 72/72, `npm run typecheck`: 0 errors). |
-| `US-02 / AC-01`–`AC-04` | `apps/server/test/office/usage.test.ts` (provider + employee usage updates, WS broadcast), adapter tests (`claude`, `codex`, `opencode`, `antigravity`, `gemini`) for usage parsing, `apps/web/src/state/usage.test.ts` | Pending |
+| `US-02 / AC-01`–`AC-04` | `apps/server/test/office/usage.test.ts` (7 tests), `apps/web/src/state/usage.test.ts` (8 tests) | Passed (`apps/server`: 184/184, `apps/web`: 80/80, `npm run typecheck`: 0 errors). |
 | `US-03 / AC-01`–`AC-04` | `apps/server/test/office/break-time.test.ts` (rate-limit detection, provider-wide `on_break`, `409 provider_on_break` guard, timer auto-resume & `POST /api/bosses/:id/resume`), `apps/server/test/http/api.test.ts` | Pending |
 | `US-04 / AC-01`–`AC-04` | `apps/web/src/state/sidebar.test.ts` (search filter + project/boss grouping), `apps/web/src/state/slashMenu.test.ts` (regression), browser verification in `/workspace` (layout, tables, code copy, composer, `/` menu, break banner) | Pending |
 | `US-05 / AC-01`–`AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (`on_break` pose/color), `apps/web/src/scene/officeQuotes.test.ts` (break quotes), browser verification in `/office` | Pending |

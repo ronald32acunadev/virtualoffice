@@ -9,6 +9,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 function stringifyValue(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
@@ -85,6 +86,13 @@ function createOpenCodeParser(sink: AgentSink): CliLineParser {
             content: stringifyValue(state?.output),
           });
         }
+        return;
+      }
+
+      if (type === "step_finish") {
+        const part = asRecord(event.part);
+        const tokens = (part ? extractTokenUsage(part) : null) ?? extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
         return;
       }
 
