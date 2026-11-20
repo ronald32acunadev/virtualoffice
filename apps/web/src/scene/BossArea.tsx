@@ -385,7 +385,7 @@ export function BossArea({
       <Html position={[desk[0], 2.55, desk[2]]} center distanceFactor={14} zIndexRange={[10, 0]}>
         <div className={`boss-label${dim ? " boss-label-dim" : ""}`}>
           <strong>{boss.name}</strong>
-          {dim ? <span>Coming soon</span> : null}
+          {dim ? <span>Not installed</span> : null}
         </div>
       </Html>
       {speechText && !dim ? (

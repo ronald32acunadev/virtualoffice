@@ -17,6 +17,7 @@ import {
   isSpecies,
   type ApprovalRequest,
   type Boss,
+  type BossId,
   type Catalog,
   type ClaudeSessionSummary,
   type Decision,
@@ -29,7 +30,10 @@ import {
 
 export type OfficeDeps = {
   repository: OfficeRepository;
-  adapter: AgentAdapter;
+  /** Single Claude adapter shortcut (kept for backward compatibility with existing tests). */
+  adapter?: AgentAdapter;
+  /** Per-boss adapters; takes precedence over `adapter` when both are provided. */
+  adapters?: Partial<Record<BossId, AgentAdapter>>;
   events: EventBus;
   now?: () => Date;
   newId?: () => string;
@@ -74,7 +78,7 @@ function defaultIsDirectory(path: string): boolean {
 export class OfficeService {
   private shuttingDown = false;
   private readonly repository: OfficeRepository;
-  private readonly adapter: AgentAdapter;
+  private readonly adapters: Partial<Record<BossId, AgentAdapter>>;
   private readonly events: EventBus;
   private readonly now: () => Date;
   private readonly newId: () => string;
@@ -95,7 +99,10 @@ export class OfficeService {
 
   constructor(deps: OfficeDeps) {
     this.repository = deps.repository;
-    this.adapter = deps.adapter;
+    this.adapters = {
+      ...(deps.adapter ? { claude: deps.adapter } : {}),
+      ...(deps.adapters ?? {}),
+    };
     this.events = deps.events;
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
@@ -112,7 +119,11 @@ export class OfficeService {
   // ---- queries ----
 
   listBosses(): Boss[] {
-    return BOSSES.map((boss) => ({ ...boss }));
+    return BOSSES.map((boss) => ({ ...boss, available: Boolean(this.adapters[boss.id]) }));
+  }
+
+  private adapterFor(bossId: BossId): AgentAdapter | undefined {
+    return this.adapters[bossId];
   }
 
   getState(): { bosses: Boss[]; employees: Employee[]; approvals: ApprovalRequest[] } {
@@ -138,8 +149,9 @@ export class OfficeService {
   async getEmployeeCatalog(employeeId: string, query: { refresh?: unknown }): Promise<Catalog> {
     const employee = this.requireEmployee(employeeId);
     const refresh = parseRefresh(query.refresh);
-    if (this.sessions.get(employeeId)?.active) {
-      const live = await this.adapter.fetchCatalog(employeeId);
+    const adapter = this.adapterFor(employee.bossId);
+    if (this.sessions.get(employeeId)?.active && adapter) {
+      const live = await adapter.fetchCatalog(employeeId);
       if (live) return this.cacheCatalog(employee.workingDirectory, live);
     }
     if (!this.isDirectory(employee.workingDirectory)) {
@@ -263,6 +275,9 @@ export class OfficeService {
   async hireFromRequest(input: HireInput): Promise<Employee> {
     this.validateHire(input);
     const role = parseRole(input.role);
+    if (role !== null && input.bossId !== "claude") {
+      throw new OfficeError("validation_error", "Roles are only supported for Claude employees", "role");
+    }
     if (role !== null) {
       const catalog = await this.folderCatalog(path.resolve(input.workingDirectory as string), false);
       if (!catalog.agents.some((agent) => agent.name === role)) {
@@ -303,7 +318,7 @@ export class OfficeService {
 
   /** Checks the rules every hire shares and returns the parsed values. */
   private validateHire(input: HireInput): { boss: Boss; task: string; workingDirectory: string } {
-    const boss = BOSSES.find((candidate) => candidate.id === input.bossId);
+    const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
     if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
     if (typeof input.task !== "string" || input.task.trim() === "") {
@@ -360,7 +375,11 @@ export class OfficeService {
 
   private async deliver(employeeId: string, text: string): Promise<Message> {
     const employee = this.requireEmployee(employeeId);
-    if (this.sessions.get(employeeId)?.active && this.adapter.sendMessage(employeeId, text)) {
+    const adapter = this.adapterFor(employee.bossId);
+    if (!adapter) {
+      throw new OfficeError("boss_unavailable", `Boss ${employee.bossId} is not available`);
+    }
+    if (this.sessions.get(employeeId)?.active && adapter.sendMessage(employeeId, text)) {
       const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
       if (employee.status === "idle") this.setStatus(employeeId, "working");
       return message;
@@ -388,7 +407,7 @@ export class OfficeService {
     if (session) session.active = false;
     this.expireApprovalsOf(employeeId);
     try {
-      await this.adapter.stop(employeeId);
+      await this.adapterFor(employee.bossId)?.stop(employeeId);
     } finally {
       this.sessions.delete(employeeId);
     }
@@ -466,6 +485,7 @@ export class OfficeService {
    * in order. A failure to read adds a system note and the resume continues.
    */
   private async catchUp(employee: Employee): Promise<void> {
+    if (employee.bossId !== "claude") return;
     const sessionId = employee.providerSessionId;
     if (!sessionId || !this.catalog) return;
     const stored = this.repository.listMessages(employee.id);
@@ -516,8 +536,13 @@ export class OfficeService {
     const session: LiveSession = { active: true };
     this.sessions.set(employee.id, session);
     const sink = this.createSink(employee.id, session);
+    const adapter = this.adapterFor(employee.bossId);
+    if (!adapter) {
+      sink.onFailed(`Boss ${employee.bossId} is not available`);
+      return;
+    }
     try {
-      this.adapter.start({ employee, prompt, ...(resume ? { resume } : {}) }, sink);
+      adapter.start({ employee, prompt, ...(resume ? { resume } : {}) }, sink);
     } catch (error) {
       sink.onFailed(errorReason(error));
     }
