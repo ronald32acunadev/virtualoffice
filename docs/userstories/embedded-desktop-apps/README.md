@@ -9,7 +9,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Embedded OpenCode web app | — | pending |
+| US-01 | Embedded OpenCode web app | — | complete |
 | US-02 | Virtual display host for desktop apps (server) | — | pending |
 | US-03 | Authenticated desktop stream channel (VNC over the office WebSocket) | US-02 | pending |
 | US-04 | "App" tab with the embedded desktop app in the workspace | US-01, US-03 | pending |
@@ -30,7 +30,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
   - The owner installs the display server once with `sudo apt install tigervnc-standalone-server`; the agent never installs system packages.
   - Electron apps (Claude Desktop, ChatGPT) and the Antigravity snap start and render on an `Xvnc` display through `DISPLAY=:<n>` without a GPU (falling back to software rendering, adding `--disable-gpu` if needed).
   - These apps enforce a single running instance per profile; to coexist with copies the owner opens on the real desktop, each embedded app runs with its own profile directory (Electron `--user-data-dir=<data>/desktop-profiles/<app>`), so the owner signs in once inside each embedded app. If an app ignores that flag, it can only be embedded while its normal window is closed.
-  - The OpenCode web UI accepts the server password supplied by the office (environment variable or login prompt), so the framed UI loads without the owner typing it.
+  - ~~The OpenCode web UI accepts the server password supplied by the office~~ — verified in US-01: on `127.0.0.1` the server answers without the password, so none is passed.
 - **Exclusions**:
   - No iframe of claude.ai or chatgpt.com, no browser-extension tricks to bypass frame protections.
   - No window reparenting into the owner's real Wayland/X11 desktop.
@@ -91,7 +91,7 @@ As the owner, I want an "App" tab next to Chat and Terminal that shows the boss'
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-04` | `apps/server/test/desktop/opencode-web-host.test.ts` (fake spawner/port probe: reuse per folder, readiness timeout, stop/close cleanup, missing binary) + live smoke test framing a real `opencode serve` | Pending |
+| `US-01 / AC-01`–`AC-04` | `apps/server/test/desktop/opencode-web-host.test.ts` (6 tests: spawn args with `--cors`, reuse incl. concurrent starts, readiness timeout kills, early exit → `start_failed`, stop/stopAll and exit after ready, missing CLI/folder with zero spawns) + `apps/server/test/http/app-routes.test.ts` (6 tests: `POST /api/employees/:id/app/start` → `{ app: { kind: "web", url } }`, `DesktopError` → status, stop, other boss/unknown employee/no host rejected, token required) + live check of the real CLI. The page-level texts of `AC-02` ("Starting OpenCode…", Retry) are verified with the App tab in US-04. | Passed. RED first (`Cannot find module '../../src/desktop/opencode-web-host.ts'`; routes answered `404`), then 12/12 green; server 31 files / 247 tests; `tsc --noEmit` 0 errors. Live: `OpenCodeWebHost.start()` on a scratch folder ran real `opencode serve`, was ready in 262 ms, `GET` of its URL answered `200` with no `X-Frame-Options`, a second start reused the same URL, and `stopAll()` left no `opencode serve` process of ours. Verified on 127.0.0.1: the API answers `200` without the server password, so the office does not pass one (`AC-03`). Implementer: `pumbastudio` (`zai-org/glm-4.7-flash`) with one correction per answer; the route answer's NEW block was applied without its OLD markers. |
 | `US-02 / AC-01`–`AC-04` | `apps/server/test/desktop/desktop-app-host.test.ts` (fake spawner: `Xvnc` and app arguments, display/port allocation, reuse, missing binaries, exit and stop cleanup) | Pending |
 | `US-02 / AC-05` | Live check per app after the owner installs `tigervnc-standalone-server`: start each app on a virtual display and capture a frame | Pending |
 | `US-03 / AC-01`–`AC-03` | `apps/server/test/http/desktop-ws.test.ts` (token/origin rejection with no TCP connect, byte relay both ways against a local fake TCP server, close propagation) | Pending |

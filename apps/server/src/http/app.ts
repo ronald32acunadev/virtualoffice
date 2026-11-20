@@ -9,6 +9,7 @@ import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
 import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
+import { DesktopError, type OpenCodeWebHost } from "../desktop/opencode-web-host.ts";
 
 export type BuildAppOptions = {
   token: string;
@@ -19,6 +20,7 @@ export type BuildAppOptions = {
   staticRoot?: string;
   devOrigin?: string;
   terminals?: TerminalSessionManager;
+  openCodeWeb?: OpenCodeWebHost;
 };
 
 const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
@@ -45,7 +47,7 @@ function asRecord(body: unknown): Record<string, unknown> {
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { token, port, office, staticRoot, devOrigin, terminals } = options;
+  const { token, port, office, staticRoot, devOrigin, terminals, openCodeWeb } = options;
   const launcher = options.launcher ?? new ExternalLauncherService();
 
   const app = Fastify({ logger: false });
@@ -276,6 +278,39 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   if (staticRoot && fs.existsSync(staticRoot)) {
     await app.register(fastifyStatic, { root: staticRoot, prefix: "/" });
   }
+
+  app.post<{ Params: { id: string } }>("/api/employees/:id/app/start", async (request, reply) => {
+    const employee = options.repository.getEmployee(request.params.id);
+    if (!employee) {
+      return sendError(reply, 404, "not_found", "Employee not found");
+    }
+    if (employee.bossId !== "opencode") {
+      return sendError(reply, 409, "app_not_available", "Embedded app is not available for this boss yet");
+    }
+    if (openCodeWeb === undefined) {
+      return sendError(reply, 409, "app_not_available", "Embedded app is not enabled");
+    }
+    try {
+      const app = await openCodeWeb.start(employee.workingDirectory);
+      return reply.code(200).send({ app: { kind: "web", url: app.url } });
+    } catch (err) {
+      if (err instanceof DesktopError) {
+        return sendError(reply, err.status, err.code, err.message);
+      }
+      throw err;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/employees/:id/app/stop", async (request, reply) => {
+    const employee = options.repository.getEmployee(request.params.id);
+    if (!employee) {
+      return sendError(reply, 404, "not_found", "Employee not found");
+    }
+    if (employee.bossId !== "opencode") {
+      return { stopped: false };
+    }
+    return { stopped: openCodeWeb?.stop(employee.workingDirectory) ?? false };
+  });
 
   return app;
 }

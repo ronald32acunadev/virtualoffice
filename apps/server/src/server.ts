@@ -13,11 +13,12 @@ import { OpenCodeAgentAdapter } from "./agents/opencode/opencode-agent-adapter.t
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
 import { TerminalSessionManager } from "./terminal/terminal-session-manager.ts";
-import { createToken } from "./http/security.ts";
+import { allowedOrigins, createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
 import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
+import { OpenCodeWebHost } from "./desktop/opencode-web-host.ts";
 
 export type StartOfficeServerOptions = {
   port?: number;
@@ -83,6 +84,10 @@ export async function startOfficeServer(
   office.recoverOnStartup();
   office.backfillProfiles();
 
+  const openCodeWeb = new OpenCodeWebHost({
+    allowedOrigins: allowedOrigins(port, devOrigin),
+  });
+
   const app = await buildApp({
     token,
     port,
@@ -91,6 +96,7 @@ export async function startOfficeServer(
     ...(fs.existsSync(webDist) ? { staticRoot: webDist } : {}),
     ...(devOrigin ? { devOrigin } : {}),
     terminals,
+    openCodeWeb,
   });
 
   await app.listen({ host: "127.0.0.1", port });
@@ -114,6 +120,7 @@ export async function startOfficeServer(
         await office.shutdown();
         await app.close();
         terminals.killAll();
+        openCodeWeb.stopAll();
         repository.close();
       } finally {
       }
