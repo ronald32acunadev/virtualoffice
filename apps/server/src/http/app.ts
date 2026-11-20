@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
@@ -10,6 +11,7 @@ import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
 import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
 import { DesktopError, type OpenCodeWebHost } from "../desktop/opencode-web-host.ts";
+import { DESKTOP_APPS, type DesktopAppHost, type DesktopAppId } from "../desktop/desktop-app-host.ts";
 
 export type BuildAppOptions = {
   token: string;
@@ -21,6 +23,7 @@ export type BuildAppOptions = {
   devOrigin?: string;
   terminals?: TerminalSessionManager;
   openCodeWeb?: OpenCodeWebHost;
+  desktopApps?: DesktopAppHost;
 };
 
 const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
@@ -274,6 +277,57 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       });
     },
   );
+
+  app.get<{ Params: { appId: string } }>("/ws/desktop/:appId", { websocket: true }, (socket, request) => {
+    const host = options.desktopApps;
+    const appId = request.params.appId;
+    const send = (message: { type: string; code: string; message: string }) => {
+      if (socket.readyState === 1) socket.send(JSON.stringify(message));
+    };
+    if (host === undefined) {
+      send({ type: "error", code: "desktop_unavailable", message: "Embedded desktop apps are not enabled" });
+      socket.close(1011, "desktop_unavailable");
+      return;
+    }
+    if (!Object.prototype.hasOwnProperty.call(DESKTOP_APPS, appId)) {
+      send({ type: "error", code: "unknown_app", message: "Unknown desktop app" });
+      socket.close(1008, "unknown_app");
+      return;
+    }
+    const instance = host.get(appId as DesktopAppId);
+    if (instance === undefined) {
+      send({ type: "error", code: "app_not_running", message: "The desktop app is not running" });
+      socket.close(1008, "app_not_running");
+      return;
+    }
+    const tcp = net.connect({ host: "127.0.0.1", port: instance.rfbPort });
+    let connected = false;
+    const browserMessages: Array<Buffer> = [];
+    const writeBrowserMessage = (buf: Buffer) => {
+      if (connected) tcp.write(buf);
+      else browserMessages.push(buf);
+    };
+    const sendTcpChunk = (chunk: Buffer) => {
+      if (socket.readyState === 1) socket.send(chunk);
+    };
+    tcp.on("connect", () => {
+      connected = true;
+      for (const buf of browserMessages) tcp.write(buf);
+      browserMessages.length = 0;
+    });
+    tcp.on("data", (chunk) => sendTcpChunk(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    tcp.on("close", () => {
+      if (socket.readyState === 1) socket.close(1000, "display_closed");
+    });
+    tcp.on("error", () => {
+      if (socket.readyState === 1) socket.close(1000, "display_closed");
+    });
+    socket.on("close", () => tcp.destroy());
+    socket.on("error", () => tcp.destroy());
+    socket.on("message", (raw) => {
+      writeBrowserMessage(Array.isArray(raw) ? Buffer.concat(raw) : Buffer.isBuffer(raw) ? raw : Buffer.from(raw));
+    });
+  });
 
   if (staticRoot && fs.existsSync(staticRoot)) {
     await app.register(fastifyStatic, { root: staticRoot, prefix: "/" });

@@ -108,6 +108,7 @@ export async function startOfficeServer(
     ...(devOrigin ? { devOrigin } : {}),
     terminals,
     openCodeWeb,
+    desktopApps,
   });
 
   await app.listen({ host: "127.0.0.1", port });
