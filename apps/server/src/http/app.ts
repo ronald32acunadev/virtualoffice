@@ -40,12 +40,20 @@ function asRecord(body: unknown): Record<string, unknown> {
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const { token, port, office, staticRoot, devOrigin } = options;
-  const hosts = allowedHosts(port);
-  const origins = allowedOrigins(port, devOrigin);
 
   const app = Fastify({ logger: false });
 
+  const resolvePort = (): number => {
+    if (port > 0) return port;
+    const addr = app.server.address();
+    return typeof addr === "object" && addr !== null ? addr.port : port;
+  };
+
   app.addHook("onRequest", async (request: FastifyRequest, reply: FastifyReply) => {
+    const activePort = resolvePort();
+    const hosts = allowedHosts(activePort);
+    const origins = allowedOrigins(activePort, devOrigin);
+
     // 1. Host check on every request, static files included.
     if (!request.headers.host || !hosts.includes(request.headers.host)) {
       return sendError(reply, 403, "forbidden_host", "Host not allowed");

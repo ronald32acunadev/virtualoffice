@@ -9,7 +9,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Programmatic server bootstrap & graceful lifecycle for desktop embedding | — | pending |
+| US-01 | Programmatic server bootstrap & graceful lifecycle for desktop embedding | — | complete |
 | US-02 | Electron desktop shell (`apps/desktop`) with workspace, 3D office window, and native folder picker | US-01 | pending |
 | US-03 | External agent launcher catalog & backend launch API | — | pending |
 | US-04 | Workspace "Open in..." external launcher picker UI | US-03 | pending |
@@ -88,7 +88,7 @@ As the owner, I want an "Open in..." selector in each employee's conversation he
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-03` | `apps/server/test/http/server-bootstrap.test.ts` (ephemeral port startup, idempotent `close()`, existing `apps/server` test suite) | Pending |
+| `US-01 / AC-01`–`AC-03` | `apps/server/test/http/server-bootstrap.test.ts` (ephemeral port startup, idempotent `close()`, existing `apps/server` test suite) | Passed (`apps/server`: 24/24 files, 191/191 tests; `typecheck`: 0 errors). |
 | `US-02 / AC-01`–`AC-04` | `apps/desktop/test/window-policy.test.ts` (same-origin `/office` allowlist, external `http(s)` openExternal, unknown scheme deny, shutdown cleanup) + manual `npm run desktop` smoke check | Pending |
 | `US-03 / AC-01`–`AC-04` | `apps/server/test/office/external-launcher.test.ts` & `apps/server/test/http/launch-routes.test.ts` (per-boss target catalogs, spawn args with `shell: false`, `400`/`404`/`409` rejection with zero spawns) | Pending |
 | `US-04 / AC-01`–`AC-03` | `apps/web/src/state/launchMenu.test.ts` (target grouping/selection/error handling) + `npm run typecheck` + `npm run build` | Pending |
