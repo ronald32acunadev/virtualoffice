@@ -13,6 +13,12 @@ import { SETTING_SOURCES, SYSTEM_PROMPT } from "./session-options.ts";
 import { approvalKindFor, summarizeToolInput } from "./approval-mapping.ts";
 import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 import { PushQueue } from "./push-queue.ts";
+import {
+  extractTokenUsage,
+  formatRateLimitWindow,
+  normalizeResetsAt,
+  normalizeUtilizationPercent,
+} from "../usage-parser.ts";
 
 /** The subset of the SDK `query` function this adapter needs; tests inject a fake. */
 export type QueryFunction = (params: {
@@ -51,7 +57,12 @@ type LooseMessage = {
   event?: { type?: string; delta?: { type?: string; text?: string } };
   result?: unknown;
   errors?: unknown;
+  error?: unknown;
   commands?: unknown;
+  rate_limit_info?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  modelUsage?: Record<string, Record<string, unknown>>;
+  total_cost_usd?: unknown;
 };
 
 const REJECTED_MESSAGE = "Rejected by the owner";
@@ -180,6 +191,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
           this.mapUser(message, sink);
         } else if (message.type === "stream_event") {
           this.mapStreamEvent(message, sink);
+        } else if (message.type === "rate_limit_event") {
+          this.mapRateLimit(message, sink);
         } else if (message.type === "result") {
           if (this.mapResult(message, initSeen, sink) === "failed") {
             this.teardown(employeeId, session);
@@ -240,6 +253,16 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private mapAssistant(message: LooseMessage, sink: AgentSink): void {
+    if (message.error === "rate_limit") {
+      sink.onUsage?.({
+        rateLimit: {
+          status: "rejected",
+          utilizationPercent: 100,
+          resetsAt: null,
+          windowLabel: null,
+        },
+      });
+    }
     const ctx = { parentToolUseId: message.parent_tool_use_id ?? null, sourceUuid: message.uuid ?? null };
     for (const mapped of mapAssistantContent(message.message?.content, ctx)) sink.onMessage(mapped);
   }
@@ -257,7 +280,73 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     }
   }
 
+  private mapRateLimit(message: LooseMessage, sink: AgentSink): void {
+    const info = message.rate_limit_info;
+    if (!info || typeof info !== "object") return;
+    const rawStatus = info.status;
+    const status =
+      rawStatus === "allowed" || rawStatus === "allowed_warning" || rawStatus === "rejected"
+        ? rawStatus
+        : "allowed";
+    sink.onUsage?.({
+      rateLimit: {
+        status,
+        utilizationPercent: normalizeUtilizationPercent(info.utilization),
+        resetsAt: normalizeResetsAt(info.resetsAt),
+        windowLabel: formatRateLimitWindow(info.rateLimitType),
+      },
+    });
+  }
+
+  private emitResultUsage(message: LooseMessage, sink: AgentSink): void {
+    if (message.modelUsage && typeof message.modelUsage === "object") {
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let cacheRead = 0;
+      let contextWindow: number | null = null;
+      let found = false;
+      for (const entry of Object.values(message.modelUsage)) {
+        if (!entry || typeof entry !== "object") continue;
+        if (typeof entry.inputTokens === "number" && Number.isFinite(entry.inputTokens)) {
+          inputTokens += entry.inputTokens;
+          found = true;
+        }
+        if (typeof entry.outputTokens === "number" && Number.isFinite(entry.outputTokens)) {
+          outputTokens += entry.outputTokens;
+          found = true;
+        }
+        if (typeof entry.cacheReadInputTokens === "number" && Number.isFinite(entry.cacheReadInputTokens)) {
+          cacheRead += entry.cacheReadInputTokens;
+        }
+        if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
+          contextWindow = Math.max(contextWindow ?? 0, entry.contextWindow);
+        }
+      }
+      if (found) {
+        const costUsd = typeof message.total_cost_usd === "number" && Number.isFinite(message.total_cost_usd)
+          ? message.total_cost_usd
+          : null;
+        sink.onUsage?.({
+          tokens: {
+            inputTokens,
+            outputTokens,
+            contextUsed: contextWindow !== null ? inputTokens + cacheRead : null,
+            contextWindow,
+            costUsd,
+            cumulative: true,
+          },
+        });
+        return;
+      }
+    }
+    const extracted = extractTokenUsage(message as unknown as Record<string, unknown>);
+    if (extracted) {
+      sink.onUsage?.({ tokens: { ...extracted, cumulative: false } });
+    }
+  }
+
   private mapResult(message: LooseMessage, initSeen: boolean, sink: AgentSink): "ok" | "failed" {
+    this.emitResultUsage(message, sink);
     if (message.subtype === "success") {
       sink.onTurnFinished();
       return "ok";

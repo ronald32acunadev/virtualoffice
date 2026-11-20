@@ -9,6 +9,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 export type AntigravityAgentAdapterOptions = {
   spawnFn?: SpawnFunction;
@@ -202,6 +203,9 @@ function createAntigravityParser(sink: AgentSink): CliLineParser {
             emittedAgentText = true;
           }
         }
+
+        const tokens = extractTokenUsage(result) ?? extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
 
         if (!failed && !finished) {
           finished = true;

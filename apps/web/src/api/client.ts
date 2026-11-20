@@ -6,11 +6,13 @@ import type {
   Decision,
   ImportResult,
   Employee,
+  LaunchTarget,
   Message,
   ServerEvent,
   Species,
   StateSnapshot,
 } from "./types";
+import type { EmbeddedAppStatus } from "../state/desktopApp";
 
 const TOKEN_KEY = "virtualoffice.token";
 
@@ -97,6 +99,7 @@ export const api = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => request<{ employee: Employee }>("POST", "/api/employees", input),
   getFolderCatalog: (workingDirectory: string, refresh = false) => {
     const query = new URLSearchParams({ workingDirectory });
@@ -108,7 +111,7 @@ export const api = {
       "GET",
       `/api/employees/${encodeURIComponent(employeeId)}/catalog${refresh ? "?refresh=true" : ""}`,
     ),
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) =>
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) =>
     request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
   listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {
     const query = new URLSearchParams({
@@ -129,12 +132,30 @@ export const api = {
     }),
   stopEmployee: (employeeId: string) =>
     request<{ employee: Employee }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/stop`),
+  resumeBoss: (bossId: BossId) =>
+    request<{ boss: import("./types").Boss }>("POST", `/api/bosses/${encodeURIComponent(bossId)}/resume`),
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) =>
     request<{ approval: ApprovalRequest }>(
       "POST",
       `/api/approvals/${encodeURIComponent(approvalId)}/decision`,
       answers ? { decision, answers } : { decision },
     ),
+  getLaunchTargets: (employeeId: string) =>
+    request<{ targets: LaunchTarget[] }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/launch-targets`),
+  launchExternal: (employeeId: string, targetId: string) =>
+    request<{ launched: true; targetId: string }>(
+      "POST",
+      `/api/employees/${encodeURIComponent(employeeId)}/launch`,
+      { targetId },
+    ),
+  getApp: (employeeId: string) =>
+    request<{ app: EmbeddedAppStatus }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/app`),
+  startApp: (employeeId: string) =>
+    request<{ app: EmbeddedAppStatus }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/start`),
+  stopApp: (employeeId: string) =>
+    request<{ stopped: boolean }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/stop`),
+  relaunchApp: (employeeId: string) =>
+    request<{ relaunched: boolean }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/app/relaunch`),
 };
 
 export type SocketHandlers = {

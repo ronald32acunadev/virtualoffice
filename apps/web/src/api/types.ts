@@ -1,12 +1,41 @@
 // Copied from docs/architecture/api-contract.md. Keep in sync with the contract.
 export type BossId = "claude" | "codex" | "opencode" | "gemini";
-export type Boss = { id: BossId; name: string; available: boolean };
+
+export type BossUsage = {
+  remainingPercent: number | null;
+  utilizationPercent: number | null;
+  resetsAt: string | null;
+  windowLabel: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  updatedAt: string | null;
+};
+
+export type EmployeeUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  contextUsed: number | null;
+  contextWindow: number | null;
+  costUsd: number | null;
+  updatedAt: string | null;
+};
+
+export type Boss = {
+  id: BossId;
+  name: string;
+  available: boolean;
+  usage?: BossUsage;
+  onBreak?: boolean;
+  breakUntil?: string | null;
+  breakReason?: string | null;
+};
 
 export type EmployeeStatus =
   | "starting"
   | "working"
   | "waiting_approval"
   | "idle"
+  | "on_break"
   | "stopped"
   | "failed";
 
@@ -22,9 +51,11 @@ export type Employee = {
   species: Species;
   importedAt: string | null;
   role: string | null;
+  jobTitle: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
+  usage?: EmployeeUsage;
   createdAt: string;
   updatedAt: string;
 };
@@ -87,16 +118,28 @@ export type ApprovalRequest = {
 };
 
 export type ServerEvent =
+  | { type: "boss_updated"; boss: Boss }
   | { type: "employee_updated"; employee: Employee }
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
-  | { type: "approval_updated"; approval: ApprovalRequest };
+  | { type: "approval_updated"; approval: ApprovalRequest }
+  | { type: "terminal_updated"; employeeId: string; active: boolean };
 
 export type StateSnapshot = {
   bosses: Boss[];
   employees: Employee[];
   approvals: ApprovalRequest[];
+  activeTerminals?: string[];
 };
 
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };
+
+export type LaunchTargetKind = "desktop_app" | "terminal_cli" | "folder";
+export type LaunchTarget = {
+  id: string;
+  label: string;
+  kind: LaunchTargetKind;
+  available: boolean;
+  unavailableReason?: string;
+};
