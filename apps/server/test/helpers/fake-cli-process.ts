@@ -137,6 +137,7 @@ export function makeEmployee(bossId: BossId, workingDirectory = "/tmp/project"):
     species: "wolf",
     importedAt: null,
     role: null,
+    jobTitle: null,
     providerSessionId: null,
     status: "starting",
     failureReason: null,

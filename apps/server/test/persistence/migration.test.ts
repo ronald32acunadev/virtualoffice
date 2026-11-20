@@ -75,3 +75,18 @@ describe("US-03 / AC-02 role column", () => {
     second.close();
   });
 });
+
+describe("US-01 / AC-01 job_title column", () => {
+  it("adds a nullable job_title column to an older database, keeps rows, and persists a job title", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+    expect(first.getEmployee("e1")?.jobTitle).toBeNull();
+    const e1 = first.getEmployee("e1")!;
+    first.updateEmployee({ ...e1, jobTitle: "Architect" });
+    first.close();
+    const second = new SqliteOfficeRepository(file);
+    expect(second.getEmployee("e1")?.jobTitle).toBe("Architect");
+    expect(second.getEmployee("e2")?.jobTitle).toBeNull();
+    second.close();
+  });
+});

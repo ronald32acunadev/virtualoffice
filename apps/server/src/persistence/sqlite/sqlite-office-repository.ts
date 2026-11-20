@@ -68,6 +68,7 @@ const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   { table: "employees", column: "species", type: "TEXT" },
   { table: "employees", column: "imported_at", type: "TEXT" },
   { table: "employees", column: "role", type: "TEXT" },
+  { table: "employees", column: "job_title", type: "TEXT" },
   { table: "messages", column: "source_uuid", type: "TEXT" },
 ];
 
@@ -85,6 +86,7 @@ function toEmployee(row: Row): Employee {
     species: (nullableStr(row.species) ?? "human") as Species,
     importedAt: nullableStr(row.imported_at),
     role: nullableStr(row.role),
+    jobTitle: nullableStr(row.job_title),
     providerSessionId: nullableStr(row.provider_session_id),
     status: str(row.status) as EmployeeStatus,
     failureReason: nullableStr(row.failure_reason),
@@ -148,8 +150,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertEmployee(e: Employee): void {
     this.db
       .prepare(
-        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
+        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
       )
       .run(
         e.id,
@@ -166,6 +168,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.species,
         e.importedAt,
         e.role,
+        e.jobTitle,
       );
   }
 
@@ -173,7 +176,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
     this.db
       .prepare(
         `UPDATE employees SET boss_id = ?, hired_by = ?, task = ?, working_directory = ?, provider_session_id = ?,
-         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ? WHERE id = ?`,
+         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ? WHERE id = ?`,
       )
       .run(
         e.bossId,
@@ -188,6 +191,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.species,
         e.importedAt,
         e.role,
+        e.jobTitle,
         e.id,
       );
   }

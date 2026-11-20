@@ -7,6 +7,7 @@ const ALL_STATUSES: EmployeeStatus[] = [
   "working",
   "waiting_approval",
   "idle",
+  "on_break",
   "stopped",
   "failed",
 ];
@@ -32,6 +33,11 @@ describe("characterVisuals", () => {
     expect(CHARACTER_POSES.idle.typing).toBe(false);
     expect(CHARACTER_POSES.idle.waving).toBe(false);
     expect(CHARACTER_POSES.idle.muted).toBe(false);
+
+    expect(CHARACTER_POSES.on_break.typing).toBe(false);
+    expect(CHARACTER_POSES.on_break.waving).toBe(false);
+    expect(CHARACTER_POSES.on_break.leanX).toBeGreaterThan(0);
+    expect(CHARACTER_POSES.on_break.accentGlow).toBe("#e09f5a");
 
     expect(CHARACTER_POSES.stopped.muted).toBe(true);
     expect(CHARACTER_POSES.stopped.leanX).toBeGreaterThan(0);

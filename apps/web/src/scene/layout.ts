@@ -37,6 +37,7 @@ export const STATUS_COLORS: Record<EmployeeStatus, string> = {
   working: "#5bbf7a",
   waiting_approval: "#ffb02e",
   idle: "#c9c2b8",
+  on_break: "#d9924a",
   stopped: "#7a7a7a",
   failed: "#d95050",
 };

@@ -39,6 +39,15 @@ export const CHARACTER_POSES: Record<EmployeeStatus, CharacterPoseSpec> = {
     muted: false,
     accentGlow: null,
   },
+  on_break: {
+    leanX: 0.2,
+    headTiltX: -0.06,
+    typing: false,
+    waving: false,
+    breathingSpeed: 0.9,
+    muted: false,
+    accentGlow: "#e09f5a",
+  },
   starting: {
     leanX: -0.06,
     headTiltX: -0.04,

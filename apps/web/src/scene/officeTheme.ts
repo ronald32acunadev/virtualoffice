@@ -96,6 +96,12 @@ export const MONITOR_VISUALS: Record<EmployeeStatus, MonitorVisual> = {
     emissiveIntensity: 0.38,
     accent: "#a8cef5",
   },
+  on_break: {
+    screen: "#2b2118",
+    emissive: "#d9924a",
+    emissiveIntensity: 0.3,
+    accent: "#f4c892",
+  },
   starting: {
     screen: "#1b2840",
     emissive: "#8fb8ff",

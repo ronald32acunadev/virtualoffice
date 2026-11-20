@@ -9,6 +9,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 function formatMcpToolName(item: Record<string, unknown>): string {
   const server = asString(item.server);
@@ -102,6 +103,8 @@ function createCodexParser(sink: AgentSink): CliLineParser {
       }
 
       if (type === "turn.completed") {
+        const tokens = extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
         sink.onTurnFinished();
         return;
       }

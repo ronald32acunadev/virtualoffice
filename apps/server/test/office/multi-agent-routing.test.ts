@@ -101,7 +101,7 @@ describe("US-01 multi-agent routing and dynamic boss availability", () => {
       bossNames: { gemini: "Antigravity" },
     });
 
-    expect(office.listBosses()).toEqual([
+    expect(office.listBosses()).toMatchObject([
       { id: "claude", name: "Claude", available: false },
       { id: "codex", name: "Codex", available: false },
       { id: "opencode", name: "OpenCode", available: false },

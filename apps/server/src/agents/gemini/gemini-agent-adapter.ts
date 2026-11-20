@@ -9,6 +9,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 function extractGeminiError(event: Record<string, unknown>, fallback: string): string {
   const message = asString(event.message);
@@ -97,6 +98,9 @@ function createGeminiParser(sink: AgentSink): CliLineParser {
 
       if (type === "result") {
         flushAssistantText();
+        const stats = asRecord(event.stats);
+        const tokens = (stats ? extractTokenUsage(stats) : null) ?? extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
         if (asString(event.status) === "error") {
           sink.onFailed(extractGeminiError(event, "Gemini CLI turn failed"));
         } else {
