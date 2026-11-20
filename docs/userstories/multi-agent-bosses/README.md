@@ -9,10 +9,10 @@ Implementer route: no local model available (LM Studio unreachable, Ollama has n
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Multi-adapter routing and dynamic boss availability | — | pending |
-| US-02 | Codex CLI agent adapter | US-01 | pending |
-| US-03 | OpenCode CLI agent adapter | US-01 | pending |
-| US-04 | Gemini CLI agent adapter | US-01 | pending |
+| US-01 | Multi-adapter routing and dynamic boss availability | — | complete |
+| US-02 | Codex CLI agent adapter | US-01 | complete |
+| US-03 | OpenCode CLI agent adapter | US-01 | complete |
+| US-04 | Gemini CLI agent adapter | US-01 | complete |
 
 Environment facts (verified 2026-11-19):
 - `codex` is installed (`/home/pumba/.local/bin/codex`, `codex-cli 0.170.0`) and supports `codex exec --json` and `codex exec resume <session_id> --json`.
@@ -63,10 +63,12 @@ As the owner, I want a Gemini CLI adapter wired into the office, so that as soon
 
 ## Verification mapping
 
+Evidence date: 2026-11-19. Automated: `npm run test -w apps/server` (19 files, 162 tests passed), `npm run test -w apps/web` (14 files, 68 tests passed), `npm run typecheck` (0 errors), `npm run build` (succeeded). Manual: temporary server on port 4397 with disposable SQLite DB running real `codex` (`0.170.0`) and `opencode` (`v2.3.2`) CLIs; temporary files cleaned afterwards.
+
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`–`AC-04` | Server unit/API tests for multi-adapter routing & dynamic boss availability; web UI check in `/workspace` and `/office` | Pending |
-| `US-02 / AC-01`–`AC-04` | Server tests for `CodexAgentAdapter` (start, JSONL parsing, resume, stop, failure); live `codex` CLI smoke test | Pending |
-| `US-03 / AC-01`–`AC-04` | Server tests for `OpenCodeAgentAdapter` (start, JSONL parsing, resume, stop, failure); live `opencode` CLI smoke test | Pending |
-| `US-04 / AC-01`–`AC-04` | Server tests for `GeminiAgentAdapter` (start, stream-json parsing, resume, stop, failure, PATH availability toggle) | Pending |
-| Risk: existing Claude hire, chat, catalog, import, approvals, and shutdown flows | Full `apps/server` (134+ tests) and `apps/web` (64+ tests) suites + `npm run typecheck` + `npm run build` | Pending |
+| `US-01 / AC-01`–`AC-04` | `apps/server/test/office/multi-agent-routing.test.ts` (9 tests), `apps/server/test/agents/binary-availability.test.ts` (6 tests); live `/api/state` check | Passed. `GET /api/state` reported `claude: true`, `codex: true`, `opencode: true`, `gemini: false`; hiring `gemini` returned `409 boss_unavailable`; `NewTaskModal` hides Role for non-Claude bosses and labels unavailable bosses `(not installed)`. |
+| `US-02 / AC-01`–`AC-04` | `apps/server/test/agents/codex-agent-adapter.test.ts` (5 tests); live `codex` CLI smoke test | Passed. Real Codex employee hired (`201`), ran turn to `idle`, recorded `providerSessionId: "01a1f64e-b0ec-7fa2-b19d-25fbb694eca0"`, and answered `["ok"]`. |
+| `US-03 / AC-01`–`AC-04` | `apps/server/test/agents/opencode-agent-adapter.test.ts` (3 tests); live `opencode` CLI smoke test | Passed. Real OpenCode employee hired (`201`), ran turn to `idle`, recorded `providerSessionId: "ses_e09b14e47ffetksjnKoCi3ZAEX"`, and answered `["ok"]`. |
+| `US-04 / AC-01`–`AC-04` | `apps/server/test/agents/gemini-agent-adapter.test.ts` (5 tests), `apps/server/test/agents/binary-availability.test.ts`; live `gemini` hire rejection check | Passed. Fake `stream-json` start, delta streaming, tool use/result, resume, error, and stop tests green; live server without `gemini` on `PATH` reported `available: false` and rejected hire with `409 boss_unavailable`. |
+| Risk: existing Claude hire, chat, catalog, import, approvals, and shutdown flows | Full `apps/server` (162 tests) and `apps/web` (68 tests) suites + `npm run typecheck` + `npm run build` | Passed. |
