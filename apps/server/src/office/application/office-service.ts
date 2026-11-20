@@ -13,6 +13,7 @@ import type { CatalogProvider } from "../ports/catalog-provider.ts";
 import type { EventBus } from "../ports/event-bus.ts";
 import type { OfficeRepository } from "../ports/office-repository.ts";
 import type { SessionCatalog } from "../ports/session-catalog.ts";
+import type { TerminalGuard } from "../ports/terminal-guard.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
@@ -58,6 +59,8 @@ export type OfficeDeps = {
   catalogProvider?: CatalogProvider;
   /** Optional display name overrides for boss suites (e.g. `{ gemini: "Antigravity" }`). */
   bossNames?: Partial<Record<BossId, string>>;
+  /** Read-only view of the embedded terminals; chat is refused while one is active. */
+  terminals?: TerminalGuard;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -100,6 +103,7 @@ export class OfficeService {
   private readonly random: RandomFn;
   private readonly catalogProvider: CatalogProvider | undefined;
   private readonly bossNames: Partial<Record<BossId, string>>;
+  private readonly terminals: TerminalGuard | undefined;
   /** Catalogs per absolute folder; only successful reads are stored. */
   private readonly catalogCache = new Map<string, Catalog>();
   /** In-flight probes per folder, so concurrent requests share one. */
@@ -125,10 +129,16 @@ export class OfficeService {
     this.random = deps.random ?? Math.random;
     this.catalogProvider = deps.catalogProvider;
     this.bossNames = deps.bossNames ?? {};
+    this.terminals = deps.terminals;
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
     return this.events.subscribe(listener);
+  }
+
+  /** Publishes whether an employee's embedded terminal currently holds its session. */
+  notifyTerminal(employeeId: string, active: boolean): void {
+    this.events.publish({ type: "terminal_updated", employeeId, active });
   }
 
   private readonly bossUsage = new Map<BossId, BossUsage>();
@@ -249,11 +259,17 @@ export class OfficeService {
     return this.adapters[bossId];
   }
 
-  getState(): { bosses: Boss[]; employees: Employee[]; approvals: ApprovalRequest[] } {
+  getState(): {
+    bosses: Boss[];
+    employees: Employee[];
+    approvals: ApprovalRequest[];
+    activeTerminals: string[];
+  } {
     return {
       bosses: this.listBosses(),
       employees: this.repository.listEmployees().map((e) => this.decorateEmployee(e)),
       approvals: this.repository.listPendingApprovals(),
+      activeTerminals: this.terminals?.listActive() ?? [],
     };
   }
 
@@ -491,6 +507,9 @@ export class OfficeService {
 
   async sendMessage(employeeId: string, text: unknown): Promise<Message> {
     const employee = this.requireEmployee(employeeId);
+    if (this.terminals?.isActive(employeeId)) {
+      throw new OfficeError("terminal_active", "The embedded terminal holds this session. End it before chatting.");
+    }
     const activeBreak = this.getActiveBreak(employee.bossId);
     if (activeBreak) {
       const bossName = this.buildBoss(employee.bossId).name;

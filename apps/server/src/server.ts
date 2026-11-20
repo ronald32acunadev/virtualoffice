@@ -66,20 +66,22 @@ export async function startOfficeServer(
         : {}),
   };
 
+  const terminals = new TerminalSessionManager({
+    getEmployee: (id) => repository.getEmployee(id) ?? null,
+    onActiveChange: (employeeId, active) => office.notifyTerminal(employeeId, active),
+  });
+
   const office = new OfficeService({
     repository,
     adapters,
     events: new InMemoryEventBus(),
     sessions: new ClaudeSessionCatalog(),
     catalogProvider: new ClaudeCatalogProvider(),
+    terminals,
     ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
   });
   office.recoverOnStartup();
   office.backfillProfiles();
-
-  const terminals = new TerminalSessionManager({
-    getEmployee: (id) => repository.getEmployee(id) ?? null,
-  });
 
   const app = await buildApp({
     token,

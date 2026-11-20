@@ -172,4 +172,42 @@ describe("office reducer", () => {
     expect(state.selectedId).toBeNull();
     expect(state.loaded).toBe(true);
   });
+
+  it("US-04 / AC-02: tracks active terminals from the snapshot and events", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [], activeTerminals: ["e1"] },
+    });
+    expect(state.activeTerminals).toEqual(["e1"]);
+
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e2", active: true },
+    });
+    expect(state.activeTerminals).toEqual(["e1", "e2"]);
+
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e2", active: true },
+    });
+    expect(state.activeTerminals).toEqual(["e1", "e2"]);
+  });
+
+  it("US-04 / AC-03: removes a terminal when it ends", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [], activeTerminals: ["e1", "e2"] },
+    });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e1", active: false },
+    });
+    expect(state.activeTerminals).toEqual(["e2"]);
+
+    state = apply(state, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [] },
+    });
+    expect(state.activeTerminals).toEqual([]);
+  });
 });

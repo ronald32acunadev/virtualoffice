@@ -123,12 +123,14 @@ export type ServerEvent =
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
-  | { type: "approval_updated"; approval: ApprovalRequest };
+  | { type: "approval_updated"; approval: ApprovalRequest }
+  | { type: "terminal_updated"; employeeId: string; active: boolean };
 
 export type StateSnapshot = {
   bosses: Boss[];
   employees: Employee[];
   approvals: ApprovalRequest[];
+  activeTerminals?: string[];
 };
 
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

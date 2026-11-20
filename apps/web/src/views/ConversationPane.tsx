@@ -226,7 +226,8 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   if (!employee) return null;
   const boss = state.bosses.find((b) => b.id === employee.bossId);
   const onBreak = Boolean(boss?.onBreak || employee.status === "on_break");
-  const disabled = missingFolder || isFolderMissing(employee) || onBreak;
+  const terminalActive = state.activeTerminals.includes(employeeId);
+  const disabled = missingFolder || isFolderMissing(employee) || onBreak || terminalActive;
   const resetCountdown = formatResetCountdown(boss?.breakUntil);
 
   const send = async () => {
@@ -313,6 +314,9 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
     >
       <div className="composer-inner">
         {missingFolder || isFolderMissing(employee) ? <p className="field-error">{FOLDER_MISSING_TEXT}</p> : null}
+        {terminalActive ? (
+          <p className="field-error">The embedded terminal holds this session. End it in the Terminal tab to chat here.</p>
+        ) : null}
         {onBreak ? (
           <div className="break-banner" role="status">
             <div className="break-banner-text">
@@ -422,6 +426,8 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
   const live = state.liveText[employeeId] ?? "";
   const timeline = useMemo(() => buildTimeline(messages ?? []), [messages]);
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
+  const employeeStatus = state.employees.find((e) => e.id === employeeId)?.status;
+  const busy = STOPPABLE.has(employeeStatus ?? "");
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
   const [view, setView] = useState<"chat" | "terminal">("chat");
@@ -473,7 +479,7 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
         </div>
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
-      {view === "terminal" ? <TerminalPanel employeeId={employeeId} /> : null}
+      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} /> : null}
     </section>
   );
 }

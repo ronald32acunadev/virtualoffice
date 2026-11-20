@@ -26,6 +26,13 @@ export function parseServerMessage(raw: string): TerminalServerMessage | null {
   }
 }
 
+export type TerminalGate = "connect" | "offer" | "wait";
+/** Decides whether the panel may connect: busy employees get an "Open when idle" offer, then wait once armed. */
+export function terminalGate(busy: boolean, armed: boolean): TerminalGate {
+  if (!busy) return armed ? "connect" : "offer";
+  return armed ? "wait" : "offer";
+}
+
 /** Short status line for an ended session: exit → `Session ended (exit code ${code})`; error → the error's `message`. */
 export function formatTerminalEnd(message: Extract<TerminalServerMessage, { type: "exit" | "error" }>): string {
   if (message.type === "exit") return `Session ended (exit code ${message.code})`;

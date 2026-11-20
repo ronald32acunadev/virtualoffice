@@ -28,6 +28,7 @@ const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
   provider_on_break: 409,
   approval_not_pending: 409,
   working_directory_missing: 409,
+  terminal_active: 409,
   catalog_unavailable: 503,
 };
 

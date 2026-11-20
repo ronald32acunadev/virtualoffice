@@ -134,7 +134,8 @@ export type ServerEvent =
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
-  | { type: "approval_updated"; approval: ApprovalRequest };
+  | { type: "approval_updated"; approval: ApprovalRequest }
+  | { type: "terminal_updated"; employeeId: string; active: boolean };
 
 export const BOSSES: readonly Boss[] = [
   { id: "claude", name: "Claude", available: true },
@@ -165,7 +166,8 @@ export class OfficeError extends Error {
       | "provider_on_break"
       | "approval_not_pending"
       | "working_directory_missing"
-      | "catalog_unavailable",
+      | "catalog_unavailable"
+      | "terminal_active",
     message: string,
     readonly field?: string,
   ) {

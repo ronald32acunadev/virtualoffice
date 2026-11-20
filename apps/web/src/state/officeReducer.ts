@@ -17,6 +17,8 @@ export type OfficeState = {
   messages: Record<string, Message[]>;
   /** Live streaming text per employee, not persisted. */
   liveText: Record<string, string>;
+  /** Employee ids whose embedded terminal is alive. */
+  activeTerminals: string[];
   selectedId: string | null;
   connection: ConnectionState;
   loaded: boolean;
@@ -35,6 +37,7 @@ export const initialOfficeState: OfficeState = {
   approvals: [],
   messages: {},
   liveText: {},
+  activeTerminals: [],
   selectedId: null,
   connection: "connecting",
   loaded: false,
@@ -101,6 +104,14 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
       }
       return { ...state, approvals: state.approvals.filter((entry) => entry.id !== approval.id) };
     }
+    case "terminal_updated": {
+      const { employeeId, active } = event;
+      if (!active) {
+        return { ...state, activeTerminals: state.activeTerminals.filter((id) => id !== employeeId) };
+      }
+      if (state.activeTerminals.includes(employeeId)) return state;
+      return { ...state, activeTerminals: [...state.activeTerminals, employeeId] };
+    }
   }
 }
 
@@ -117,6 +128,7 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
         approvals: snapshot.approvals.filter((approval) => approval.status === "pending"),
         // Partial streaming text is lost across a reconnect; stored messages replace it.
         liveText: {},
+        activeTerminals: snapshot.activeTerminals ?? [],
         selectedId: selectedStillExists ? state.selectedId : null,
         loaded: true,
       };

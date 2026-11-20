@@ -12,6 +12,7 @@ import {
   createTerminalConnection,
   formatTerminalEnd,
   parseServerMessage,
+  terminalGate,
 } from "./terminalChannel";
 
 class FakeSocket implements TerminalSocket {
@@ -247,5 +248,12 @@ describe("terminalChannel", () => {
     scheduler.request(50, 10);
 
     expect(frames.pending).toBe(0);
+  });
+
+  it("US-04 / AC-01: gates the connection on the employee's turn", () => {
+    expect(terminalGate(false, true)).toBe("connect");
+    expect(terminalGate(true, true)).toBe("wait");
+    expect(terminalGate(true, false)).toBe("offer");
+    expect(terminalGate(false, false)).toBe("offer");
   });
 });

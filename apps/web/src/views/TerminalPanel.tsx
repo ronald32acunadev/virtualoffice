@@ -8,6 +8,7 @@ import {
   createResizeScheduler,
   createTerminalConnection,
   formatTerminalEnd,
+  terminalGate,
   type TerminalConnection,
   type TerminalSocket,
   type TerminalConnectionHandlers,
@@ -16,14 +17,18 @@ import {
 
 type Status = "connecting" | "open" | "ended";
 /** Embedded xterm.js terminal attached to the employee's agent CLI over /ws/terminal. */
-export function TerminalPanel({ employeeId }: { employeeId: string }) {
+export function TerminalPanel({ employeeId, busy }: { employeeId: string; busy: boolean }) {
   const [status, setStatus] = useState<Status>("connecting");
   const [endText, setEndText] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
+  const [armed, setArmed] = useState(!busy);
+  const gate = terminalGate(busy, armed);
+  const canConnect = gate === "connect";
   const hostRef = useRef<HTMLDivElement>(null);
   const connectionRef = useRef<TerminalConnection | null>(null);
 
   useEffect(() => {
+    if (!canConnect) return;
     const host = hostRef.current;
     if (host == null) return;
 
@@ -106,13 +111,32 @@ export function TerminalPanel({ employeeId }: { employeeId: string }) {
       }
       term.dispose();
     };
-  }, [employeeId, generation]);
+  }, [employeeId, generation, canConnect]);
 
   const endSession = () => {
     if (window.confirm("End this terminal session? The agent CLI will be closed.")) {
       connectionRef.current?.kill();
     }
   };
+
+  if (!canConnect) {
+    return (
+      <div className="terminal-panel">
+        <div className="terminal-gate muted" style={{ padding: 16 }}>
+          {gate === "offer" ? (
+            <>
+              <p>A turn is in progress. The terminal opens when this employee is idle.</p>
+              <button type="button" className="secondary" onClick={() => setArmed(true)}>
+                Open when idle
+              </button>
+            </>
+          ) : (
+            <p>Waiting for the turn to finish…</p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="terminal-panel">

@@ -1,7 +1,7 @@
 import { spawn } from "node-pty";
 import fs from "node:fs";
 import { isBinaryAvailable } from "../agents/binary-availability.ts";
-import type { Employee } from "../office/domain/types.ts";
+import { isActiveStatus, type Employee } from "../office/domain/types.ts";
 import { resolveAgentCliCommand } from "./agent-cli-command.ts";
 
 export type PtyDisposable = { dispose(): void };
@@ -15,7 +15,7 @@ export type PtyProcess = {
 export type PtySpawnOptions = { name: string; cols: number; rows: number; cwd: string; env: Record<string, string | undefined> };
 export type PtyFactory = (command: string, args: string[], options: PtySpawnOptions) => PtyProcess;
 export type TerminalSize = { cols: number; rows: number };
-export type TerminalErrorCode = "not_found" | "folder_missing" | "target_unavailable";
+export type TerminalErrorCode = "not_found" | "folder_missing" | "target_unavailable" | "employee_busy";
 export class TerminalError extends Error {
   readonly code: TerminalErrorCode;
   readonly status: 404 | 409;
@@ -206,6 +206,9 @@ export class TerminalSessionManager {
     }
     if (!this.pathExists(employee.workingDirectory)) {
       throw new TerminalError("folder_missing", "Working directory no longer exists");
+    }
+    if (isActiveStatus(employee.status)) {
+      throw new TerminalError("employee_busy", "A turn is in progress; open the terminal when the employee is idle");
     }
     const command = resolveAgentCliCommand(employee, this.isBinaryAvailable);
     if (command == null) {
