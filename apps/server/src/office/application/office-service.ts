@@ -15,6 +15,7 @@ import type { OfficeRepository } from "../ports/office-repository.ts";
 import type { SessionCatalog } from "../ports/session-catalog.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
+import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
 import {
   BOSSES,
   MAX_JOB_TITLE_LENGTH,
@@ -132,8 +133,78 @@ export class OfficeService {
 
   private readonly bossUsage = new Map<BossId, BossUsage>();
   private readonly employeeUsage = new Map<string, EmployeeUsage>();
+  private readonly bossBreaks = new Map<
+    BossId,
+    { reason: string; until: string | null; timer?: ReturnType<typeof setTimeout> }
+  >();
 
   // ---- queries ----
+
+  private getActiveBreak(bossId: BossId): { reason: string; until: string | null } | null {
+    const active = this.bossBreaks.get(bossId);
+    if (!active) return null;
+    if (active.until !== null) {
+      const untilMs = Date.parse(active.until);
+      if (Number.isFinite(untilMs) && untilMs <= this.now().getTime()) {
+        this.clearBreakState(bossId);
+        return null;
+      }
+    }
+    return { reason: active.reason, until: active.until };
+  }
+
+  private clearBreakState(bossId: BossId): void {
+    const existing = this.bossBreaks.get(bossId);
+    if (existing?.timer) clearTimeout(existing.timer);
+    this.bossBreaks.delete(bossId);
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.bossId === bossId && employee.status === "on_break") {
+        this.setStatus(employee.id, "idle", { failureReason: null });
+      }
+    }
+    this.events.publish({ type: "boss_updated", boss: this.buildBoss(bossId) });
+  }
+
+  private triggerProviderBreak(bossId: BossId, reason: string, until: string | null): void {
+    const existing = this.bossBreaks.get(bossId);
+    if (existing?.timer) clearTimeout(existing.timer);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (until !== null) {
+      const delayMs = Date.parse(until) - this.now().getTime();
+      if (Number.isFinite(delayMs) && delayMs > 0) {
+        timer = setTimeout(() => {
+          this.clearBreakState(bossId);
+        }, Math.min(delayMs, 2_147_483_647));
+        timer.unref?.();
+      }
+    }
+    this.bossBreaks.set(bossId, { reason, until, ...(timer ? { timer } : {}) });
+
+    const adapter = this.adapterFor(bossId);
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.bossId !== bossId || employee.status === "stopped") continue;
+      const live = this.sessions.get(employee.id);
+      if (live) {
+        live.active = false;
+        this.sessions.delete(employee.id);
+        this.expireApprovalsOf(employee.id);
+        if (adapter) void adapter.stop(employee.id).catch(() => {});
+      }
+      if (employee.status !== "on_break" || employee.failureReason !== reason) {
+        this.setStatus(employee.id, "on_break", { failureReason: reason });
+      }
+    }
+    this.events.publish({ type: "boss_updated", boss: this.buildBoss(bossId) });
+  }
+
+  /** Manually ends a provider's break and restores resting employees to idle. */
+  resumeBoss(bossIdInput: string): Boss {
+    const base = BOSSES.find((b) => b.id === bossIdInput);
+    if (!base) throw new OfficeError("not_found", `Unknown boss: ${bossIdInput}`);
+    this.clearBreakState(base.id);
+    return this.buildBoss(base.id);
+  }
 
   private getOrCreateBossUsage(bossId: BossId): BossUsage {
     const existing = this.bossUsage.get(bossId);
@@ -158,11 +229,15 @@ export class OfficeService {
 
   private buildBoss(bossId: BossId): Boss {
     const base = BOSSES.find((b) => b.id === bossId)!;
+    const activeBreak = this.getActiveBreak(bossId);
     return {
       ...base,
       name: this.bossNames[bossId] ?? base.name,
       available: Boolean(this.adapters[bossId]),
       usage: { ...this.getOrCreateBossUsage(bossId) },
+      onBreak: Boolean(activeBreak),
+      breakUntil: activeBreak?.until ?? null,
+      breakReason: activeBreak?.reason ?? null,
     };
   }
 
@@ -372,6 +447,10 @@ export class OfficeService {
     const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
     if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
+    const activeBreak = this.getActiveBreak(boss.id);
+    if (activeBreak) {
+      throw new OfficeError("provider_on_break", `${boss.name} is on break: ${activeBreak.reason}`);
+    }
     if (typeof input.task !== "string" || input.task.trim() === "") {
       throw new OfficeError("validation_error", "Task must not be empty", "task");
     }
@@ -411,7 +490,12 @@ export class OfficeService {
   }
 
   async sendMessage(employeeId: string, text: unknown): Promise<Message> {
-    this.requireEmployee(employeeId);
+    const employee = this.requireEmployee(employeeId);
+    const activeBreak = this.getActiveBreak(employee.bossId);
+    if (activeBreak) {
+      const bossName = this.buildBoss(employee.bossId).name;
+      throw new OfficeError("provider_on_break", `${bossName} is on break: ${activeBreak.reason}`);
+    }
     if (typeof text !== "string" || text.trim() === "") {
       throw new OfficeError("validation_error", "Message text must not be empty", "text");
     }
@@ -533,6 +617,10 @@ export class OfficeService {
       }
     }
     for (const id of [...this.pending.keys()]) this.expire(id);
+    for (const entry of this.bossBreaks.values()) {
+      if (entry.timer) clearTimeout(entry.timer);
+    }
+    this.bossBreaks.clear();
   }
 
   /**
@@ -638,6 +726,18 @@ export class OfficeService {
         if (isSignalTermination(reason)) {
           this.appendMessage(employeeId, { kind: "system", content: SIGNAL_INTERRUPTED });
           this.setStatus(employeeId, "stopped");
+          return;
+        }
+        if (isRateLimitErrorMessage(reason)) {
+          const employee = this.repository.getEmployee(employeeId);
+          this.appendMessage(employeeId, {
+            kind: "system",
+            content: `Provider reached its usage limit — on break: ${reason}`,
+          });
+          if (employee) {
+            const until = this.bossUsage.get(employee.bossId)?.resetsAt ?? null;
+            this.triggerProviderBreak(employee.bossId, reason, until);
+          }
           return;
         }
         this.appendMessage(employeeId, { kind: "system", content: `Employee failed: ${reason}` });
@@ -820,6 +920,17 @@ export class OfficeService {
     }
     if (employeeChanged) {
       this.events.publish({ type: "employee_updated", employee: this.decorateEmployee(employee) });
+    }
+    if (
+      update.rateLimit &&
+      (update.rateLimit.status === "rejected" ||
+        (update.rateLimit.utilizationPercent !== null && update.rateLimit.utilizationPercent >= 100))
+    ) {
+      this.triggerProviderBreak(
+        employee.bossId,
+        "Usage limit reached — on break",
+        update.rateLimit.resetsAt ?? bossUsage.resetsAt,
+      );
     }
   }
 

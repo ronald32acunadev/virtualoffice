@@ -253,6 +253,16 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private mapAssistant(message: LooseMessage, sink: AgentSink): void {
+    if (message.error === "rate_limit") {
+      sink.onUsage?.({
+        rateLimit: {
+          status: "rejected",
+          utilizationPercent: 100,
+          resetsAt: null,
+          windowLabel: null,
+        },
+      });
+    }
     const ctx = { parentToolUseId: message.parent_tool_use_id ?? null, sourceUuid: message.uuid ?? null };
     for (const mapped of mapAssistantContent(message.message?.content, ctx)) sink.onMessage(mapped);
   }

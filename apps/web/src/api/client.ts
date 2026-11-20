@@ -130,6 +130,8 @@ export const api = {
     }),
   stopEmployee: (employeeId: string) =>
     request<{ employee: Employee }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/stop`),
+  resumeBoss: (bossId: BossId) =>
+    request<{ boss: import("./types").Boss }>("POST", `/api/bosses/${encodeURIComponent(bossId)}/resume`),
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) =>
     request<{ approval: ApprovalRequest }>(
       "POST",

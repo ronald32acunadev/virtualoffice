@@ -25,6 +25,9 @@ export type Boss = {
   name: string;
   available: boolean;
   usage?: BossUsage;
+  onBreak?: boolean;
+  breakUntil?: string | null;
+  breakReason?: string | null;
 };
 
 export type EmployeeStatus =
@@ -32,6 +35,7 @@ export type EmployeeStatus =
   | "working"
   | "waiting_approval"
   | "idle"
+  | "on_break"
   | "stopped"
   | "failed";
 

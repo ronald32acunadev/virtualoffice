@@ -24,6 +24,9 @@ export type Boss = {
   name: string;
   available: boolean;
   usage?: BossUsage;
+  onBreak?: boolean;
+  breakUntil?: string | null;
+  breakReason?: string | null;
 };
 
 export type EmployeeStatus =
@@ -31,6 +34,7 @@ export type EmployeeStatus =
   | "working"
   | "waiting_approval"
   | "idle"
+  | "on_break"
   | "stopped"
   | "failed";
 
@@ -158,6 +162,7 @@ export class OfficeError extends Error {
       | "validation_error"
       | "not_found"
       | "boss_unavailable"
+      | "provider_on_break"
       | "approval_not_pending"
       | "working_directory_missing"
       | "catalog_unavailable",

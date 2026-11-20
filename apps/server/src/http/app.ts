@@ -20,6 +20,7 @@ const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
   validation_error: 400,
   not_found: 404,
   boss_unavailable: 409,
+  provider_on_break: 409,
   approval_not_pending: 409,
   working_directory_missing: 409,
   catalog_unavailable: 503,
@@ -158,6 +159,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.post<{ Params: { id: string } }>("/api/employees/:id/stop", async (request) => ({
     employee: await office.stop(request.params.id),
+  }));
+
+  app.post<{ Params: { id: string } }>("/api/bosses/:id/resume", async (request) => ({
+    boss: office.resumeBoss(request.params.id),
   }));
 
   app.post<{ Params: { id: string } }>("/api/approvals/:id/decision", async (request) => {
