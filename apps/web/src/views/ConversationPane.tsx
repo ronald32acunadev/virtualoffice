@@ -1,6 +1,4 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
@@ -9,12 +7,14 @@ import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
 import { composerKeyAction, isFolderMissing } from "../state/sidebar";
 import { buildTimeline } from "../state/timeline";
 import { filterCommands, insertCommand, insertSkillAtStart, menuKeyAction, moveIndex, slashQuery } from "../state/slashMenu";
+import { formatResetCountdown } from "../state/usage";
 import { useCatalog } from "../state/useCatalog";
 import { RoleBadge } from "../ui/RoleBadge";
+import { UsageRing } from "../ui/UsageRing";
 import { ApprovalCard } from "../ui/ApprovalCard";
 import { toFormError } from "../ui/errors";
 import { optionId, SlashMenu } from "./SlashMenu";
-import { TextBubble, ToolRow } from "./ToolRow";
+import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { Toolbox } from "./Toolbox";
 
 const STOPPABLE = new Set(["starting", "working", "waiting_approval"]);
@@ -221,7 +221,10 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   }, [pendingInsert]);
 
   if (!employee) return null;
-  const disabled = missingFolder || isFolderMissing(employee);
+  const boss = state.bosses.find((b) => b.id === employee.bossId);
+  const onBreak = Boolean(boss?.onBreak || employee.status === "on_break");
+  const disabled = missingFolder || isFolderMissing(employee) || onBreak;
+  const resetCountdown = formatResetCountdown(boss?.breakUntil);
 
   const send = async () => {
     const trimmed = text.trim();
@@ -231,9 +234,32 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
     try {
       await actions.sendMessage(employeeId, trimmed);
       setText("");
+      if (areaRef.current) areaRef.current.style.height = "auto";
     } catch (err) {
       if (err instanceof ApiError && err.code === "working_directory_missing") setMissingFolder(true);
       else setError(toFormError(err).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openSlashFromPlus = () => {
+    if (disabled) return;
+    const nextText = text.startsWith("/") ? text : `/${text}`;
+    nextCaret.current = 1;
+    setText(nextText);
+    setDismissed(false);
+    setActiveIndex(0);
+    areaRef.current?.focus();
+  };
+
+  const resumeBreak = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await actions.resumeBoss(employee.bossId);
+    } catch (err) {
+      setError(toFormError(err).message);
     } finally {
       setBusy(false);
     }
@@ -282,42 +308,107 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
         void send();
       }}
     >
-      {disabled ? <p className="field-error">{FOLDER_MISSING_TEXT}</p> : null}
-      <div className="composer-row">
-        <SlashMenu
-          open={menuOpen}
-          entry={entry}
-          matches={matches}
-          activeIndex={safeIndex}
-          listId={listId}
-          onHover={setActiveIndex}
-          onPick={pick}
-        />
-        <textarea
-          ref={areaRef}
-          rows={2}
-          value={text}
-          disabled={disabled}
-          role="combobox"
-          aria-expanded={menuOpen && matches.length > 0}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={menuOpen && matches.length > 0 ? optionId(listId, safeIndex) : undefined}
-          onChange={(e) => {
-            setText(e.target.value);
-            setCaret(e.target.selectionStart ?? e.target.value.length);
-            setDismissed(false);
-            setActiveIndex(0);
-          }}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onKeyDown={onKeyDown}
-          placeholder={disabled ? "Messaging is unavailable" : "Message this employee (Enter to send, Shift+Enter for a new line)"}
-        />
-        <button type="submit" disabled={disabled || busy || text.trim() === ""}>
-          Send
-        </button>
+      <div className="composer-inner">
+        {missingFolder || isFolderMissing(employee) ? <p className="field-error">{FOLDER_MISSING_TEXT}</p> : null}
+        {onBreak ? (
+          <div className="break-banner" role="status">
+            <div className="break-banner-text">
+              <strong>☕ {boss?.name ?? employee.bossId} is on break</strong>
+              <span>
+                {boss?.breakReason ?? employee.failureReason ?? "Usage limit reached."}
+                {resetCountdown ? ` · Resets ${resetCountdown}` : ""}
+              </span>
+            </div>
+            <button type="button" className="break-resume-btn" disabled={busy} onClick={() => void resumeBreak()}>
+              Resume now
+            </button>
+          </div>
+        ) : null}
+        <div className="composer-card">
+          <SlashMenu
+            open={menuOpen}
+            entry={entry}
+            matches={matches}
+            activeIndex={safeIndex}
+            listId={listId}
+            onHover={setActiveIndex}
+            onPick={pick}
+          />
+          <div className="composer-input-row">
+            <button
+              type="button"
+              className="composer-plus-btn"
+              disabled={disabled}
+              title="Insert / command"
+              aria-label="Insert slash command"
+              onClick={openSlashFromPlus}
+            >
+              +
+            </button>
+            <textarea
+              ref={areaRef}
+              rows={1}
+              value={text}
+              disabled={disabled}
+              role="combobox"
+              aria-expanded={menuOpen && matches.length > 0}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={menuOpen && matches.length > 0 ? optionId(listId, safeIndex) : undefined}
+              onChange={(e) => {
+                setText(e.target.value);
+                setCaret(e.target.selectionStart ?? e.target.value.length);
+                setDismissed(false);
+                setActiveIndex(0);
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${Math.min(e.currentTarget.scrollHeight, 180)}px`;
+              }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+              onKeyDown={onKeyDown}
+              placeholder={
+                onBreak
+                  ? `${boss?.name ?? employee.bossId} is on break — click Resume now to retry`
+                  : disabled
+                    ? "Messaging is unavailable"
+                    : "Type / for commands or write a message..."
+              }
+            />
+            {STOPPABLE.has(employee.status) ? (
+              <button
+                type="button"
+                className="composer-stop-btn"
+                title="Stop agent"
+                onClick={() => void actions.stopEmployee(employee.id)}
+              >
+                ■
+              </button>
+            ) : null}
+            <button
+              type="submit"
+              className="composer-send-btn"
+              disabled={disabled || busy || text.trim() === ""}
+              aria-label="Send message"
+            >
+              ↑
+            </button>
+          </div>
+          <div className="composer-footer">
+            <div className="composer-meta">
+              <span className="composer-boss-pill">{boss?.name ?? employee.bossId}</span>
+              {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
+            </div>
+            <div className="composer-status-right">
+              <UsageRing
+                bossUsage={boss?.usage}
+                employeeUsage={employee.usage}
+                onBreak={onBreak}
+                breakUntil={boss?.breakUntil}
+              />
+            </div>
+          </div>
+        </div>
+        {error ? <p className="field-error">{error}</p> : null}
       </div>
-      {error ? <p className="field-error">{error}</p> : null}
     </form>
   );
 }
@@ -339,33 +430,35 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
     <section className="conversation-pane">
       <Header employeeId={employeeId} onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })} />
       <div className="conv-scroll">
-        {approvals.length > 0 ? (
-          <ul className="approval-list conv-approvals">
-            {approvals.map((approval) => (
-              <ApprovalCard
-                key={approval.id}
-                approval={approval}
-                employee={state.employees.find((e) => e.id === approval.employeeId)}
-                onSelectEmployee={actions.select}
-                onDecide={actions.decide}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {timeline.length === 0 && !live ? <p className="muted">No messages yet.</p> : null}
-        {timeline.map((item) =>
-          item.message.kind === "tool_call" || item.message.kind === "tool_result" ? (
-            <ToolRow key={item.message.id} item={item} />
-          ) : (
-            <TextBubble key={item.message.id} item={item} />
-          ),
-        )}
-        {live ? (
-          <div className="bubble bubble-agent markdown bubble-live">
-            <Markdown remarkPlugins={[remarkGfm]}>{live}</Markdown>
-          </div>
-        ) : null}
-        <div ref={endRef} />
+        <div className="conv-column">
+          {approvals.length > 0 ? (
+            <ul className="approval-list conv-approvals">
+              {approvals.map((approval) => (
+                <ApprovalCard
+                  key={approval.id}
+                  approval={approval}
+                  employee={state.employees.find((e) => e.id === approval.employeeId)}
+                  onSelectEmployee={actions.select}
+                  onDecide={actions.decide}
+                />
+              ))}
+            </ul>
+          ) : null}
+          {timeline.length === 0 && !live ? <p className="muted">No messages yet.</p> : null}
+          {timeline.map((item) =>
+            item.message.kind === "tool_call" || item.message.kind === "tool_result" ? (
+              <ToolRow key={item.message.id} item={item} />
+            ) : (
+              <TextBubble key={item.message.id} item={item} />
+            ),
+          )}
+          {live ? (
+            <div className="bubble bubble-agent markdown bubble-live">
+              <RichMarkdown content={live} />
+            </div>
+          ) : null}
+          <div ref={endRef} />
+        </div>
       </div>
       <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} />
     </section>
