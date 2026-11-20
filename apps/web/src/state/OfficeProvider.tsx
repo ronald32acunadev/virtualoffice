@@ -21,8 +21,9 @@ export type OfficeActions = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => Promise<void>;
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) => Promise<void>;
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
   importSessions: (sessionIds: string[]) => Promise<ImportResult>;
   sendMessage: (employeeId: string, text: string) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;

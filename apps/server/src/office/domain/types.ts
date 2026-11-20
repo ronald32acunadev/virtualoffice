@@ -17,6 +17,7 @@ export function isSpecies(value: unknown): value is Species {
 }
 
 export const MAX_NAME_LENGTH = 40;
+export const MAX_JOB_TITLE_LENGTH = 60;
 
 export type Employee = {
   id: string;
@@ -29,6 +30,8 @@ export type Employee = {
   importedAt: string | null;
   /** Agent name the employee runs as (provider `agent` option); null means General. */
   role: string | null;
+  /** Human-facing position / cargo assigned by the owner (provider-agnostic). */
+  jobTitle: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;

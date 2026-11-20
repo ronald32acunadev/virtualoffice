@@ -5,6 +5,7 @@ import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
 import { SPECIES_EMOJI, SPECIES_LIST, speciesLabel } from "../state/species";
+import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
 import { composerKeyAction, isFolderMissing } from "../state/sidebar";
 import { buildTimeline } from "../state/timeline";
 import { filterCommands, insertCommand, insertSkillAtStart, menuKeyAction, moveIndex, slashQuery } from "../state/slashMenu";
@@ -25,7 +26,10 @@ function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSki
   const employee = state.employees.find((e) => e.id === employeeId);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const titleListId = useId();
   if (!employee) return null;
 
   const run = async (action: () => Promise<void>) => {
@@ -40,6 +44,12 @@ function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSki
     run(async () => {
       await actions.updateEmployee(employee.id, { name: draft });
       setEditing(false);
+    });
+  const saveJobTitle = () =>
+    run(async () => {
+      const trimmed = titleDraft.trim();
+      await actions.updateEmployee(employee.id, { jobTitle: trimmed === "" ? null : trimmed });
+      setEditingTitle(false);
     });
 
   return (
@@ -86,6 +96,51 @@ function Header({ employeeId, onInsertSkill }: { employeeId: string; onInsertSki
           </>
         )}
         <RoleBadge role={employee.role} />
+        {editingTitle ? (
+          <form
+            className="rename"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveJobTitle();
+            }}
+          >
+            <input
+              type="text"
+              autoFocus
+              list={titleListId}
+              maxLength={MAX_JOB_TITLE_LENGTH}
+              value={titleDraft}
+              aria-label="Job title"
+              placeholder="e.g. Architect"
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+            />
+            <datalist id={titleListId}>
+              {JOB_TITLE_PRESETS.map((preset) => (
+                <option key={preset} value={preset} />
+              ))}
+            </datalist>
+            <button type="submit">Save</button>
+            <button type="button" className="secondary" onClick={() => setEditingTitle(false)}>
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            className="job-title-pill"
+            title="Edit job title"
+            onClick={() => {
+              setTitleDraft(employee.jobTitle ?? "");
+              setError(null);
+              setEditingTitle(true);
+            }}
+          >
+            {employee.jobTitle ?? "+ Job title"}
+          </button>
+        )}
         <span className={`status status-${employee.status}`}>{employee.status.replace("_", " ")}</span>
         <select
           aria-label="Species"

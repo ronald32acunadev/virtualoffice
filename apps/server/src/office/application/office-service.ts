@@ -10,6 +10,7 @@ import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import {
   BOSSES,
+  MAX_JOB_TITLE_LENGTH,
   MAX_NAME_LENGTH,
   OfficeError,
   isActiveStatus,
@@ -259,6 +260,7 @@ export class OfficeService {
         species: generateSpecies(this.random),
         importedAt: timestamp,
         role: null,
+        jobTitle: null,
         providerSessionId: sessionId,
         status: folderExists ? "idle" : "failed",
         failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
@@ -298,6 +300,7 @@ export class OfficeService {
   hire(input: HireInput): Employee {
     const { boss, task, workingDirectory } = this.validateHire(input);
     const role = parseRole(input.role);
+    const jobTitle = parseJobTitle(input.jobTitle);
     const name = input.name === undefined ? this.nextName() : parseName(input.name);
     const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
     const timestamp = this.timestamp();
@@ -311,6 +314,7 @@ export class OfficeService {
       species,
       importedAt: null,
       role,
+      jobTitle,
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -335,15 +339,19 @@ export class OfficeService {
     return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
-  /** Renames an employee and/or changes its species. Nothing changes when any value is invalid. */
-  updateProfile(employeeId: string, input: { name?: unknown; species?: unknown }): Employee {
+  /** Renames an employee, changes its species, and/or updates its job title. Nothing changes when any value is invalid. */
+  updateProfile(
+    employeeId: string,
+    input: { name?: unknown; species?: unknown; jobTitle?: unknown },
+  ): Employee {
     this.requireEmployee(employeeId);
-    if (input.name === undefined && input.species === undefined) {
-      throw new OfficeError("validation_error", "Provide a name or a species", "name");
+    if (input.name === undefined && input.species === undefined && input.jobTitle === undefined) {
+      throw new OfficeError("validation_error", "Provide a name, species, or job title", "name");
     }
     const patch: Partial<Employee> = {};
     if (input.name !== undefined) patch.name = parseName(input.name);
     if (input.species !== undefined) patch.species = parseSpecies(input.species);
+    if (input.jobTitle !== undefined) patch.jobTitle = parseJobTitle(input.jobTitle);
     return this.patchEmployee(employeeId, patch);
   }
 
@@ -755,7 +763,26 @@ type HireInput = {
   name?: unknown;
   species?: unknown;
   role?: unknown;
+  jobTitle?: unknown;
 };
+
+/** `undefined`, `null`, or blank string clears job title; otherwise trimmed up to MAX_JOB_TITLE_LENGTH. */
+function parseJobTitle(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new OfficeError("validation_error", "Job title must be a string", "jobTitle");
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length > MAX_JOB_TITLE_LENGTH) {
+    throw new OfficeError(
+      "validation_error",
+      `Job title must be at most ${MAX_JOB_TITLE_LENGTH} characters`,
+      "jobTitle",
+    );
+  }
+  return trimmed;
+}
 
 /** `undefined` and `null` mean General; anything else must be a non-empty agent name. */
 function parseRole(value: unknown): string | null {

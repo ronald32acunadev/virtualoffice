@@ -62,6 +62,7 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
                     <span className="employee-text">
                       <span className="employee-name">
                         {employee.name}
+                        {employee.jobTitle ? <span className="job-title-badge">{employee.jobTitle}</span> : null}
                         <RoleBadge role={employee.role} />
                       </span>
                       <span className="employee-task" title={employee.task}>

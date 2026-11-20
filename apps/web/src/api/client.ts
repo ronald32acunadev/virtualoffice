@@ -97,6 +97,7 @@ export const api = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => request<{ employee: Employee }>("POST", "/api/employees", input),
   getFolderCatalog: (workingDirectory: string, refresh = false) => {
     const query = new URLSearchParams({ workingDirectory });
@@ -108,7 +109,7 @@ export const api = {
       "GET",
       `/api/employees/${encodeURIComponent(employeeId)}/catalog${refresh ? "?refresh=true" : ""}`,
     ),
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) =>
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) =>
     request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
   listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {
     const query = new URLSearchParams({

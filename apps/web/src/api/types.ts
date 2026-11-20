@@ -22,6 +22,7 @@ export type Employee = {
   species: Species;
   importedAt: string | null;
   role: string | null;
+  jobTitle: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;

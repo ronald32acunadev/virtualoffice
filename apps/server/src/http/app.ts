@@ -119,6 +119,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       name: body.name,
       species: body.species,
       role: body.role,
+      jobTitle: body.jobTitle,
     });
     return reply.code(201).send({ employee });
   });
@@ -134,7 +135,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.patch<{ Params: { id: string } }>("/api/employees/:id", async (request) => {
     const body = asRecord(request.body);
-    return { employee: office.updateProfile(request.params.id, { name: body.name, species: body.species }) };
+    return {
+      employee: office.updateProfile(request.params.id, {
+        name: body.name,
+        species: body.species,
+        jobTitle: body.jobTitle,
+      }),
+    };
   });
 
   app.get("/api/imports/claude/sessions", async (request) => {

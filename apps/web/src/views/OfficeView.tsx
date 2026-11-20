@@ -147,6 +147,7 @@ export function OfficeView() {
             </button>
           </div>
           <span className={`status status-${card.status}`}>{card.status.replace("_", " ")}</span>
+          {card.jobTitle ? <span className="job-title-badge">{card.jobTitle}</span> : null}
           <RoleBadge role={card.role} />
           <p className="muted">{card.task}</p>
           <button type="button" onClick={() => openWorkspace(card.id)}>
