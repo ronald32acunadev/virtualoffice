@@ -1,6 +1,47 @@
 import type { Boss, Employee } from "../api/types";
 
 export type EmployeeGroup = { bossId: string; bossName: string; employees: Employee[] };
+export type ProjectGroup = { projectKey: string; projectName: string; employees: Employee[] };
+
+function projectNameFromPath(dir: string): string {
+  const normalized = dir.replace(/[\\/]+$/, "");
+  if (!normalized) return dir || "Workspace";
+  const parts = normalized.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? normalized;
+}
+
+/** Case-insensitive search across employee name, job title, task, folder, and specialist role. */
+export function filterEmployees(employees: Employee[], query: string): Employee[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return employees;
+  return employees.filter((e) => {
+    const haystack = [e.name, e.jobTitle ?? "", e.task, e.workingDirectory, e.role ?? ""].join("\n").toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+/** Groups employees by project folder (newest activity first within and across groups). */
+export function groupEmployeesByProject(employees: Employee[]): ProjectGroup[] {
+  const byProject = new Map<string, Employee[]>();
+  for (const employee of employees) {
+    const key = employee.workingDirectory.replace(/[\\/]+$/, "") || employee.workingDirectory;
+    const list = byProject.get(key) ?? [];
+    list.push(employee);
+    byProject.set(key, list);
+  }
+  const newestFirst = (a: Employee, b: Employee) =>
+    a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0;
+  const groups: ProjectGroup[] = [];
+  for (const [projectKey, list] of byProject) {
+    const sorted = [...list].sort(newestFirst);
+    groups.push({ projectKey, projectName: projectNameFromPath(projectKey), employees: sorted });
+  }
+  return groups.sort((a, b) => {
+    const aTime = a.employees[0]?.updatedAt ?? "";
+    const bTime = b.employees[0]?.updatedAt ?? "";
+    return aTime < bTime ? 1 : aTime > bTime ? -1 : 0;
+  });
+}
 
 /** Groups employees by boss (boss order preserved, empty groups dropped), newest activity first. */
 export function groupEmployeesByBoss(employees: Employee[], bosses: Pick<Boss, "id" | "name">[]): EmployeeGroup[] {

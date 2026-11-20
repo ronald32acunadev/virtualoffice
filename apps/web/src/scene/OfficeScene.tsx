@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
-import type { BossId, EmployeeStatus } from "../api/types";
+import type { Boss, BossId, EmployeeStatus } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
 import { BossArea } from "./BossArea";
 import {
@@ -104,7 +104,7 @@ export function OfficeScene({
   chatterEnabled?: boolean;
 }) {
   const { state } = useOffice();
-  const bosses = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
+  const bosses: Boss[] = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
   const palette = MOOD_PALETTES[mood];
 
   const [activeSpeech, setActiveSpeech] = useState<{ speakerId: string; text: string } | null>(null);
@@ -118,7 +118,7 @@ export function OfficeScene({
     }));
     for (const boss of bosses) {
       if (boss.available) {
-        list.push({ id: `boss:${boss.id}`, status: undefined });
+        list.push({ id: `boss:${boss.id}`, status: boss.onBreak ? "on_break" : undefined });
       }
     }
     return list;

@@ -22,6 +22,23 @@ export type ApprovalOutcome =
   | { decision: Decision; answers?: Record<string, string> }
   | { decision: "expired" };
 
+export type UsageUpdate = {
+  rateLimit?: {
+    status: "allowed" | "allowed_warning" | "rejected";
+    utilizationPercent: number | null;
+    resetsAt: string | null;
+    windowLabel: string | null;
+  };
+  tokens?: {
+    inputTokens: number;
+    outputTokens: number;
+    contextUsed?: number | null;
+    contextWindow?: number | null;
+    costUsd?: number | null;
+    cumulative?: boolean;
+  };
+};
+
 /** Callbacks the office hands to an adapter for one live session. */
 export interface AgentSink {
   onSessionStarted(providerSessionId: string): void;
@@ -31,6 +48,8 @@ export interface AgentSink {
   onFailed(reason: string): void;
   /** The live session's current commands and agents (after init and whenever the provider pushes a change). */
   onCatalog(catalog: ProviderCatalog): void;
+  /** Optional provider quota and session token usage telemetry. */
+  onUsage?(update: UsageUpdate): void;
   /** Must resolve `expired` (never approve) when the signal aborts or the session ends. */
   requestApproval(prompt: ApprovalPrompt, signal: AbortSignal): Promise<ApprovalOutcome>;
 }

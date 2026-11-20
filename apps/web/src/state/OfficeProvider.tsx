@@ -21,11 +21,13 @@ export type OfficeActions = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => Promise<void>;
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) => Promise<void>;
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
   importSessions: (sessionIds: string[]) => Promise<ImportResult>;
   sendMessage: (employeeId: string, text: string) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
+  resumeBoss: (bossId: BossId) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
 };
 
@@ -116,6 +118,10 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
       stopEmployee: async (employeeId) => {
         const { employee } = await api.stopEmployee(employeeId);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
+      },
+      resumeBoss: async (bossId) => {
+        const { boss } = await api.resumeBoss(bossId);
+        dispatch({ type: "server_event", event: { type: "boss_updated", boss } });
       },
       decide: async (approvalId, decision, answers) => {
         try {

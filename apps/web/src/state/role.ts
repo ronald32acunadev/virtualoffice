@@ -1,8 +1,13 @@
 import type { AgentInfo, Employee } from "../api/types";
 
-/** Character label: "Name · role" when a role is set. */
-export function employeeLabel(employee: Pick<Employee, "name" | "role">): string {
-  return employee.role ? `${employee.name} · ${employee.role}` : employee.name;
+/** Character label: "Name · jobTitle · role" including only set fields. */
+export function employeeLabel(
+  employee: Pick<Employee, "name" | "role"> & { jobTitle?: string | null },
+): string {
+  const parts = [employee.name, employee.jobTitle, employee.role].filter(
+    (part): part is string => typeof part === "string" && part.trim() !== "",
+  );
+  return parts.join(" · ");
 }
 
 export type RoleOptions = { owner: AgentInfo[]; builtin: AgentInfo[] };

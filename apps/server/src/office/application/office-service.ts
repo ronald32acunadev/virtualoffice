@@ -1,15 +1,24 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { AgentAdapter, AgentMessage, AgentSink, ApprovalOutcome, ApprovalPrompt } from "../ports/agent-adapter.ts";
+import type {
+  AgentAdapter,
+  AgentMessage,
+  AgentSink,
+  ApprovalOutcome,
+  ApprovalPrompt,
+  UsageUpdate,
+} from "../ports/agent-adapter.ts";
 import type { CatalogProvider } from "../ports/catalog-provider.ts";
 import type { EventBus } from "../ports/event-bus.ts";
 import type { OfficeRepository } from "../ports/office-repository.ts";
 import type { SessionCatalog } from "../ports/session-catalog.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
+import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
 import {
   BOSSES,
+  MAX_JOB_TITLE_LENGTH,
   MAX_NAME_LENGTH,
   OfficeError,
   isActiveStatus,
@@ -18,10 +27,12 @@ import {
   type ApprovalRequest,
   type Boss,
   type BossId,
+  type BossUsage,
   type Catalog,
   type ClaudeSessionSummary,
   type Decision,
   type Employee,
+  type EmployeeUsage,
   type ImportSkipReason,
   type Message,
   type ProviderCatalog,
@@ -120,14 +131,118 @@ export class OfficeService {
     return this.events.subscribe(listener);
   }
 
+  private readonly bossUsage = new Map<BossId, BossUsage>();
+  private readonly employeeUsage = new Map<string, EmployeeUsage>();
+  private readonly bossBreaks = new Map<
+    BossId,
+    { reason: string; until: string | null; timer?: ReturnType<typeof setTimeout> }
+  >();
+
   // ---- queries ----
 
+  private getActiveBreak(bossId: BossId): { reason: string; until: string | null } | null {
+    const active = this.bossBreaks.get(bossId);
+    if (!active) return null;
+    if (active.until !== null) {
+      const untilMs = Date.parse(active.until);
+      if (Number.isFinite(untilMs) && untilMs <= this.now().getTime()) {
+        this.clearBreakState(bossId);
+        return null;
+      }
+    }
+    return { reason: active.reason, until: active.until };
+  }
+
+  private clearBreakState(bossId: BossId): void {
+    const existing = this.bossBreaks.get(bossId);
+    if (existing?.timer) clearTimeout(existing.timer);
+    this.bossBreaks.delete(bossId);
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.bossId === bossId && employee.status === "on_break") {
+        this.setStatus(employee.id, "idle", { failureReason: null });
+      }
+    }
+    this.events.publish({ type: "boss_updated", boss: this.buildBoss(bossId) });
+  }
+
+  private triggerProviderBreak(bossId: BossId, reason: string, until: string | null): void {
+    const existing = this.bossBreaks.get(bossId);
+    if (existing?.timer) clearTimeout(existing.timer);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if (until !== null) {
+      const delayMs = Date.parse(until) - this.now().getTime();
+      if (Number.isFinite(delayMs) && delayMs > 0) {
+        timer = setTimeout(() => {
+          this.clearBreakState(bossId);
+        }, Math.min(delayMs, 2_147_483_647));
+        timer.unref?.();
+      }
+    }
+    this.bossBreaks.set(bossId, { reason, until, ...(timer ? { timer } : {}) });
+
+    const adapter = this.adapterFor(bossId);
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.bossId !== bossId || employee.status === "stopped") continue;
+      const live = this.sessions.get(employee.id);
+      if (live) {
+        live.active = false;
+        this.sessions.delete(employee.id);
+        this.expireApprovalsOf(employee.id);
+        if (adapter) void adapter.stop(employee.id).catch(() => {});
+      }
+      if (employee.status !== "on_break" || employee.failureReason !== reason) {
+        this.setStatus(employee.id, "on_break", { failureReason: reason });
+      }
+    }
+    this.events.publish({ type: "boss_updated", boss: this.buildBoss(bossId) });
+  }
+
+  /** Manually ends a provider's break and restores resting employees to idle. */
+  resumeBoss(bossIdInput: string): Boss {
+    const base = BOSSES.find((b) => b.id === bossIdInput);
+    if (!base) throw new OfficeError("not_found", `Unknown boss: ${bossIdInput}`);
+    this.clearBreakState(base.id);
+    return this.buildBoss(base.id);
+  }
+
+  private getOrCreateBossUsage(bossId: BossId): BossUsage {
+    const existing = this.bossUsage.get(bossId);
+    if (existing) return existing;
+    const initial: BossUsage = {
+      remainingPercent: null,
+      utilizationPercent: null,
+      resetsAt: null,
+      windowLabel: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      updatedAt: null,
+    };
+    this.bossUsage.set(bossId, initial);
+    return initial;
+  }
+
+  private decorateEmployee(employee: Employee): Employee {
+    const usage = this.employeeUsage.get(employee.id);
+    return usage ? { ...employee, usage } : employee;
+  }
+
+  private buildBoss(bossId: BossId): Boss {
+    const base = BOSSES.find((b) => b.id === bossId)!;
+    const activeBreak = this.getActiveBreak(bossId);
+    return {
+      ...base,
+      name: this.bossNames[bossId] ?? base.name,
+      available: Boolean(this.adapters[bossId]),
+      usage: { ...this.getOrCreateBossUsage(bossId) },
+      onBreak: Boolean(activeBreak),
+      breakUntil: activeBreak?.until ?? null,
+      breakReason: activeBreak?.reason ?? null,
+    };
+  }
+
   listBosses(): Boss[] {
-    return BOSSES.map((boss) => ({
-      ...boss,
-      name: this.bossNames[boss.id] ?? boss.name,
-      available: Boolean(this.adapters[boss.id]),
-    }));
+    return BOSSES.map((boss) => this.buildBoss(boss.id));
   }
 
   private adapterFor(bossId: BossId): AgentAdapter | undefined {
@@ -137,7 +252,7 @@ export class OfficeService {
   getState(): { bosses: Boss[]; employees: Employee[]; approvals: ApprovalRequest[] } {
     return {
       bosses: this.listBosses(),
-      employees: this.repository.listEmployees(),
+      employees: this.repository.listEmployees().map((e) => this.decorateEmployee(e)),
       approvals: this.repository.listPendingApprovals(),
     };
   }
@@ -259,6 +374,7 @@ export class OfficeService {
         species: generateSpecies(this.random),
         importedAt: timestamp,
         role: null,
+        jobTitle: null,
         providerSessionId: sessionId,
         status: folderExists ? "idle" : "failed",
         failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
@@ -298,6 +414,7 @@ export class OfficeService {
   hire(input: HireInput): Employee {
     const { boss, task, workingDirectory } = this.validateHire(input);
     const role = parseRole(input.role);
+    const jobTitle = parseJobTitle(input.jobTitle);
     const name = input.name === undefined ? this.nextName() : parseName(input.name);
     const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
     const timestamp = this.timestamp();
@@ -311,6 +428,7 @@ export class OfficeService {
       species,
       importedAt: null,
       role,
+      jobTitle,
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -329,21 +447,29 @@ export class OfficeService {
     const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
     if (!boss.available) throw new OfficeError("boss_unavailable", `${boss.name} is not available yet`);
+    const activeBreak = this.getActiveBreak(boss.id);
+    if (activeBreak) {
+      throw new OfficeError("provider_on_break", `${boss.name} is on break: ${activeBreak.reason}`);
+    }
     if (typeof input.task !== "string" || input.task.trim() === "") {
       throw new OfficeError("validation_error", "Task must not be empty", "task");
     }
     return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
-  /** Renames an employee and/or changes its species. Nothing changes when any value is invalid. */
-  updateProfile(employeeId: string, input: { name?: unknown; species?: unknown }): Employee {
+  /** Renames an employee, changes its species, and/or updates its job title. Nothing changes when any value is invalid. */
+  updateProfile(
+    employeeId: string,
+    input: { name?: unknown; species?: unknown; jobTitle?: unknown },
+  ): Employee {
     this.requireEmployee(employeeId);
-    if (input.name === undefined && input.species === undefined) {
-      throw new OfficeError("validation_error", "Provide a name or a species", "name");
+    if (input.name === undefined && input.species === undefined && input.jobTitle === undefined) {
+      throw new OfficeError("validation_error", "Provide a name, species, or job title", "name");
     }
     const patch: Partial<Employee> = {};
     if (input.name !== undefined) patch.name = parseName(input.name);
     if (input.species !== undefined) patch.species = parseSpecies(input.species);
+    if (input.jobTitle !== undefined) patch.jobTitle = parseJobTitle(input.jobTitle);
     return this.patchEmployee(employeeId, patch);
   }
 
@@ -364,7 +490,12 @@ export class OfficeService {
   }
 
   async sendMessage(employeeId: string, text: unknown): Promise<Message> {
-    this.requireEmployee(employeeId);
+    const employee = this.requireEmployee(employeeId);
+    const activeBreak = this.getActiveBreak(employee.bossId);
+    if (activeBreak) {
+      const bossName = this.buildBoss(employee.bossId).name;
+      throw new OfficeError("provider_on_break", `${bossName} is on break: ${activeBreak.reason}`);
+    }
     if (typeof text !== "string" || text.trim() === "") {
       throw new OfficeError("validation_error", "Message text must not be empty", "text");
     }
@@ -486,6 +617,10 @@ export class OfficeService {
       }
     }
     for (const id of [...this.pending.keys()]) this.expire(id);
+    for (const entry of this.bossBreaks.values()) {
+      if (entry.timer) clearTimeout(entry.timer);
+    }
+    this.bossBreaks.clear();
   }
 
   /**
@@ -593,6 +728,18 @@ export class OfficeService {
           this.setStatus(employeeId, "stopped");
           return;
         }
+        if (isRateLimitErrorMessage(reason)) {
+          const employee = this.repository.getEmployee(employeeId);
+          this.appendMessage(employeeId, {
+            kind: "system",
+            content: `Provider reached its usage limit — on break: ${reason}`,
+          });
+          if (employee) {
+            const until = this.bossUsage.get(employee.bossId)?.resetsAt ?? null;
+            this.triggerProviderBreak(employee.bossId, reason, until);
+          }
+          return;
+        }
         this.appendMessage(employeeId, { kind: "system", content: `Employee failed: ${reason}` });
         this.setStatus(employeeId, "failed", { failureReason: reason });
       },
@@ -600,6 +747,10 @@ export class OfficeService {
         if (!session.active) return;
         const employee = this.repository.getEmployee(employeeId);
         if (employee) this.cacheCatalog(employee.workingDirectory, catalog);
+      },
+      onUsage: (update) => {
+        if (!session.active) return;
+        this.recordUsage(employeeId, update);
       },
       requestApproval: (prompt, signal) => this.requestApproval(employeeId, session, prompt, signal),
     };
@@ -711,11 +862,84 @@ export class OfficeService {
     return employee;
   }
 
+  private recordUsage(employeeId: string, update: UsageUpdate): void {
+    const employee = this.repository.getEmployee(employeeId);
+    if (!employee) return;
+    const timestamp = this.timestamp();
+    const bossUsage = this.getOrCreateBossUsage(employee.bossId);
+    let bossChanged = false;
+    let employeeChanged = false;
+
+    if (update.rateLimit) {
+      const { utilizationPercent, resetsAt, windowLabel } = update.rateLimit;
+      if (utilizationPercent !== null) {
+        bossUsage.utilizationPercent = utilizationPercent;
+        bossUsage.remainingPercent = Math.round(Math.max(0, Math.min(100, 100 - utilizationPercent)) * 10) / 10;
+      }
+      if (resetsAt !== null) bossUsage.resetsAt = resetsAt;
+      if (windowLabel !== null) bossUsage.windowLabel = windowLabel;
+      bossUsage.updatedAt = timestamp;
+      bossChanged = true;
+    }
+
+    if (update.tokens) {
+      const prev = this.employeeUsage.get(employeeId) ?? {
+        inputTokens: 0,
+        outputTokens: 0,
+        contextUsed: null,
+        contextWindow: null,
+        costUsd: null,
+        updatedAt: null,
+      };
+      const deltaIn = update.tokens.cumulative
+        ? Math.max(0, update.tokens.inputTokens - prev.inputTokens)
+        : update.tokens.inputTokens;
+      const deltaOut = update.tokens.cumulative
+        ? Math.max(0, update.tokens.outputTokens - prev.outputTokens)
+        : update.tokens.outputTokens;
+      const nextEmployeeUsage: EmployeeUsage = {
+        inputTokens: update.tokens.cumulative ? update.tokens.inputTokens : prev.inputTokens + update.tokens.inputTokens,
+        outputTokens: update.tokens.cumulative
+          ? update.tokens.outputTokens
+          : prev.outputTokens + update.tokens.outputTokens,
+        contextUsed: update.tokens.contextUsed !== undefined ? update.tokens.contextUsed : prev.contextUsed,
+        contextWindow: update.tokens.contextWindow !== undefined ? update.tokens.contextWindow : prev.contextWindow,
+        costUsd: update.tokens.costUsd !== undefined ? update.tokens.costUsd : prev.costUsd,
+        updatedAt: timestamp,
+      };
+      this.employeeUsage.set(employeeId, nextEmployeeUsage);
+      bossUsage.inputTokens += deltaIn;
+      bossUsage.outputTokens += deltaOut;
+      bossUsage.updatedAt = timestamp;
+      bossChanged = true;
+      employeeChanged = true;
+    }
+
+    if (bossChanged) {
+      this.events.publish({ type: "boss_updated", boss: this.buildBoss(employee.bossId) });
+    }
+    if (employeeChanged) {
+      this.events.publish({ type: "employee_updated", employee: this.decorateEmployee(employee) });
+    }
+    if (
+      update.rateLimit &&
+      (update.rateLimit.status === "rejected" ||
+        (update.rateLimit.utilizationPercent !== null && update.rateLimit.utilizationPercent >= 100))
+    ) {
+      this.triggerProviderBreak(
+        employee.bossId,
+        "Usage limit reached — on break",
+        update.rateLimit.resetsAt ?? bossUsage.resetsAt,
+      );
+    }
+  }
+
   private patchEmployee(id: string, patch: Partial<Employee>): Employee {
     const next: Employee = { ...this.requireEmployee(id), ...patch, updatedAt: this.timestamp() };
     this.repository.updateEmployee(next);
-    this.events.publish({ type: "employee_updated", employee: next });
-    return next;
+    const decorated = this.decorateEmployee(next);
+    this.events.publish({ type: "employee_updated", employee: decorated });
+    return decorated;
   }
 
   private setStatus(id: string, status: Employee["status"], patch: Partial<Employee> = {}): Employee {
@@ -755,7 +979,26 @@ type HireInput = {
   name?: unknown;
   species?: unknown;
   role?: unknown;
+  jobTitle?: unknown;
 };
+
+/** `undefined`, `null`, or blank string clears job title; otherwise trimmed up to MAX_JOB_TITLE_LENGTH. */
+function parseJobTitle(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new OfficeError("validation_error", "Job title must be a string", "jobTitle");
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length > MAX_JOB_TITLE_LENGTH) {
+    throw new OfficeError(
+      "validation_error",
+      `Job title must be at most ${MAX_JOB_TITLE_LENGTH} characters`,
+      "jobTitle",
+    );
+  }
+  return trimmed;
+}
 
 /** `undefined` and `null` mean General; anything else must be a non-empty agent name. */
 function parseRole(value: unknown): string | null {

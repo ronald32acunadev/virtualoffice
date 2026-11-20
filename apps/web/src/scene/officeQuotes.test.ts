@@ -22,8 +22,8 @@ describe("officeQuotes", () => {
     }
   });
 
-  it("US-05 / AC-01: pickOfficeQuote uses status-aware pools for working, waiting_approval, idle, and failed", () => {
-    const statuses = ["working", "waiting_approval", "idle", "failed"] as const;
+  it("US-05 / AC-01: pickOfficeQuote uses status-aware pools for working, waiting_approval, idle, on_break, and failed", () => {
+    const statuses = ["working", "waiting_approval", "idle", "on_break", "failed"] as const;
     for (const status of statuses) {
       const statusPool = STATUS_QUOTES[status] ?? [];
       expect(statusPool.length).toBeGreaterThan(0);

@@ -20,6 +20,7 @@ const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
   validation_error: 400,
   not_found: 404,
   boss_unavailable: 409,
+  provider_on_break: 409,
   approval_not_pending: 409,
   working_directory_missing: 409,
   catalog_unavailable: 503,
@@ -119,6 +120,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       name: body.name,
       species: body.species,
       role: body.role,
+      jobTitle: body.jobTitle,
     });
     return reply.code(201).send({ employee });
   });
@@ -134,7 +136,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.patch<{ Params: { id: string } }>("/api/employees/:id", async (request) => {
     const body = asRecord(request.body);
-    return { employee: office.updateProfile(request.params.id, { name: body.name, species: body.species }) };
+    return {
+      employee: office.updateProfile(request.params.id, {
+        name: body.name,
+        species: body.species,
+        jobTitle: body.jobTitle,
+      }),
+    };
   });
 
   app.get("/api/imports/claude/sessions", async (request) => {
@@ -151,6 +159,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.post<{ Params: { id: string } }>("/api/employees/:id/stop", async (request) => ({
     employee: await office.stop(request.params.id),
+  }));
+
+  app.post<{ Params: { id: string } }>("/api/bosses/:id/resume", async (request) => ({
+    boss: office.resumeBoss(request.params.id),
   }));
 
   app.post<{ Params: { id: string } }>("/api/approvals/:id/decision", async (request) => {
