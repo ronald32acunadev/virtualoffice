@@ -2,12 +2,13 @@
   "name": "virtualoffice",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/server", "apps/web"],
+  "workspaces": ["apps/server", "apps/web", "apps/desktop"],
   "scripts": {
-    "build": "npm run build -w apps/web",
-    "start": "npm run build && npm run start -w apps/server",
-    "test": "npm run test -w apps/server && npm run test -w apps/web",
-    "typecheck": "npm run typecheck -w apps/server && npm run typecheck -w apps/web"
+    "build": "npm run build -w apps/web && npm run build -w apps/desktop",
+    "start": "npm run build -w apps/web && npm run start -w apps/server",
+    "desktop": "npm run build && npm run start -w apps/desktop",
+    "test": "npm run test -w apps/server && npm run test -w apps/web && npm run test -w apps/desktop",
+    "typecheck": "npm run typecheck -w apps/server && npm run typecheck -w apps/web && npm run typecheck -w apps/desktop"
   },
   "engines": { "node": ">=22.13" }
 }
