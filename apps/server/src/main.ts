@@ -1,13 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isBinaryAvailable } from "./agents/binary-availability.ts";
 import { ClaudeAgentAdapter } from "./agents/claude/claude-agent-adapter.ts";
 import { ClaudeCatalogProvider } from "./agents/claude/claude-catalog-provider.ts";
 import { ClaudeSessionCatalog } from "./agents/claude/claude-session-catalog.ts";
+import { CodexAgentAdapter } from "./agents/codex/codex-agent-adapter.ts";
+import { GeminiAgentAdapter } from "./agents/gemini/gemini-agent-adapter.ts";
+import { OpenCodeAgentAdapter } from "./agents/opencode/opencode-agent-adapter.ts";
 import { InMemoryEventBus } from "./events/in-memory-event-bus.ts";
 import { buildApp } from "./http/app.ts";
 import { createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
+import type { BossId } from "./office/domain/types.ts";
+import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -20,9 +26,15 @@ fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const token = createToken();
 const repository = new SqliteOfficeRepository(dbPath);
+const adapters: Partial<Record<BossId, AgentAdapter>> = {
+  claude: new ClaudeAgentAdapter(),
+  ...(isBinaryAvailable("codex") ? { codex: new CodexAgentAdapter() } : {}),
+  ...(isBinaryAvailable("opencode") ? { opencode: new OpenCodeAgentAdapter() } : {}),
+  ...(isBinaryAvailable("gemini") ? { gemini: new GeminiAgentAdapter() } : {}),
+};
 const office = new OfficeService({
   repository,
-  adapter: new ClaudeAgentAdapter(),
+  adapters,
   events: new InMemoryEventBus(),
   sessions: new ClaudeSessionCatalog(),
   catalogProvider: new ClaudeCatalogProvider(),
