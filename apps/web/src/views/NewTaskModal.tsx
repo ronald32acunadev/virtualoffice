@@ -100,34 +100,10 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
         </label>
         <label>
           Working directory
-          <div className="input-with-action">
-            <input type="text" value={workingDirectory} onChange={(e) => {
-                setWorkingDirectory(e.target.value);
-                setRole("");
-              }} placeholder="/path/to/project" />
-            {typeof window !== "undefined" && typeof window.virtualOfficeDesktop?.pickDirectory === "function" ? (
-              <button
-                type="button"
-                className="secondary"
-                disabled={busy}
-                onClick={() => {
-                  void window.virtualOfficeDesktop
-                    ?.pickDirectory()
-                    .then((picked) => {
-                      if (typeof picked === "string" && picked !== "") {
-                        setWorkingDirectory(picked);
-                        setRole("");
-                      }
-                    })
-                    .catch((err) => {
-                      setError(toFormError(err));
-                    });
-                }}
-              >
-                Browse...
-              </button>
-            ) : null}
-          </div>
+          <input type="text" value={workingDirectory} onChange={(e) => {
+              setWorkingDirectory(e.target.value);
+              setRole("");
+            }} placeholder="/path/to/project" />
           {fieldError("workingDirectory")}
         </label>
         <div className="form-row">

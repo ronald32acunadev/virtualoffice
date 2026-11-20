@@ -10,7 +10,7 @@ Implementer route: `US-01` via `pumbastudio` (`zai-org/glm-4.7-flash`); `US-02`�
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Programmatic server bootstrap & graceful lifecycle for desktop embedding | — | complete |
-| US-02 | Electron desktop shell (`apps/desktop`) with workspace, 3D office window, and native folder picker | US-01 | complete |
+| US-02 | Electron desktop shell (`apps/desktop`) with workspace, 3D office window, and native folder picker | US-01 | removed (2026-11-20) |
 | US-03 | External agent launcher catalog & backend launch API | — | complete |
 | US-04 | Workspace "Open in..." external launcher picker UI | US-03 | complete |
 
