@@ -25,6 +25,8 @@ import { toFormError } from "../ui/errors";
 import { OpenExternalMenu } from "./OpenExternalMenu";
 import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
+import { groupTimelineBlocks } from "../state/activityGroups";
+import { ActivityGroup } from "./ActivityGroup";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
 
@@ -593,12 +595,13 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
 
 export function ConversationPane({ employeeId, mood }: { employeeId: string; mood: LightingMood }) {
   const { state, actions } = useOffice();
-  const messages = state.messages[employeeId];
-  const live = state.liveText[employeeId] ?? "";
-  const timeline = useMemo(() => buildTimeline(messages ?? []), [messages]);
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
   const employee = state.employees.find((e) => e.id === employeeId);
   const busy = STOPPABLE.has(employee?.status ?? "");
+  const messages = state.messages[employeeId];
+  const live = state.liveText[employeeId] ?? "";
+  const timeline = useMemo(() => buildTimeline(messages ?? []), [messages]);
+  const activityBlocks = useMemo(() => groupTimelineBlocks(timeline, busy), [timeline, busy]);
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
   const [view, setView] = useState<"chat" | "terminal">("chat");
@@ -638,11 +641,13 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
             </ul>
           ) : null}
           {timeline.length === 0 && !live ? <p className="muted">No messages yet.</p> : null}
-          {timeline.map((item) =>
-            item.message.kind === "tool_call" || item.message.kind === "tool_result" ? (
-              <ToolRow key={item.message.id} item={item} />
+          {activityBlocks.map((block) =>
+            block.kind === "activity_group" ? (
+              <ActivityGroup key={block.id} block={block} />
+            ) : block.item.message.kind === "tool_call" || block.item.message.kind === "tool_result" ? (
+              <ToolRow key={block.item.message.id} item={block.item} />
             ) : (
-              <TextBubble key={item.message.id} item={item} />
+              <TextBubble key={block.item.message.id} item={block.item} />
             ),
           )}
           {live ? (

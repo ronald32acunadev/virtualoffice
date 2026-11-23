@@ -11,8 +11,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Remove embedded desktop app streaming (`App` tab, noVNC, and Xvnc host) | — | complete |
 | US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | complete |
-| US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | in progress |
-| US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | pending |
+| US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | complete |
+| US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | in progress |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -84,8 +84,8 @@ As the owner, I want consecutive agent tool calls and thoughts within a turn gro
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01`, `US-03 / AC-03` | `apps/web/src/state/activityGroups.test.ts` (consecutive step grouping, summary label formatting, running/done/error status, deduplicated file pills, structured diff & command extraction) | Pending |
-| `US-03 / AC-02` + Day/Evening contrast | `npm run test -w apps/web`, `npm run typecheck`, `npm run build`, and visual inspection in Day & Evening moods | Pending |
+| `US-03 / AC-01`, `US-03 / AC-03` | `apps/web/src/state/activityGroups.test.ts` (consecutive step grouping, summary label formatting, running/done/error status, deduplicated file pills, structured diff & command extraction) | Passed (`6/6` tests in `activityGroups.test.ts`) |
+| `US-03 / AC-02` + Day/Evening contrast | `npm run test -w apps/web`, `npm run typecheck`, `npm run build`, and visual inspection in Day & Evening moods | Automated: passed (`24/24` web files `126/126` tests, `typecheck` & `vite build` clean); visual inspection pending owner browser run |
 
 ---
 

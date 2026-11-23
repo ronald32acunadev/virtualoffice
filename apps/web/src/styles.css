@@ -522,3 +522,232 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 .attachment-lightbox-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-popover); }
 .attachment-lightbox-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
 .attachment-lightbox-img { max-width: 80vw; max-height: 75vh; object-fit: contain; display: block; background: var(--bg); }
+
+/* US-03 Activity Groups & Diffs */
+.activity-group {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: var(--panel);
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.activity-header:hover {
+  background: var(--surface-hover);
+}
+
+.activity-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.activity-status-dot.done {
+  background: var(--ok);
+}
+
+.activity-status-dot.error {
+  background: var(--danger);
+}
+
+.activity-status-dot.running {
+  background: var(--warn);
+  animation: pulse-dot 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+.activity-summary {
+  flex: 1;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-files {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  max-width: 45%;
+}
+
+.file-pill {
+  font-size: 11px;
+  font-family: monospace;
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  border: 1px solid var(--badge-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.file-pill-more {
+  background: var(--surface-hover);
+  color: var(--muted);
+}
+
+.activity-steps {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.activity-step {
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-step:last-child {
+  border-bottom: none;
+}
+
+.activity-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  background: var(--card);
+}
+
+.activity-step-head:hover {
+  background: var(--surface-hover);
+}
+
+.activity-step-icon {
+  font-size: 13px;
+  flex: none;
+}
+
+.activity-step-title {
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-step-file {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--muted);
+  flex: none;
+}
+
+.activity-step-body {
+  padding: 10px 14px;
+  background: var(--input-bg);
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.activity-step-thought {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-step-thought .activity-step-head {
+  padding: 0 0 6px 0;
+  background: transparent;
+  cursor: default;
+}
+
+.activity-step-content {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.diff-view {
+  font-family: monospace;
+  font-size: 11px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.diff-del {
+  color: var(--danger-text);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
+  padding: 1px 4px;
+}
+
+.diff-add {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  padding: 1px 4px;
+}
+
+.cmd-view {
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.cmd-line {
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cmd-output {
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.tool-raw {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-section {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tool-section pre {
+  margin: 4px 0 0 0;
+  padding: 6px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text);
+  white-space: pre-wrap;
+}
