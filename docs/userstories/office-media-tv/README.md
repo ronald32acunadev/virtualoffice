@@ -9,7 +9,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Parse and validate Spotify, YouTube / YouTube Music, and Apple Music URLs into canonical embed descriptors | — | pending |
+| US-01 | Parse and validate Spotify, YouTube / YouTube Music, and Apple Music URLs into canonical embed descriptors | — | complete |
 | US-02 | Persist office TV playback state and saved stations in SQLite with REST API and WebSocket sync | US-01 | pending |
 | US-03 | Mount an interactive 3D Media TV on the office back wall with live in-TV playback and camera focus | US-01, US-02 | pending |
 | US-04 | Add Android-style provider chooser drawer and saved stations controls to the Office HUD | US-02, US-03 | pending |
@@ -51,8 +51,8 @@ As the owner, I want Virtual Office to recognize links from Spotify, YouTube / Y
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-02`, `US-01 / AC-03`, `US-01 / AC-04` | `apps/server/test/office/media-parser.test.ts` (Spotify URLs/URIs with locale prefixes, YouTube/YouTube Music videos/shorts/playlists, Apple Music album/song/playlist/station URLs, rejection of non-HTTPS/unknown hosts/traversal/provider mismatch) | Pending |
-| `US-01 / AC-05` | `apps/server/test/office/media-metadata.test.ts` (stubbed oEmbed success for Spotify and YouTube, network error/timeout/invalid-JSON fallback to `fallbackTitle`) | Pending |
+| `US-01 / AC-01`, `US-01 / AC-02`, `US-01 / AC-03`, `US-01 / AC-04` | `apps/server/test/office/media-parser.test.ts` (Spotify URLs/URIs with locale prefixes, YouTube/YouTube Music videos/shorts/playlists, Apple Music album/song/playlist/station URLs, rejection of non-HTTPS/unknown hosts/traversal/provider mismatch) | Passed (`34/34` tests in `media-parser.test.ts`; TDD RED observed before implementation) |
+| `US-01 / AC-05` | `apps/server/test/office/media-metadata.test.ts` (stubbed oEmbed success for Spotify and YouTube, network error/timeout/invalid-JSON fallback to `fallbackTitle`) | Passed (`8/8` tests in `media-metadata.test.ts`; `npm run typecheck -w apps/server` clean) |
 
 ---
 
