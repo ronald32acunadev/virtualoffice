@@ -526,3 +526,35 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 .boss-accent-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--boss-accent, var(--accent)); margin-right: 6px; vertical-align: middle; flex: none; }
 .conv-head[data-boss] { border-top: 3px solid var(--boss-accent, var(--accent)); }
 .composer-boss-pill[data-boss] { border: 1px solid color-mix(in srgb, var(--boss-accent) 55%, var(--border)); display: inline-flex; align-items: center; gap: 5px; }
+
+/* Attachments & Composer Enhancements */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.composer-card.is-dragging { border-color: var(--accent); background: var(--surface-hover); box-shadow: var(--shadow-popover); }
+.composer-attach-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 4px 6px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; }
+.composer-attach-btn:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
+.composer-attach-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.composer-attachments { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 8px 12px 0 12px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.composer-attachment-item { display: inline-flex; align-items: center; gap: 8px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; max-width: 220px; }
+.composer-attachment-thumb { width: 28px; height: 28px; border-radius: 4px; overflow: hidden; background: var(--panel); flex: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.composer-attachment-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.composer-attachment-thumb.file-icon { color: var(--muted); }
+.composer-attachment-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.composer-attachment-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.composer-attachment-meta small { font-size: 10px; color: var(--muted); }
+.composer-attachment-remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 2px; border-radius: 4px; line-height: 1; flex: none; }
+.composer-attachment-remove:hover { color: var(--danger); background: var(--surface-hover); }
+
+.msg-attachments { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg-attachment-thumb { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0; width: 80px; height: 80px; overflow: hidden; cursor: pointer; display: block; }
+.msg-attachment-thumb:hover { border-color: var(--border-strong); }
+.msg-attachment-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.msg-attachment-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; text-decoration: none; color: var(--text); max-width: 260px; }
+.msg-attachment-chip:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.msg-attachment-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.msg-attachment-chip small { color: var(--muted); font-size: 11px; flex: none; }
+
+.attachment-lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.attachment-lightbox-content { background: var(--card); border: 1px solid var(--border); border-radius: 12px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-popover); }
+.attachment-lightbox-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.attachment-lightbox-img { max-width: 80vw; max-height: 75vh; object-fit: contain; display: block; background: var(--bg); }

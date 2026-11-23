@@ -1,5 +1,6 @@
 import type {
   ApprovalRequest,
+  AttachmentUpload,
   Catalog,
   BossId,
   ClaudeSessionSummary,
@@ -128,9 +129,10 @@ export const api = {
   },
   importClaudeSessions: (sessionIds: string[]) =>
     request<ImportResult>("POST", "/api/imports/claude", { sessionIds }),
-  sendMessage: (employeeId: string, text: string) =>
+  sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
       text,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     }),
   stopEmployee: (employeeId: string) =>
     request<{ employee: Employee }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/stop`),

@@ -1,8 +1,11 @@
 import { isValidElement, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getToken } from "../api/client";
+import type { MessageAttachment } from "../api/types";
 import type { TimelineItem } from "../state/timeline";
 import { buildToolLabel, splitLabel } from "../state/toolLabel";
+import { buildAuthenticatedAttachmentUrl, formatFileSize, isPreviewableImageMime } from "../state/attachments";
 
 function prettyInput(content: string): string {
   try {
@@ -114,13 +117,91 @@ export function ToolRow({ item }: { item: TimelineItem }) {
 
 export function TextBubble({ item }: { item: TimelineItem }) {
   const { message } = item;
+  const token = getToken();
+  const [preview, setPreview] = useState<MessageAttachment | null>(null);
+
   switch (message.kind) {
-    case "user_text":
+    case "user_text": {
+      const atts = message.attachments;
       return (
         <div className="bubble bubble-user">
-          <p>{message.content}</p>
+          {atts && atts.length > 0 ? (
+            <div className="msg-attachments">
+              {atts.map((att) => {
+                const authUrl = buildAuthenticatedAttachmentUrl(att.url, token);
+                const isImg = isPreviewableImageMime(att.mimeType);
+                if (isImg) {
+                  return (
+                    <button
+                      key={att.id}
+                      type="button"
+                      className="msg-attachment-thumb"
+                      onClick={() => setPreview(att)}
+                      title={att.name}
+                    >
+                      <img src={authUrl} alt={att.name} />
+                    </button>
+                  );
+                }
+                return (
+                  <a
+                    key={att.id}
+                    className="msg-attachment-chip"
+                    href={authUrl}
+                    download={att.name}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <span aria-hidden="true">📄</span>
+                    <span className="msg-attachment-name">{att.name}</span>
+                    <small>{formatFileSize(att.size)}</small>
+                  </a>
+                );
+              })}
+            </div>
+          ) : null}
+          {message.content !== "" ? <p>{message.content}</p> : null}
+          {preview ? (
+            <div
+              className="attachment-lightbox"
+              role="dialog"
+              aria-modal="true"
+              onClick={() => setPreview(null)}
+            >
+              <div className="attachment-lightbox-content" onClick={(e) => e.stopPropagation()}>
+                <div className="attachment-lightbox-bar">
+                  <span className="msg-attachment-name">{preview.name}</span>
+                  <a
+                    className="composer-attach-btn"
+                    href={buildAuthenticatedAttachmentUrl(preview.url, token)}
+                    download={preview.name}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ textDecoration: "none", fontSize: "14px", padding: "4px 8px" }}
+                  >
+                    Download
+                  </a>
+                  <button
+                    type="button"
+                    className="composer-attachment-remove"
+                    onClick={() => setPreview(null)}
+                    title="Close preview"
+                    aria-label="Close preview"
+                  >
+                    ×
+                  </button>
+                </div>
+                <img
+                  className="attachment-lightbox-img"
+                  src={buildAuthenticatedAttachmentUrl(preview.url, token)}
+                  alt={preview.name}
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       );
+    }
     case "agent_text":
       return (
         <div className="bubble bubble-agent markdown">

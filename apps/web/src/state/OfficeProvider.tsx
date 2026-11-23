@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, ImportResult, Species, SyncSummary } from "../api/types";
+import type { BossId, Decision, AttachmentUpload, ImportResult, Species, SyncSummary } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -26,7 +26,7 @@ export type OfficeActions = {
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
   importSessions: (sessionIds: string[]) => Promise<ImportResult>;
   syncProviders: () => Promise<SyncSummary>;
-  sendMessage: (employeeId: string, text: string) => Promise<void>;
+  sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
   resumeBoss: (bossId: BossId) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
@@ -101,8 +101,8 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
         dispatch({ type: "select", employeeId: employee.id });
       },
-      sendMessage: async (employeeId, text) => {
-        const { message } = await api.sendMessage(employeeId, text);
+      sendMessage: async (employeeId, text, attachments) => {
+        const { message } = await api.sendMessage(employeeId, text, attachments);
         dispatch({ type: "server_event", event: { type: "message_added", message } });
       },
       updateEmployee: async (employeeId, patch) => {

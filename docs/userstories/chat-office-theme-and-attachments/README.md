@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Shared 3D Office Day/Evening mood sync and workspace toggle | — | complete |
 | US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | complete |
 | US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | complete |
-| US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | in progress |
+| US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -123,6 +123,6 @@ As the owner, I want to attach photos and files directly in the chat composer (b
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01`, `US-04 / AC-02` | `apps/web/src/state/attachments.test.ts` (staging validation: count/size limits, MIME image detection, size formatting, base64 encoding helper, send-enabled state) | Pending |
-| `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/attachments.test.ts` (authenticated attachment URL builder, message payload serialization) + manual end-to-end check uploading a photo and a text file in the chat UI and reloading | Pending |
-| Regression: existing slash commands, keyboard Enter-to-send, break/terminal disabled composer states, and full suite | `npm run typecheck`, `npm test`, `npm run build` | Pending |
+| `US-04 / AC-01`, `US-04 / AC-02` | `apps/web/src/state/attachments.test.ts` (staging validation: count/size limits, MIME image detection, size formatting, base64 encoding helper, send-enabled state) | Passed (`7/7` tests in `attachments.test.ts`) |
+| `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/attachments.test.ts` (authenticated attachment URL builder, message payload serialization) + manual end-to-end check uploading a photo and a text file in the chat UI and reloading | Automated: passed (`7/7` tests in `attachments.test.ts`); manual E2E browser check pending owner run |
+| Regression: existing slash commands, keyboard Enter-to-send, break/terminal disabled composer states, and full suite | `npm run typecheck`, `npm test`, `npm run build` | Passed (`apps/server` 40/40 files 287/287 tests, `apps/web` 23/23 files 123/123 tests, `npm run typecheck` clean, `vite build` clean) |

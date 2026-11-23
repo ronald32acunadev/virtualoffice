@@ -60,6 +60,19 @@ export type Employee = {
   updatedAt: string;
 };
 
+export type MessageAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+export type AttachmentUpload = {
+  name: string;
+  mimeType: string;
+  dataBase64: string;
+};
+
 export type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "system";
 export type Message = {
   id: string;
@@ -71,6 +84,7 @@ export type Message = {
   parentToolUseId: string | null;
   createdAt: string;
   sourceUuid: string | null;
+  attachments?: MessageAttachment[];
 };
 
 export type SlashCommand = {

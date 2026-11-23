@@ -1,8 +1,16 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type KeyboardEvent } from "react";
 import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
 import type { LightingMood } from "../scene/officeTheme";
 import { useOffice } from "../state/OfficeProvider";
+import {
+  canSendComposer,
+  encodeAttachmentFile,
+  formatFileSize,
+  isPreviewableImageMime,
+  validateFilesToStage,
+  type AttachmentUpload,
+} from "../state/attachments";
 import { SPECIES_EMOJI, SPECIES_LIST, speciesLabel } from "../state/species";
 import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
 import { composerKeyAction, isFolderMissing } from "../state/sidebar";
@@ -54,98 +62,88 @@ function Header({
       setError(toFormError(err).message);
     }
   };
-  const saveName = () =>
-    run(async () => {
-      await actions.updateEmployee(employee.id, { name: draft });
-      setEditing(false);
-    });
-  const saveJobTitle = () =>
-    run(async () => {
-      const trimmed = titleDraft.trim();
-      await actions.updateEmployee(employee.id, { jobTitle: trimmed === "" ? null : trimmed });
-      setEditingTitle(false);
-    });
+
+  const boss = state.bosses.find((b) => b.id === employee.bossId);
 
   return (
-    <header className="conv-head" data-boss={employee.bossId}>
-      <div className="conv-title">
-        <span className="avatar avatar-lg">{SPECIES_EMOJI[employee.species]}</span>
+    <header className="conv-header">
+      <div className="conv-title-row">
         {editing ? (
           <form
-            className="rename"
+            className="conv-name-form"
             onSubmit={(e) => {
               e.preventDefault();
-              void saveName();
+              const name = draft.trim();
+              if (!name) return;
+              void run(async () => {
+                await actions.updateEmployee(employee.id, { name });
+                setEditing(false);
+              });
             }}
           >
             <input
               type="text"
-              autoFocus
               value={draft}
-              aria-label="Employee name"
+              maxLength={40}
+              autoFocus
               onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setEditing(false);
-              }}
+              onBlur={() => setEditing(false)}
             />
-            <button type="submit">Save</button>
-            <button type="button" className="secondary" onClick={() => setEditing(false)}>
-              Cancel
-            </button>
           </form>
         ) : (
-          <>
-            <h1>{employee.name}</h1>
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setDraft(employee.name);
-                setError(null);
-                setEditing(true);
-              }}
-            >
-              Rename
-            </button>
-          </>
-        )}
-        <RoleBadge role={employee.role} />
-        {editingTitle ? (
-          <form
-            className="rename"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void saveJobTitle();
+          <h2
+            className="conv-name"
+            title="Click to rename"
+            onClick={() => {
+              setDraft(employee.name);
+              setEditing(true);
             }}
           >
+            {SPECIES_EMOJI[employee.species]} {employee.name}
+          </h2>
+        )}
+        {editingTitle ? (
+          <div className="conv-title-edit-wrap">
             <input
               type="text"
-              autoFocus
-              list={titleListId}
-              maxLength={MAX_JOB_TITLE_LENGTH}
+              className="conv-title-input"
               value={titleDraft}
-              aria-label="Job title"
-              placeholder="e.g. Architect"
+              maxLength={MAX_JOB_TITLE_LENGTH}
+              list={titleListId}
+              autoFocus
               onChange={(e) => setTitleDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Escape") setEditingTitle(false);
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const jt = titleDraft.trim();
+                  void run(async () => {
+                    await actions.updateEmployee(employee.id, { jobTitle: jt ? jt : null });
+                    setEditingTitle(false);
+                  });
+                } else if (e.key === "Escape") {
+                  setEditingTitle(false);
+                }
               }}
+              onBlur={() => {
+                const jt = titleDraft.trim();
+                void run(async () => {
+                  await actions.updateEmployee(employee.id, { jobTitle: jt ? jt : null });
+                  setEditingTitle(false);
+                });
+              }}
+              placeholder="Job title..."
             />
             <datalist id={titleListId}>
-              {JOB_TITLE_PRESETS.map((preset) => (
-                <option key={preset} value={preset} />
+              {JOB_TITLE_PRESETS.map((t) => (
+                <option key={t} value={t} />
               ))}
             </datalist>
-            <button type="submit">Save</button>
-            <button type="button" className="secondary" onClick={() => setEditingTitle(false)}>
-              Cancel
-            </button>
-          </form>
+          </div>
         ) : (
           <button
             type="button"
-            className="job-title-pill"
-            title="Edit job title"
+            className="conv-job-title-btn"
+            title="Click to set job title"
             onClick={() => {
               setTitleDraft(employee.jobTitle ?? "");
               setError(null);
@@ -194,6 +192,16 @@ function Header({
 
 export type PendingInsert = { name: string; nonce: number };
 
+type StagedAttachment = {
+  id: string;
+  file: File;
+  name: string;
+  mimeType: string;
+  size: number;
+  isImage: boolean;
+  previewUrl: string | null;
+};
+
 function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingInsert: PendingInsert | null }) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -204,9 +212,16 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   const [caret, setCaret] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [staged, setStaged] = useState<StagedAttachment[]>([]);
+  const [dragging, setDragging] = useState(false);
+
   const areaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const nextCaret = useRef<number | null>(null);
   const lastNonce = useRef<number | null>(null);
+  const stagedRef = useRef<StagedAttachment[]>([]);
+  stagedRef.current = staged;
+
   const listId = useId();
   const { entry, load } = useCatalog({ kind: "employee", id: employeeId });
 
@@ -215,6 +230,14 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   const catalog = "catalog" in entry ? entry.catalog : undefined;
   const matches = useMemo(() => (catalog && query !== null ? filterCommands(catalog.commands, query) : []), [catalog, query]);
   const safeIndex = Math.min(activeIndex, Math.max(0, matches.length - 1));
+
+  useEffect(() => {
+    return () => {
+      for (const item of stagedRef.current) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+    };
+  }, []);
 
   // Typing "/" is the explicit action that loads this employee's catalog (once; retried when the menu reopens).
   useEffect(() => {
@@ -247,13 +270,50 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   const disabled = missingFolder || isFolderMissing(employee) || onBreak || terminalActive;
   const resetCountdown = formatResetCountdown(boss?.breakUntil);
 
+  const stageFiles = (files: File[]) => {
+    const result = validateFilesToStage(staged.length, files);
+    if (result.error) {
+      setError(result.error);
+    } else if (result.accepted.length > 0) {
+      setError(null);
+    }
+    if (result.accepted.length === 0) return;
+
+    const newStaged: StagedAttachment[] = result.accepted.map((file) => {
+      const isImage = isPreviewableImageMime(file.type);
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        file,
+        name: file.name,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        isImage,
+        previewUrl: isImage ? URL.createObjectURL(file) : null,
+      };
+    });
+
+    setStaged((prev) => [...prev, ...newStaged]);
+  };
+
+  const removeStaged = (id: string) => {
+    setStaged((prev) => {
+      const item = prev.find((s) => s.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((s) => s.id !== id);
+    });
+  };
+
   const send = async () => {
-    const trimmed = text.trim();
-    if (!trimmed || busy || disabled) return;
+    if (!canSendComposer(text, staged.length, disabled, busy)) return;
     setBusy(true);
     setError(null);
     try {
-      await actions.sendMessage(employeeId, trimmed);
+      const uploads = await Promise.all(staged.map((s) => encodeAttachmentFile(s.file)));
+      await actions.sendMessage(employeeId, text.trim(), uploads);
+      for (const item of staged) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      setStaged([]);
       setText("");
       if (areaRef.current) areaRef.current.style.height = "auto";
     } catch (err) {
@@ -316,6 +376,9 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
     if (action === "send") {
       event.preventDefault();
       void send();
+    } else if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && staged.length > 0 && text.trim() === "") {
+      event.preventDefault();
+      void send();
     } else if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault(); // Empty text is never sent and never adds a newline.
     }
@@ -348,7 +411,27 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             </button>
           </div>
         ) : null}
-        <div className="composer-card">
+        <div
+          className={`composer-card${dragging ? " is-dragging" : ""}`}
+          onDragOver={(e: DragEvent) => {
+            if (disabled) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDragging(true);
+          }}
+          onDragLeave={(e: DragEvent) => {
+            if (disabled) return;
+            e.preventDefault();
+            setDragging(false);
+          }}
+          onDrop={(e: DragEvent) => {
+            if (disabled) return;
+            e.preventDefault();
+            setDragging(false);
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) stageFiles(files);
+          }}
+        >
           <SlashMenu
             open={menuOpen}
             entry={entry}
@@ -358,6 +441,38 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             onHover={setActiveIndex}
             onPick={pick}
           />
+          {staged.length > 0 ? (
+            <div className="composer-attachments">
+              {staged.map((item) => (
+                <div key={item.id} className="composer-attachment-item">
+                  {item.previewUrl ? (
+                    <div className="composer-attachment-thumb">
+                      <img src={item.previewUrl} alt={item.name} />
+                    </div>
+                  ) : (
+                    <div className="composer-attachment-thumb file-icon" aria-hidden="true">
+                      📎
+                    </div>
+                  )}
+                  <div className="composer-attachment-meta">
+                    <span className="composer-attachment-name" title={item.name}>
+                      {item.name}
+                    </span>
+                    <small>{formatFileSize(item.size)}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="composer-attachment-remove"
+                    onClick={() => removeStaged(item.id)}
+                    title="Remove attachment"
+                    aria-label={`Remove ${item.name}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="composer-input-row">
             <button
               type="button"
@@ -369,6 +484,27 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             >
               +
             </button>
+            <button
+              type="button"
+              className="composer-attach-btn"
+              disabled={disabled}
+              title="Attach files or photos"
+              aria-label="Attach files"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              📎
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                if (files.length > 0) stageFiles(files);
+              }}
+            />
             <textarea
               ref={areaRef}
               rows={1}
@@ -389,6 +525,25 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
               }}
               onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
               onKeyDown={onKeyDown}
+              onPaste={(e) => {
+                if (disabled) return;
+                const items = e.clipboardData.items;
+                const files: File[] = [];
+                for (let i = 0; i < items.length; i++) {
+                  const item = items[i];
+                  if (item && item.kind === "file") {
+                    const file = item.getAsFile();
+                    if (file) files.push(file);
+                  }
+                }
+                if (files.length === 0 && e.clipboardData.files.length > 0) {
+                  files.push(...Array.from(e.clipboardData.files));
+                }
+                if (files.length > 0) {
+                  e.preventDefault();
+                  stageFiles(files);
+                }
+              }}
               placeholder={
                 onBreak
                   ? `${boss?.name ?? employee.bossId} is on break — click Resume now to retry`
@@ -410,7 +565,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             <button
               type="submit"
               className="composer-send-btn"
-              disabled={disabled || busy || text.trim() === ""}
+              disabled={!canSendComposer(text, staged.length, disabled, busy)}
               aria-label="Send message"
             >
               ↑
