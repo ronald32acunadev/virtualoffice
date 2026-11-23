@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import fs from "node:fs";
 import type {
   CanUseTool,
   Options,
@@ -7,12 +8,19 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentAdapter, AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
-import type { ProviderAgent, ProviderCatalog } from "../../office/domain/types.ts";
+import type { ProviderAgent, ProviderCatalog, StoredAttachment } from "../../office/domain/types.ts";
+import { isSafeInlineImageMime } from "../../office/application/attachments.ts";
 import { toAgents, toCommands, withTimeout } from "./catalog-support.ts";
 import { SETTING_SOURCES, SYSTEM_PROMPT } from "./session-options.ts";
 import { approvalKindFor, summarizeToolInput } from "./approval-mapping.ts";
 import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 import { PushQueue } from "./push-queue.ts";
+import {
+  extractTokenUsage,
+  formatRateLimitWindow,
+  normalizeResetsAt,
+  normalizeUtilizationPercent,
+} from "../usage-parser.ts";
 
 /** The subset of the SDK `query` function this adapter needs; tests inject a fake. */
 export type QueryFunction = (params: {
@@ -51,7 +59,12 @@ type LooseMessage = {
   event?: { type?: string; delta?: { type?: string; text?: string } };
   result?: unknown;
   errors?: unknown;
+  error?: unknown;
   commands?: unknown;
+  rate_limit_info?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  modelUsage?: Record<string, Record<string, unknown>>;
+  total_cost_usd?: unknown;
 };
 
 const REJECTED_MESSAGE = "Rejected by the owner";
@@ -60,8 +73,70 @@ function deny(message: string): PermissionResult {
   return { behavior: "deny", message };
 }
 
-function userMessage(text: string): SDKUserMessage {
-  return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+function userMessage(text: string, attachments?: StoredAttachment[]): SDKUserMessage {
+  if (!attachments || attachments.length === 0) {
+    return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+  }
+
+  const blocks: Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        source: {
+          type: "base64";
+          media_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+          data: string;
+        };
+      }
+  > = [];
+
+  const otherFiles: StoredAttachment[] = [];
+
+  for (const att of attachments) {
+    if (isSafeInlineImageMime(att.mimeType) && fs.existsSync(att.path)) {
+      try {
+        const data = fs.readFileSync(att.path).toString("base64");
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: att.mimeType.toLowerCase() as
+              | "image/png"
+              | "image/jpeg"
+              | "image/gif"
+              | "image/webp",
+            data,
+          },
+        });
+        continue;
+      } catch {
+        // fallback to other files if read fails
+      }
+    }
+    otherFiles.push(att);
+  }
+
+  let finalText = text.trim();
+  if (otherFiles.length > 0) {
+    const lines = otherFiles.map((f) => `- ${f.name} (${f.mimeType}): ${f.path}`);
+    const notes = `Attached files:\n${lines.join("\n")}`;
+    finalText = finalText ? `${finalText}\n\n${notes}` : notes;
+  }
+
+  if (blocks.length > 0 && !finalText) {
+    finalText = "Please inspect the attached image(s).";
+  }
+
+  blocks.push({ type: "text", text: finalText });
+
+  return {
+    type: "user",
+    message: {
+      role: "user",
+      content: blocks as unknown as SDKUserMessage["message"]["content"],
+    },
+    parent_tool_use_id: null,
+  };
 }
 
 export class ClaudeAgentAdapter implements AgentAdapter {
@@ -73,9 +148,9 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     return this.sessions.has(employeeId);
   }
 
-  start({ employee, prompt, resume }: StartParams, sink: AgentSink): void {
+  start({ employee, prompt, resume, attachments }: StartParams, sink: AgentSink): void {
     const session: Session = { queue: new PushQueue(), abort: new AbortController(), stopped: false };
-    session.queue.push(userMessage(prompt));
+    session.queue.push(userMessage(prompt, attachments));
     this.sessions.set(employee.id, session);
 
     const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -127,10 +202,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     void this.run(employee.id, session, options, sink);
   }
 
-  sendMessage(employeeId: string, text: string): boolean {
+  sendMessage(employeeId: string, text: string, attachments?: StoredAttachment[]): boolean {
     const session = this.sessions.get(employeeId);
     if (!session || session.stopped) return false;
-    session.queue.push(userMessage(text));
+    session.queue.push(userMessage(text, attachments));
     return true;
   }
 
@@ -180,6 +255,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
           this.mapUser(message, sink);
         } else if (message.type === "stream_event") {
           this.mapStreamEvent(message, sink);
+        } else if (message.type === "rate_limit_event") {
+          this.mapRateLimit(message, sink);
         } else if (message.type === "result") {
           if (this.mapResult(message, initSeen, sink) === "failed") {
             this.teardown(employeeId, session);
@@ -240,6 +317,16 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private mapAssistant(message: LooseMessage, sink: AgentSink): void {
+    if (message.error === "rate_limit") {
+      sink.onUsage?.({
+        rateLimit: {
+          status: "rejected",
+          utilizationPercent: 100,
+          resetsAt: null,
+          windowLabel: null,
+        },
+      });
+    }
     const ctx = { parentToolUseId: message.parent_tool_use_id ?? null, sourceUuid: message.uuid ?? null };
     for (const mapped of mapAssistantContent(message.message?.content, ctx)) sink.onMessage(mapped);
   }
@@ -257,7 +344,73 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     }
   }
 
+  private mapRateLimit(message: LooseMessage, sink: AgentSink): void {
+    const info = message.rate_limit_info;
+    if (!info || typeof info !== "object") return;
+    const rawStatus = info.status;
+    const status =
+      rawStatus === "allowed" || rawStatus === "allowed_warning" || rawStatus === "rejected"
+        ? rawStatus
+        : "allowed";
+    sink.onUsage?.({
+      rateLimit: {
+        status,
+        utilizationPercent: normalizeUtilizationPercent(info.utilization),
+        resetsAt: normalizeResetsAt(info.resetsAt),
+        windowLabel: formatRateLimitWindow(info.rateLimitType),
+      },
+    });
+  }
+
+  private emitResultUsage(message: LooseMessage, sink: AgentSink): void {
+    if (message.modelUsage && typeof message.modelUsage === "object") {
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let cacheRead = 0;
+      let contextWindow: number | null = null;
+      let found = false;
+      for (const entry of Object.values(message.modelUsage)) {
+        if (!entry || typeof entry !== "object") continue;
+        if (typeof entry.inputTokens === "number" && Number.isFinite(entry.inputTokens)) {
+          inputTokens += entry.inputTokens;
+          found = true;
+        }
+        if (typeof entry.outputTokens === "number" && Number.isFinite(entry.outputTokens)) {
+          outputTokens += entry.outputTokens;
+          found = true;
+        }
+        if (typeof entry.cacheReadInputTokens === "number" && Number.isFinite(entry.cacheReadInputTokens)) {
+          cacheRead += entry.cacheReadInputTokens;
+        }
+        if (typeof entry.contextWindow === "number" && Number.isFinite(entry.contextWindow) && entry.contextWindow > 0) {
+          contextWindow = Math.max(contextWindow ?? 0, entry.contextWindow);
+        }
+      }
+      if (found) {
+        const costUsd = typeof message.total_cost_usd === "number" && Number.isFinite(message.total_cost_usd)
+          ? message.total_cost_usd
+          : null;
+        sink.onUsage?.({
+          tokens: {
+            inputTokens,
+            outputTokens,
+            contextUsed: contextWindow !== null ? inputTokens + cacheRead : null,
+            contextWindow,
+            costUsd,
+            cumulative: true,
+          },
+        });
+        return;
+      }
+    }
+    const extracted = extractTokenUsage(message as unknown as Record<string, unknown>);
+    if (extracted) {
+      sink.onUsage?.({ tokens: { ...extracted, cumulative: false } });
+    }
+  }
+
   private mapResult(message: LooseMessage, initSeen: boolean, sink: AgentSink): "ok" | "failed" {
+    this.emitResultUsage(message, sink);
     if (message.subtype === "success") {
       sink.onTurnFinished();
       return "ok";

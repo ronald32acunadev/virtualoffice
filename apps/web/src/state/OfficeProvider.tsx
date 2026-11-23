@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, ImportResult, Species } from "../api/types";
+import type { BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -21,12 +21,19 @@ export type OfficeActions = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => Promise<void>;
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) => Promise<void>;
-  importSessions: (sessionIds: string[]) => Promise<ImportResult>;
-  sendMessage: (employeeId: string, text: string) => Promise<void>;
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
+  syncProviders: () => Promise<SyncSummary>;
+  sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
+  deleteEmployee: (employeeId: string) => Promise<void>;
+  resumeBoss: (bossId: BossId) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
+  setMediaPlayback: (input: { url: string; provider?: MediaProvider; title?: string }) => Promise<MediaPlaybackState>;
+  clearMediaPlayback: () => Promise<void>;
+  addMediaPreset: (input: { url: string; provider?: MediaProvider; title?: string }) => Promise<MediaPreset>;
+  deleteMediaPreset: (id: string) => Promise<void>;
 };
 
 type OfficeContextValue = { state: OfficeState; actions: OfficeActions };
@@ -98,24 +105,30 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
         dispatch({ type: "select", employeeId: employee.id });
       },
-      sendMessage: async (employeeId, text) => {
-        const { message } = await api.sendMessage(employeeId, text);
+      sendMessage: async (employeeId, text, attachments) => {
+        const { message } = await api.sendMessage(employeeId, text, attachments);
         dispatch({ type: "server_event", event: { type: "message_added", message } });
       },
       updateEmployee: async (employeeId, patch) => {
         const { employee } = await api.updateEmployee(employeeId, patch);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
       },
-      importSessions: async (sessionIds) => {
-        const result = await api.importClaudeSessions(sessionIds);
-        for (const employee of result.imported) {
-          dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
-        }
-        return result;
+      syncProviders: async () => {
+        const summary = await api.syncProviders();
+        await refresh();
+        return summary;
       },
       stopEmployee: async (employeeId) => {
         const { employee } = await api.stopEmployee(employeeId);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
+      },
+      deleteEmployee: async (employeeId) => {
+        await api.deleteEmployee(employeeId);
+        dispatch({ type: "server_event", event: { type: "employee_removed", employeeId } });
+      },
+      resumeBoss: async (bossId) => {
+        const { boss } = await api.resumeBoss(bossId);
+        dispatch({ type: "server_event", event: { type: "boss_updated", boss } });
       },
       decide: async (approvalId, decision, answers) => {
         try {
@@ -125,6 +138,24 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
           if (error instanceof ApiError && error.status === 409) await refresh();
           throw error;
         }
+      },
+      setMediaPlayback: async (input) => {
+        const { media } = await api.setMediaPlayback(input);
+        dispatch({ type: "server_event", event: { type: "media_updated", media } });
+        return media;
+      },
+      clearMediaPlayback: async () => {
+        await api.clearMediaPlayback();
+        dispatch({ type: "server_event", event: { type: "media_updated", media: null } });
+      },
+      addMediaPreset: async (input) => {
+        const { preset, presets } = await api.addMediaPreset(input);
+        dispatch({ type: "server_event", event: { type: "media_presets_updated", presets } });
+        return preset;
+      },
+      deleteMediaPreset: async (id) => {
+        const { presets } = await api.deleteMediaPreset(id);
+        dispatch({ type: "server_event", event: { type: "media_presets_updated", presets } });
       },
     }),
     [refresh],

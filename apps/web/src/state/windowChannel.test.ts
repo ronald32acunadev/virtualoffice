@@ -33,6 +33,17 @@ describe("windowChannel", () => {
       type: "focus_employee",
       employeeId: "e1",
     });
+    expect(parseWindowMessage({ type: "mood_changed", mood: "day" })).toEqual({
+      type: "mood_changed",
+      mood: "day",
+    });
+    expect(parseWindowMessage({ type: "mood_changed", mood: "evening" })).toEqual({
+      type: "mood_changed",
+      mood: "evening",
+    });
+    expect(parseWindowMessage({ type: "mood_changed", mood: "midnight" })).toBeNull();
+    expect(parseWindowMessage({ type: "mood_changed" })).toBeNull();
+    expect(parseWindowMessage({ type: "mood_changed", mood: 123 })).toBeNull();
   });
 
   it("US-02 / AC-01: workspace answers pings and selects on focus messages", () => {

@@ -8,12 +8,14 @@ import { InMemoryEventBus } from "../../src/events/in-memory-event-bus.ts";
 import { OfficeService } from "../../src/office/application/office-service.ts";
 import type { Employee, ServerEvent } from "../../src/office/domain/types.ts";
 import type { OfficeRepository } from "../../src/office/ports/office-repository.ts";
+import type { FetchLike } from "../../src/office/domain/media.ts";
+import type { TerminalGuard } from "../../src/office/ports/terminal-guard.ts";
 import { SqliteOfficeRepository } from "../../src/persistence/sqlite/sqlite-office-repository.ts";
 import { FakeSdk, FakeSessionStore, waitFor } from "./fake-sdk.ts";
 
 export function createHarness(
   repository: OfficeRepository = new SqliteOfficeRepository(":memory:"),
-  options: { random?: () => number; probeTimeoutMs?: number } = {},
+  options: { random?: () => number; probeTimeoutMs?: number; terminals?: TerminalGuard; mediaFetch?: FetchLike } = {},
 ) {
   const sdk = new FakeSdk();
   const store = new FakeSessionStore();
@@ -27,7 +29,9 @@ export function createHarness(
     events,
     sessions: catalog,
     catalogProvider,
+    mediaFetch: options.mediaFetch ?? (async () => ({ ok: false, json: async () => ({}) })),
     ...(options.random ? { random: options.random } : {}),
+    ...(options.terminals ? { terminals: options.terminals } : {}),
   });
   const emitted: ServerEvent[] = [];
   events.subscribe((event) => emitted.push(event));

@@ -1,24 +1,46 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type { BossId, Species } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
+import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
 import { groupRoleOptions } from "../state/role";
+import { buildProjectOptions } from "../state/sidebar";
 import { SPECIES_LIST, speciesLabel } from "../state/species";
 import { useCatalog } from "../state/useCatalog";
 import { toFormError, type FormError } from "../ui/errors";
 import { Modal } from "./Modal";
 
-export function NewTaskModal({ onClose }: { onClose: () => void }) {
+export function NewTaskModal({
+  onClose,
+  initialWorkingDirectory,
+}: {
+  onClose: () => void;
+  initialWorkingDirectory?: string | null;
+}) {
   const { state, actions } = useOffice();
   const bosses =
     state.bosses.length > 0 ? state.bosses : [{ id: "claude" as BossId, name: "Claude", available: true }];
   const [bossId, setBossId] = useState<BossId>(() => bosses.find((b) => b.available)?.id ?? "claude");
   const [task, setTask] = useState("");
-  const [workingDirectory, setWorkingDirectory] = useState("");
+  const projectOptions = useMemo(
+    () => buildProjectOptions(state.projects, state.employees),
+    [state.projects, state.employees],
+  );
+  const [workingDirectory, setWorkingDirectory] = useState(
+    () => initialWorkingDirectory ?? projectOptions[0]?.path ?? "",
+  );
+  const [customPath, setCustomPath] = useState(
+    () =>
+      projectOptions.length === 0 ||
+      (Boolean(initialWorkingDirectory) &&
+        !projectOptions.some((p) => p.path === initialWorkingDirectory)),
+  );
   const [name, setName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [species, setSpecies] = useState<"" | Species>("");
   const [role, setRole] = useState("");
   const [error, setError] = useState<FormError | null>(null);
   const [busy, setBusy] = useState(false);
+  const jobTitleListId = useId();
 
   useEffect(() => {
     const selected = bosses.find((b) => b.id === bossId);
@@ -53,6 +75,7 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
         task,
         workingDirectory,
         ...(name.trim() !== "" ? { name } : {}),
+        ...(jobTitle.trim() !== "" ? { jobTitle } : {}),
         ...(species !== "" ? { species } : {}),
         ...(isClaude && role !== "" ? { role } : {}),
       });
@@ -94,19 +117,69 @@ export function NewTaskModal({ onClose }: { onClose: () => void }) {
           <textarea rows={3} value={task} onChange={(e) => setTask(e.target.value)} placeholder="What should the employee do?" />
           {fieldError("task")}
         </label>
-        <label>
-          Working directory
-          <input type="text" value={workingDirectory} onChange={(e) => {
-              setWorkingDirectory(e.target.value);
-              setRole("");
-            }} placeholder="/path/to/project" />
-          {fieldError("workingDirectory")}
-        </label>
+        {projectOptions.length > 0 ? (
+          <label>
+            Project
+            <select
+              value={customPath ? "__custom__" : workingDirectory}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "__custom__") {
+                  setCustomPath(true);
+                  setWorkingDirectory("");
+                } else {
+                  setCustomPath(false);
+                  setWorkingDirectory(value);
+                }
+                setRole("");
+              }}
+            >
+              {projectOptions.map((p) => (
+                <option key={p.path} value={p.path}>
+                  {p.name} — {p.path}
+                </option>
+              ))}
+              <option value="__custom__">Custom directory...</option>
+            </select>
+          </label>
+        ) : null}
+        {customPath || projectOptions.length === 0 ? (
+          <label>
+            Working directory
+            <input
+              type="text"
+              value={workingDirectory}
+              onChange={(e) => {
+                setWorkingDirectory(e.target.value);
+                setRole("");
+              }}
+              placeholder="/path/to/project"
+            />
+            {fieldError("workingDirectory")}
+          </label>
+        ) : null}
         <div className="form-row">
           <label>
             Name (optional)
             <input type="text" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Generated if empty" />
             {fieldError("name")}
+          </label>
+          <label>
+            Job title (optional)
+            <input
+              type="text"
+              list={jobTitleListId}
+              value={jobTitle}
+              maxLength={MAX_JOB_TITLE_LENGTH}
+              onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="e.g. Frontend Engineer, Architect"
+            />
+            <datalist id={jobTitleListId}>
+              {JOB_TITLE_PRESETS.map((preset) => (
+                <option key={preset} value={preset} />
+              ))}
+            </datalist>
+            {fieldError("jobTitle")}
           </label>
           <label>
             Species (optional)

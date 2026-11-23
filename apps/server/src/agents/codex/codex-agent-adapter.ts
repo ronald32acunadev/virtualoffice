@@ -1,4 +1,5 @@
 import type { AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
+import { isSafeInlineImageMime } from "../../office/application/attachments.ts";
 import {
   CliJsonlAdapter,
   asRecord,
@@ -9,6 +10,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 function formatMcpToolName(item: Record<string, unknown>): string {
   const server = asString(item.server);
@@ -96,12 +98,28 @@ function createCodexParser(sink: AgentSink): CliLineParser {
           if (text !== undefined) {
             sink.onMessage({ kind: "agent_text", content: text });
           }
+        } else if (itemType === "reasoning") {
+          const rawText = asString(item.text);
+          let text = rawText !== undefined ? rawText : "";
+          if (!text && Array.isArray(item.summary)) {
+            const parts = item.summary
+              .map((s) => asRecord(s))
+              .filter((s): s is Record<string, unknown> => s !== null)
+              .map((s) => asString(s.text))
+              .filter((t): t is string => t !== undefined && t.trim() !== "");
+            text = parts.join("\n");
+          }
+          if (text.trim() !== "") {
+            sink.onMessage({ kind: "thinking", content: text.trim() });
+          }
         }
         // item.type === "error" is a non-fatal advisory warning in Codex JSONL
         return;
       }
 
       if (type === "turn.completed") {
+        const tokens = extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
         sink.onTurnFinished();
         return;
       }
@@ -143,10 +161,34 @@ export class CodexAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "Codex",
       command,
-      buildArgs: ({ employee, prompt, resume }: StartParams) =>
-        resume
-          ? ["exec", "resume", resume, "--json", prompt]
-          : ["exec", "--json", "--cd", employee.workingDirectory, "--skip-git-repo-check", prompt],
+      buildArgs: ({ employee, prompt, resume, attachments }: StartParams) => {
+        const images = (attachments ?? []).filter((a) => isSafeInlineImageMime(a.mimeType));
+        const otherFiles = (attachments ?? []).filter((a) => !isSafeInlineImageMime(a.mimeType));
+
+        let finalPrompt = prompt.trim();
+        if (otherFiles.length > 0) {
+          const lines = otherFiles.map((f) => `- ${f.name} (${f.mimeType}): ${f.path}`);
+          const notes = `Attached files:\n${lines.join("\n")}`;
+          finalPrompt = finalPrompt ? `${finalPrompt}\n\n${notes}` : notes;
+        }
+        if (images.length > 0 && !finalPrompt) {
+          finalPrompt = "Please inspect the attached image(s).";
+        }
+
+        const imageFlags = images.flatMap((img) => ["-i", img.path]);
+
+        return resume
+          ? ["exec", "resume", resume, "--json", ...imageFlags, finalPrompt]
+          : [
+              "exec",
+              "--json",
+              "--cd",
+              employee.workingDirectory,
+              "--skip-git-repo-check",
+              ...imageFlags,
+              finalPrompt,
+            ];
+      },
       createParser: createCodexParser,
     };
     super(spec, spawnFn, killGraceMs);

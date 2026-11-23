@@ -9,6 +9,7 @@ import {
   type CliProviderSpec,
   type SpawnFunction,
 } from "../cli-jsonl-adapter.ts";
+import { extractTokenUsage } from "../usage-parser.ts";
 
 function stringifyValue(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
@@ -52,6 +53,15 @@ function createOpenCodeParser(sink: AgentSink): CliLineParser {
         return;
       }
 
+      if (type === "reasoning") {
+        const part = asRecord(event.part);
+        const text = asString(part?.text) ?? asString(event.text);
+        if (text !== undefined && text.trim() !== "") {
+          sink.onMessage({ kind: "thinking", content: text.trim() });
+        }
+        return;
+      }
+
       if (type === "tool_use") {
         const part = asRecord(event.part);
         if (!part) return;
@@ -88,6 +98,13 @@ function createOpenCodeParser(sink: AgentSink): CliLineParser {
         return;
       }
 
+      if (type === "step_finish") {
+        const part = asRecord(event.part);
+        const tokens = (part ? extractTokenUsage(part) : null) ?? extractTokenUsage(event);
+        if (tokens) sink.onUsage?.({ tokens });
+        return;
+      }
+
       if (type === "error") {
         sink.onFailed(extractOpenCodeError(event));
       }
@@ -115,10 +132,16 @@ export class OpenCodeAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "OpenCode",
       command,
-      buildArgs: ({ prompt, resume }: StartParams) =>
-        resume
-          ? ["run", "--format", "json", "--session", resume, prompt]
-          : ["run", "--format", "json", prompt],
+      buildArgs: ({ prompt, resume, attachments }: StartParams) => {
+        const fileFlags = (attachments ?? []).flatMap((a) => ["--file", a.path]);
+        const trimmedPrompt = prompt.trim();
+        const finalPrompt =
+          trimmedPrompt || (fileFlags.length > 0 ? "Please inspect the attached file(s)." : trimmedPrompt);
+
+        return resume
+          ? ["run", "--format", "json", "--session", resume, ...fileFlags, finalPrompt]
+          : ["run", "--format", "json", ...fileFlags, finalPrompt];
+      },
       createParser: createOpenCodeParser,
     };
     super(spec, spawnFn, killGraceMs);

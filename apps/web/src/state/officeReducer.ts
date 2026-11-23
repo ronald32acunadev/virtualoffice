@@ -2,7 +2,10 @@ import type {
   ApprovalRequest,
   Boss,
   Employee,
+  MediaPlaybackState,
+  MediaPreset,
   Message,
+  Project,
   ServerEvent,
   StateSnapshot,
 } from "../api/types";
@@ -12,14 +15,19 @@ export type ConnectionState = "connecting" | "online" | "offline";
 export type OfficeState = {
   bosses: Boss[];
   employees: Employee[];
+  projects: Project[];
   /** Pending approvals only. */
   approvals: ApprovalRequest[];
   messages: Record<string, Message[]>;
   /** Live streaming text per employee, not persisted. */
   liveText: Record<string, string>;
+  /** Employee ids whose embedded terminal is alive. */
+  activeTerminals: string[];
   selectedId: string | null;
   connection: ConnectionState;
   loaded: boolean;
+  media: MediaPlaybackState | null;
+  mediaPresets: MediaPreset[];
 };
 
 export type OfficeAction =
@@ -32,12 +40,16 @@ export type OfficeAction =
 export const initialOfficeState: OfficeState = {
   bosses: [],
   employees: [],
+  projects: [],
   approvals: [],
   messages: {},
   liveText: {},
+  activeTerminals: [],
   selectedId: null,
   connection: "connecting",
   loaded: false,
+  media: null,
+  mediaPresets: [],
 };
 
 function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
@@ -68,6 +80,8 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
 
 function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
   switch (event.type) {
+    case "boss_updated":
+      return { ...state, bosses: upsertById(state.bosses, event.boss) };
     case "employee_updated":
       return { ...state, employees: upsertById(state.employees, event.employee) };
     case "message_added": {
@@ -99,6 +113,32 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
       }
       return { ...state, approvals: state.approvals.filter((entry) => entry.id !== approval.id) };
     }
+    case "terminal_updated": {
+      const { employeeId, active } = event;
+      if (!active) {
+        return { ...state, activeTerminals: state.activeTerminals.filter((id) => id !== employeeId) };
+      }
+      if (state.activeTerminals.includes(employeeId)) return state;
+      return { ...state, activeTerminals: [...state.activeTerminals, employeeId] };
+    }
+    case "employee_removed": {
+      const { employeeId } = event;
+      return {
+        ...state,
+        employees: state.employees.filter((e) => e.id !== employeeId),
+        approvals: state.approvals.filter((a) => a.employeeId !== employeeId),
+        messages: withoutKey(state.messages, employeeId),
+        liveText: withoutKey(state.liveText, employeeId),
+        activeTerminals: state.activeTerminals.filter((id) => id !== employeeId),
+        selectedId: state.selectedId === employeeId ? null : state.selectedId,
+      };
+    }
+    case "projects_updated":
+      return { ...state, projects: event.projects };
+    case "media_updated":
+      return { ...state, media: event.media };
+    case "media_presets_updated":
+      return { ...state, mediaPresets: event.presets };
   }
 }
 
@@ -112,11 +152,15 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
         ...state,
         bosses: snapshot.bosses,
         employees: snapshot.employees,
+        projects: snapshot.projects ?? [],
         approvals: snapshot.approvals.filter((approval) => approval.status === "pending"),
         // Partial streaming text is lost across a reconnect; stored messages replace it.
         liveText: {},
+        activeTerminals: snapshot.activeTerminals ?? [],
         selectedId: selectedStillExists ? state.selectedId : null,
         loaded: true,
+        media: snapshot.media ?? null,
+        mediaPresets: snapshot.mediaPresets ?? [],
       };
     }
     case "messages_loaded":

@@ -3,6 +3,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { SqliteOfficeRepository } from "../../src/persistence/sqlite/sqlite-office-repository.ts";
+import type { MediaPlaybackState, MediaPreset } from "../../src/office/domain/types.ts";
 import { createHarness, makeTempDir } from "../helpers/harness.ts";
 
 const tempDirs: string[] = [];
@@ -73,5 +74,99 @@ describe("US-03 / AC-02 role column", () => {
     expect(second.getEmployee("e1")?.role).toBe("review-risk");
     expect(second.getEmployee("e2")?.role).toBeNull();
     second.close();
+  });
+});
+
+describe("US-01 / AC-01 job_title column", () => {
+  it("adds a nullable job_title column to an older database, keeps rows, and persists a job title", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+    expect(first.getEmployee("e1")?.jobTitle).toBeNull();
+    const e1 = first.getEmployee("e1")!;
+    first.updateEmployee({ ...e1, jobTitle: "Architect" });
+    first.close();
+    const second = new SqliteOfficeRepository(file);
+    expect(second.getEmployee("e1")?.jobTitle).toBe("Architect");
+    expect(second.getEmployee("e2")?.jobTitle).toBeNull();
+    second.close();
+  });
+});
+
+describe("US-02 / AC-01 media tables", () => {
+  it("creates media tables, preserves employees, persists state and presets across reopen, orders presets newest first, and supports deletion and clearing", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+
+    expect(first.getEmployee("e1")).not.toBeNull();
+    expect(first.getEmployee("e2")).not.toBeNull();
+
+    const state: MediaPlaybackState = {
+      provider: "spotify",
+      mediaKind: "audio",
+      sourceUrl: "https://open.spotify.com/track/abc",
+      embedUrl: "https://open.spotify.com/embed/track/abc",
+      title: "Track A",
+      thumbnailUrl: "https://i.scdn.co/image/abc",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+    };
+    first.setMediaState(state);
+    expect(first.getMediaState()).toEqual(state);
+
+    const preset1: MediaPreset = {
+      id: "p1",
+      provider: "youtube_music",
+      mediaKind: "video",
+      sourceUrl: "https://music.youtube.com/watch?v=1",
+      embedUrl: "https://music.youtube.com/embed/1",
+      title: "Preset 1",
+      thumbnailUrl: null,
+      createdAt: "2025-01-01T00:00:00.000Z",
+    };
+    const preset2: MediaPreset = {
+      id: "p2",
+      provider: "apple_music",
+      mediaKind: "audio",
+      sourceUrl: "https://music.apple.com/track/2",
+      embedUrl: "https://music.apple.com/embed/track/2",
+      title: "Preset 2",
+      thumbnailUrl: "https://is1-ssl.mzstatic.com/image/2",
+      createdAt: "2025-01-02T00:00:00.000Z",
+    };
+    first.insertMediaPreset(preset1);
+    first.insertMediaPreset(preset2);
+
+    let presets = first.listMediaPresets();
+    expect(presets).toHaveLength(2);
+    expect(presets[0]!.id).toBe("p2");
+    expect(presets[1]!.id).toBe("p1");
+
+    first.close();
+
+    const second = new SqliteOfficeRepository(file);
+    expect(second.getEmployee("e1")).not.toBeNull();
+    expect(second.getEmployee("e2")).not.toBeNull();
+    expect(second.getMediaState()).toEqual(state);
+
+    presets = second.listMediaPresets();
+    expect(presets).toHaveLength(2);
+    expect(presets[0]!.id).toBe("p2");
+    expect(presets[1]!.id).toBe("p1");
+
+    second.deleteMediaPreset("p1");
+    presets = second.listMediaPresets();
+    expect(presets).toHaveLength(1);
+    expect(presets[0]!.id).toBe("p2");
+
+    second.setMediaState(null);
+    expect(second.getMediaState()).toBeNull();
+
+    second.close();
+
+    const third = new SqliteOfficeRepository(file);
+    expect(third.getMediaState()).toBeNull();
+    presets = third.listMediaPresets();
+    expect(presets).toHaveLength(1);
+    expect(presets[0]!.id).toBe("p2");
+    third.close();
   });
 });

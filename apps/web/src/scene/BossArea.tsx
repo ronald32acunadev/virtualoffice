@@ -6,6 +6,7 @@ import type { Boss, EmployeeStatus } from "../api/types";
 import { AREA_CENTERS, AREA_COLORS, AREA_SIZE, bossDeskPosition } from "./layout";
 import { MONITOR_VISUALS, type LightingMood } from "./officeTheme";
 import { createRugTexture, createScreenTexture } from "./textures";
+import { formatResetCountdown } from "../state/usage";
 
 export type DeskProps = {
   position: [number, number, number];
@@ -373,6 +374,7 @@ export function BossArea({
         color={dim ? "#7d8087" : "#b98a5a"}
         width={2.6}
         isBoss
+        status={boss.onBreak && !dim ? "on_break" : undefined}
         dim={dim}
         accentColor={color}
         lampOn={mood === "evening" && !dim}
@@ -383,9 +385,16 @@ export function BossArea({
 
       {/* Readable department nameplate */}
       <Html position={[desk[0], 2.55, desk[2]]} center distanceFactor={14} zIndexRange={[10, 0]}>
-        <div className={`boss-label${dim ? " boss-label-dim" : ""}`}>
+        <div className={`boss-label${dim ? " boss-label-dim" : boss.onBreak ? " boss-label-break" : ""}`}>
           <strong>{boss.name}</strong>
-          {dim ? <span>Not installed</span> : null}
+          {dim ? (
+            <span>Not installed</span>
+          ) : boss.onBreak ? (
+            <span>
+              ☕ On break
+              {formatResetCountdown(boss.breakUntil) ? ` · ${formatResetCountdown(boss.breakUntil)}` : ""}
+            </span>
+          ) : null}
         </div>
       </Html>
       {speechText && !dim ? (

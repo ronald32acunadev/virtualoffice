@@ -1,23 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../api/client";
-import { readSavedMood, saveMood } from "../scene/camera";
 import { readSavedChatter, saveChatter } from "../scene/officeQuotes";
 import { OfficeScene } from "../scene/OfficeScene";
 import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
+import { useOfficeMood } from "../state/officeMood";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
 import { RoleBadge } from "../ui/RoleBadge";
+import { truncateMediaTitle } from "../state/media";
+import { MediaDrawer } from "./MediaDrawer";
 
 export function OfficeView() {
   const { state, actions } = useOffice();
+  const officeViewRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
-  const [mood, setMood] = useState<LightingMood>(() => readSavedMood());
+  const { mood, toggleMood } = useOfficeMood();
   const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [focusTvToken, setFocusTvToken] = useState(0);
 
   useEffect(() => {
     const channel = openWindowChannel();
@@ -48,14 +53,6 @@ export function OfficeView() {
     setCardId(null);
   }, [actions]);
 
-  const toggleMood = useCallback(() => {
-    setMood((prev) => {
-      const next: LightingMood = prev === "day" ? "evening" : "day";
-      saveMood(next);
-      return next;
-    });
-  }, []);
-
   const toggleChatter = useCallback(() => {
     setChatterEnabled((prev) => {
       const next = !prev;
@@ -67,6 +64,18 @@ export function OfficeView() {
   const resetView = useCallback(() => {
     setResetToken((n) => n + 1);
   }, []);
+  const focusTv = useCallback(() => {
+    setFocusTvToken((n) => n + 1);
+  }, []);
+  const openMediaDrawer = useCallback(() => {
+    setMediaOpen(true);
+  }, []);
+  const toggleMediaDrawer = useCallback(() => {
+    setMediaOpen((v) => !v);
+  }, []);
+  const turnOffMedia = useCallback(() => {
+    void actions.clearMediaPlayback().catch(() => {});
+  }, [actions]);
 
   const oldestApproval = useMemo(
     () =>
@@ -81,7 +90,7 @@ export function OfficeView() {
   };
 
   return (
-    <div className="office-view">
+    <div className="office-view" ref={officeViewRef}>
       <SceneErrorBoundary>
         <OfficeScene
           onSelectEmployee={(id) => void focusEmployee(id)}
@@ -89,6 +98,11 @@ export function OfficeView() {
           mood={mood}
           resetToken={resetToken}
           chatterEnabled={chatterEnabled}
+          focusTvToken={focusTvToken}
+          onOpenMediaDrawer={openMediaDrawer}
+          onFocusTv={focusTv}
+          onTurnOffMedia={turnOffMedia}
+          tvPortalRef={officeViewRef}
         />
       </SceneErrorBoundary>
       <div className="office-hud" role="toolbar" aria-label="Office view controls">
@@ -118,6 +132,26 @@ export function OfficeView() {
         >
           {chatterEnabled ? "💬 Quotes" : "🔇 Muted"}
         </button>
+        <button
+          type="button"
+          className="hud-btn hud-btn-media"
+          aria-pressed={mediaOpen}
+          onClick={toggleMediaDrawer}
+          title="Open Office TV & Music selector"
+        >
+          <span className={state.media ? "hud-media-dot is-live" : "hud-media-dot"} aria-hidden="true" />
+          {state.media ? `TV: ${truncateMediaTitle(state.media.title, 22)}` : "TV / Music"}
+        </button>
+        {state.media ? (
+          <button
+            type="button"
+            className="hud-btn"
+            onClick={focusTv}
+            title="Focus camera on the Office TV"
+          >
+            Focus TV
+          </button>
+        ) : null}
       </div>
       <div className={`connection connection-${state.connection}`}>
         {state.connection === "online"
@@ -147,13 +181,35 @@ export function OfficeView() {
             </button>
           </div>
           <span className={`status status-${card.status}`}>{card.status.replace("_", " ")}</span>
+          {card.jobTitle ? <span className="job-title-badge">{card.jobTitle}</span> : null}
           <RoleBadge role={card.role} />
+          {card.status === "on_break" && card.failureReason ? (
+            <p className="muted">☕ {card.failureReason}</p>
+          ) : null}
           <p className="muted">{card.task}</p>
-          <button type="button" onClick={() => openWorkspace(card.id)}>
-            Open in workspace
-          </button>
+          <div className="actions">
+            <button type="button" onClick={() => openWorkspace(card.id)}>
+              Open in workspace
+            </button>
+            {card.status === "on_break" ? (
+              <button type="button" className="break-resume-btn" onClick={() => void actions.resumeBoss(card.bossId)}>
+                Resume break
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
+      <MediaDrawer
+        open={mediaOpen}
+        media={state.media}
+        presets={state.mediaPresets}
+        onClose={() => setMediaOpen(false)}
+        onFocusTv={focusTv}
+        onPlay={actions.setMediaPlayback}
+        onTurnOff={actions.clearMediaPlayback}
+        onSavePreset={actions.addMediaPreset}
+        onDeletePreset={actions.deleteMediaPreset}
+      />
     </div>
   );
 }

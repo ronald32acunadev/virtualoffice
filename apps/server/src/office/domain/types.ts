@@ -1,11 +1,55 @@
+import type { MediaKind, MediaPlaybackState, MediaPreset, MediaProvider } from "./media.ts";
+
+export type { MediaKind, MediaPlaybackState, MediaPreset, MediaProvider };
+
+export type MessageAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+export type StoredAttachment = MessageAttachment & {
+  path: string;
+};
+
 export type BossId = "claude" | "codex" | "opencode" | "gemini";
-export type Boss = { id: BossId; name: string; available: boolean };
+
+export type BossUsage = {
+  remainingPercent: number | null;
+  utilizationPercent: number | null;
+  resetsAt: string | null;
+  windowLabel: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  updatedAt: string | null;
+};
+
+export type EmployeeUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  contextUsed: number | null;
+  contextWindow: number | null;
+  costUsd: number | null;
+  updatedAt: string | null;
+};
+
+export type Boss = {
+  id: BossId;
+  name: string;
+  available: boolean;
+  usage?: BossUsage;
+  onBreak?: boolean;
+  breakUntil?: string | null;
+  breakReason?: string | null;
+};
 
 export type EmployeeStatus =
   | "starting"
   | "working"
   | "waiting_approval"
   | "idle"
+  | "on_break"
   | "stopped"
   | "failed";
 
@@ -17,6 +61,7 @@ export function isSpecies(value: unknown): value is Species {
 }
 
 export const MAX_NAME_LENGTH = 40;
+export const MAX_JOB_TITLE_LENGTH = 60;
 
 export type Employee = {
   id: string;
@@ -29,14 +74,17 @@ export type Employee = {
   importedAt: string | null;
   /** Agent name the employee runs as (provider `agent` option); null means General. */
   role: string | null;
+  /** Human-facing position / cargo assigned by the owner (provider-agnostic). */
+  jobTitle: string | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
+  usage?: EmployeeUsage;
   createdAt: string;
   updatedAt: string;
 };
 
-export type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "system";
+export type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "thinking" | "system";
 export type Message = {
   id: string;
   employeeId: string;
@@ -48,6 +96,7 @@ export type Message = {
   createdAt: string;
   /** Provider message uuid (imports and catch-up dedupe); null for entries the provider never numbered. */
   sourceUuid: string | null;
+  attachments?: MessageAttachment[];
 };
 
 export type SlashCommand = {
@@ -77,6 +126,29 @@ export type ClaudeSessionSummary = {
 
 export type ImportSkipReason = "already_imported" | "missing_cwd" | "not_found" | "read_failed";
 
+export type Project = {
+  path: string;
+  name: string;
+  providers: BossId[];
+  lastSeenAt: string;
+};
+
+export type ProviderSyncStats = {
+  projectsAdded: number;
+  sessionsImported: number;
+  sessionsRemoved?: number;
+  skipped: number;
+  error: string | null;
+};
+
+export type SyncSummary = {
+  projectsAdded: number;
+  sessionsImported: number;
+  sessionsRemoved?: number;
+  skipped: number;
+  providers: Partial<Record<BossId, ProviderSyncStats>>;
+};
+
 export type ApprovalKind = "permission" | "question" | "plan";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 export type Decision = "approve" | "approve_for_session" | "reject";
@@ -96,11 +168,17 @@ export type ApprovalRequest = {
 };
 
 export type ServerEvent =
+  | { type: "boss_updated"; boss: Boss }
   | { type: "employee_updated"; employee: Employee }
+  | { type: "employee_removed"; employeeId: string }
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
-  | { type: "approval_updated"; approval: ApprovalRequest };
+  | { type: "approval_updated"; approval: ApprovalRequest }
+  | { type: "terminal_updated"; employeeId: string; active: boolean }
+  | { type: "projects_updated"; projects: Project[] }
+  | { type: "media_updated"; media: MediaPlaybackState | null }
+  | { type: "media_presets_updated"; presets: MediaPreset[] };
 
 export const BOSSES: readonly Boss[] = [
   { id: "claude", name: "Claude", available: true },
@@ -128,9 +206,11 @@ export class OfficeError extends Error {
       | "validation_error"
       | "not_found"
       | "boss_unavailable"
+      | "provider_on_break"
       | "approval_not_pending"
       | "working_directory_missing"
-      | "catalog_unavailable",
+      | "catalog_unavailable"
+      | "terminal_active",
     message: string,
     readonly field?: string,
   ) {

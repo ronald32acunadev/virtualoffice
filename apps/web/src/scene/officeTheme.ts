@@ -96,6 +96,12 @@ export const MONITOR_VISUALS: Record<EmployeeStatus, MonitorVisual> = {
     emissiveIntensity: 0.38,
     accent: "#a8cef5",
   },
+  on_break: {
+    screen: "#2b2118",
+    emissive: "#d9924a",
+    emissiveIntensity: 0.3,
+    accent: "#f4c892",
+  },
   starting: {
     screen: "#1b2840",
     emissive: "#8fb8ff",
@@ -165,8 +171,14 @@ export const PROP_PLACEMENTS: readonly PropPlacement[] = [
     variant: 0,
   },
 
-  // Large whiteboard mounted on the back wall center pier
-  { id: "whiteboard-main", kind: "whiteboard", position: [0, 0, -14.5], radius: 0.45 },
+  // Large whiteboard mounted on the left wall Pier 2
+  {
+    id: "whiteboard-main",
+    kind: "whiteboard",
+    position: [-14.55, 0, -5.5],
+    rotationY: Math.PI / 2,
+    radius: 0.45,
+  },
 
   // Cozy coffee bar & water cooler along the left wall walkway
   {
@@ -178,12 +190,12 @@ export const PROP_PLACEMENTS: readonly PropPlacement[] = [
   },
   { id: "water-cooler", kind: "water_cooler", position: [-13.8, 0, -2.5], radius: 0.55 },
 
-  // Framed minimalist art on the left wall
+  // Framed minimalist art on the back wall Pier 1
   {
     id: "wall-art-north",
     kind: "wall_art",
-    position: [-14.65, 0, -5.5],
-    rotationY: Math.PI / 2,
+    position: [-12.6, 0, -14.65],
+    rotationY: 0,
     radius: 0.3,
     variant: 0,
   },

@@ -1,9 +1,12 @@
+import type { LightingMood } from "../scene/officeTheme";
+
 export const CHANNEL_NAME = "virtual-office";
 
 export type WindowMessage =
   | { type: "focus_employee"; employeeId: string }
   | { type: "workspace_ping" }
-  | { type: "workspace_pong" };
+  | { type: "workspace_pong" }
+  | { type: "mood_changed"; mood: LightingMood };
 
 /** The subset of BroadcastChannel used here, so tests can inject a fake. */
 export type ChannelLike = {
@@ -23,6 +26,12 @@ export function parseWindowMessage(data: unknown): WindowMessage | null {
     record["employeeId"] !== ""
   ) {
     return { type: "focus_employee", employeeId: record["employeeId"] };
+  }
+  if (
+    record["type"] === "mood_changed" &&
+    (record["mood"] === "day" || record["mood"] === "evening")
+  ) {
+    return { type: "mood_changed", mood: record["mood"] };
   }
   return null;
 }

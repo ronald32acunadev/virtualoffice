@@ -1,7 +1,10 @@
 import { getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKSessionInfo, SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import type { AgentMessage } from "../../office/ports/agent-adapter.ts";
-import type { SessionCatalog, SessionInfo } from "../../office/ports/session-catalog.ts";
+import type { DiscoveredProject, SessionCatalog, SessionInfo } from "../../office/ports/session-catalog.ts";
 import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 
 export type ListSessionsFunction = () => Promise<SDKSessionInfo[]>;
@@ -16,6 +19,7 @@ export class ClaudeSessionCatalog implements SessionCatalog {
   constructor(
     private readonly listFn: ListSessionsFunction = () => listSessions(),
     private readonly messagesFn: GetSessionMessagesFunction = (sessionId) => getSessionMessages(sessionId),
+    private readonly projectsDir: string = path.join(os.homedir(), ".claude", "projects"),
   ) {}
 
   async list(): Promise<SessionInfo[]> {
@@ -30,6 +34,29 @@ export class ClaudeSessionCatalog implements SessionCatalog {
     }));
   }
 
+  async listProjects(): Promise<DiscoveredProject[]> {
+    try {
+      const sessions = await this.list();
+      const projectMap = new Map<string, DiscoveredProject>();
+      for (const s of sessions) {
+        if (!s.cwd) continue;
+        const resolved = path.resolve(s.cwd);
+        const name = path.basename(resolved) || resolved;
+        const existing = projectMap.get(resolved);
+        if (!existing || s.lastModified > existing.lastModified) {
+          projectMap.set(resolved, {
+            path: resolved,
+            name,
+            lastModified: s.lastModified,
+          });
+        }
+      }
+      return Array.from(projectMap.values()).sort((a, b) => b.lastModified - a.lastModified);
+    } catch {
+      return [];
+    }
+  }
+
   async history(sessionId: string): Promise<AgentMessage[]> {
     const stored = await this.messagesFn(sessionId);
     const out: AgentMessage[] = [];
@@ -40,5 +67,30 @@ export class ClaudeSessionCatalog implements SessionCatalog {
       else if (entry.type === "user") out.push(...mapUserContent(content, ctx, { includeUserText: true }));
     }
     return out;
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    if (!sessionId || !/^[A-Za-z0-9._-]+$/.test(sessionId)) {
+      return false;
+    }
+    try {
+      const resolvedProjectsDir = path.resolve(this.projectsDir);
+      const expectedPrefix = resolvedProjectsDir + path.sep;
+      // Search <projectsDir>/*/${sessionId}.jsonl
+      if (!fs.existsSync(resolvedProjectsDir)) return false;
+      const entries = fs.readdirSync(resolvedProjectsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const candidate = path.resolve(resolvedProjectsDir, entry.name, `${sessionId}.jsonl`);
+          if (candidate.startsWith(expectedPrefix) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            fs.unlinkSync(candidate);
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 }

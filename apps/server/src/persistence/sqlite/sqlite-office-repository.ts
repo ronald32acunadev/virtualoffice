@@ -5,12 +5,18 @@ import type {
   Employee,
   EmployeeStatus,
   Message,
+  MessageAttachment,
   BossId,
   MessageKind,
   ApprovalKind,
   ApprovalStatus,
   Decision,
   Species,
+  Project,
+  MediaKind,
+  MediaPlaybackState,
+  MediaPreset,
+  MediaProvider,
 } from "../../office/domain/types.ts";
 
 type Row = Record<string, unknown>;
@@ -42,7 +48,8 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_use_id TEXT,
   parent_tool_use_id TEXT,
   created_at TEXT NOT NULL,
-  source_uuid TEXT
+  source_uuid TEXT,
+  attachments TEXT
 );
 CREATE INDEX IF NOT EXISTS messages_employee ON messages (employee_id, seq);
 CREATE TABLE IF NOT EXISTS approvals (
@@ -60,6 +67,33 @@ CREATE TABLE IF NOT EXISTS approvals (
   created_at TEXT NOT NULL,
   decided_at TEXT
 );
+CREATE TABLE IF NOT EXISTS projects (
+  path TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  providers TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_state (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  media_kind TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  embed_url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail_url TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_presets (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  provider TEXT NOT NULL,
+  media_kind TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  embed_url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail_url TEXT,
+  created_at TEXT NOT NULL
+);
 `;
 
 /** Columns added after the MVP schema; `CREATE TABLE IF NOT EXISTS` never adds them to an existing table. */
@@ -68,7 +102,9 @@ const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   { table: "employees", column: "species", type: "TEXT" },
   { table: "employees", column: "imported_at", type: "TEXT" },
   { table: "employees", column: "role", type: "TEXT" },
+  { table: "employees", column: "job_title", type: "TEXT" },
   { table: "messages", column: "source_uuid", type: "TEXT" },
+  { table: "messages", column: "attachments", type: "TEXT" },
 ];
 
 const str = (value: unknown): string => String(value);
@@ -85,6 +121,7 @@ function toEmployee(row: Row): Employee {
     species: (nullableStr(row.species) ?? "human") as Species,
     importedAt: nullableStr(row.imported_at),
     role: nullableStr(row.role),
+    jobTitle: nullableStr(row.job_title),
     providerSessionId: nullableStr(row.provider_session_id),
     status: str(row.status) as EmployeeStatus,
     failureReason: nullableStr(row.failure_reason),
@@ -94,6 +131,16 @@ function toEmployee(row: Row): Employee {
 }
 
 function toMessage(row: Row): Message {
+  const attStr = nullableStr(row.attachments);
+  let attachments: MessageAttachment[] | undefined;
+  if (attStr) {
+    try {
+      const parsed = JSON.parse(attStr) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        attachments = parsed as MessageAttachment[];
+      }
+    } catch {}
+  }
   return {
     id: str(row.id),
     employeeId: str(row.employee_id),
@@ -104,6 +151,7 @@ function toMessage(row: Row): Message {
     parentToolUseId: nullableStr(row.parent_tool_use_id),
     createdAt: str(row.created_at),
     sourceUuid: nullableStr(row.source_uuid),
+    ...(attachments ? { attachments } : {}),
   };
 }
 
@@ -125,11 +173,45 @@ function toApproval(row: Row): ApprovalRequest {
   };
 }
 
+function toProject(row: Row): Project {
+  return {
+    path: str(row.path),
+    name: str(row.name),
+    providers: JSON.parse(str(row.providers)) as BossId[],
+    lastSeenAt: str(row.last_seen_at),
+  };
+}
+
+function toMediaPlaybackState(row: Row): MediaPlaybackState {
+  return {
+    provider: str(row.provider) as MediaProvider,
+    mediaKind: str(row.media_kind) as MediaKind,
+    sourceUrl: str(row.source_url),
+    embedUrl: str(row.embed_url),
+    title: str(row.title),
+    thumbnailUrl: nullableStr(row.thumbnail_url),
+    updatedAt: str(row.updated_at),
+  };
+}
+
+function toMediaPreset(row: Row): MediaPreset {
+  return {
+    id: str(row.id),
+    provider: str(row.provider) as MediaProvider,
+    mediaKind: str(row.media_kind) as MediaKind,
+    sourceUrl: str(row.source_url),
+    embedUrl: str(row.embed_url),
+    title: str(row.title),
+    thumbnailUrl: nullableStr(row.thumbnail_url),
+    createdAt: str(row.created_at),
+  };
+}
+
 export class SqliteOfficeRepository implements OfficeRepository {
   private readonly db: DatabaseSync;
 
-  constructor(path: string) {
-    this.db = new DatabaseSync(path);
+  constructor(dbOrPath: DatabaseSync | string) {
+    this.db = typeof dbOrPath === "string" ? new DatabaseSync(dbOrPath) : dbOrPath;
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(SCHEMA);
     this.migrate();
@@ -148,8 +230,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertEmployee(e: Employee): void {
     this.db
       .prepare(
-        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
+        `INSERT INTO employees (id, boss_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
       )
       .run(
         e.id,
@@ -166,6 +248,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.species,
         e.importedAt,
         e.role,
+        e.jobTitle,
       );
   }
 
@@ -173,7 +256,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
     this.db
       .prepare(
         `UPDATE employees SET boss_id = ?, hired_by = ?, task = ?, working_directory = ?, provider_session_id = ?,
-         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ? WHERE id = ?`,
+         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ? WHERE id = ?`,
       )
       .run(
         e.bossId,
@@ -188,6 +271,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.species,
         e.importedAt,
         e.role,
+        e.jobTitle,
         e.id,
       );
   }
@@ -201,13 +285,31 @@ export class SqliteOfficeRepository implements OfficeRepository {
     return this.db.prepare("SELECT * FROM employees ORDER BY seq").all().map(toEmployee);
   }
 
+  deleteEmployee(employeeId: string): boolean {
+    this.db.prepare("DELETE FROM approvals WHERE employee_id = ?").run(employeeId);
+    this.db.prepare("DELETE FROM messages WHERE employee_id = ?").run(employeeId);
+    const result = this.db.prepare("DELETE FROM employees WHERE id = ?").run(employeeId);
+    return Number(result.changes) > 0;
+  }
+
   insertMessage(m: Message): void {
     this.db
       .prepare(
-        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at, source_uuid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at, source_uuid, attachments)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(m.id, m.employeeId, m.kind, m.content, m.toolName, m.toolUseId, m.parentToolUseId, m.createdAt, m.sourceUuid);
+      .run(
+        m.id,
+        m.employeeId,
+        m.kind,
+        m.content,
+        m.toolName,
+        m.toolUseId,
+        m.parentToolUseId,
+        m.createdAt,
+        m.sourceUuid,
+        m.attachments && m.attachments.length > 0 ? JSON.stringify(m.attachments) : null,
+      );
   }
 
   listMessages(employeeId: string): Message[] {
@@ -216,6 +318,25 @@ export class SqliteOfficeRepository implements OfficeRepository {
 
   setMessageSourceUuid(messageId: string, sourceUuid: string): void {
     this.db.prepare("UPDATE messages SET source_uuid = ? WHERE id = ?").run(sourceUuid, messageId);
+  }
+
+  findAttachment(id: string): { employeeId: string; attachment: MessageAttachment } | null {
+    const rows = this.db.prepare("SELECT employee_id, attachments FROM messages WHERE attachments IS NOT NULL").all() as Row[];
+    for (const row of rows) {
+      const attStr = nullableStr(row.attachments);
+      if (!attStr) continue;
+      try {
+        const parsed = JSON.parse(attStr) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const att of parsed) {
+            if (typeof att === "object" && att !== null && (att as MessageAttachment).id === id) {
+              return { employeeId: str(row.employee_id), attachment: att as MessageAttachment };
+            }
+          }
+        }
+      } catch {}
+    }
+    return null;
   }
 
   insertApproval(a: ApprovalRequest): void {
@@ -260,6 +381,65 @@ export class SqliteOfficeRepository implements OfficeRepository {
       .prepare("UPDATE approvals SET status = 'expired', decided_at = ? WHERE status = 'pending'")
       .run(decidedAt);
     return Number(result.changes);
+  }
+
+  upsertProject(p: Project): void {
+    this.db
+      .prepare(
+        "INSERT INTO projects (path, name, providers, last_seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET name = excluded.name, providers = excluded.providers, last_seen_at = excluded.last_seen_at",
+      )
+      .run(p.path, p.name, JSON.stringify(p.providers), p.lastSeenAt);
+  }
+
+  listProjects(): Project[] {
+    const rows = this.db.prepare("SELECT * FROM projects ORDER BY last_seen_at DESC, path ASC").all() as Row[];
+    return rows.map((row) => toProject(row));
+  }
+
+  getMediaState(): MediaPlaybackState | null {
+    const row = this.db.prepare("SELECT * FROM media_state WHERE id = 'office_tv'").get() as Row | undefined;
+    if (row === undefined) return null;
+    return toMediaPlaybackState(row);
+  }
+
+  setMediaState(state: MediaPlaybackState | null): void {
+    if (state === null) {
+      this.db.prepare("DELETE FROM media_state WHERE id = 'office_tv'").run();
+      return;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO media_state (id, provider, media_kind, source_url, embed_url, title, thumbnail_url, updated_at)
+         VALUES ('office_tv', ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           provider = excluded.provider,
+           media_kind = excluded.media_kind,
+           source_url = excluded.source_url,
+           embed_url = excluded.embed_url,
+           title = excluded.title,
+           thumbnail_url = excluded.thumbnail_url,
+           updated_at = excluded.updated_at`,
+      )
+      .run(state.provider, state.mediaKind, state.sourceUrl, state.embedUrl, state.title, state.thumbnailUrl, state.updatedAt);
+  }
+
+  insertMediaPreset(preset: MediaPreset): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_presets (id, provider, media_kind, source_url, embed_url, title, thumbnail_url, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(preset.id, preset.provider, preset.mediaKind, preset.sourceUrl, preset.embedUrl, preset.title, preset.thumbnailUrl, preset.createdAt);
+  }
+
+  listMediaPresets(): MediaPreset[] {
+    const rows = this.db.prepare("SELECT * FROM media_presets ORDER BY created_at DESC, seq DESC").all() as Row[];
+    return rows.map((row) => toMediaPreset(row));
+  }
+
+  deleteMediaPreset(id: string): boolean {
+    const result = this.db.prepare("DELETE FROM media_presets WHERE id = ?").run(id);
+    return Number(result.changes) > 0;
   }
 
   close(): void {

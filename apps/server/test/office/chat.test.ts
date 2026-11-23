@@ -67,8 +67,8 @@ describe("US-03 chat with an employee", () => {
 
     expect(h.emitted).toContainEqual({ type: "message_delta", employeeId: employee.id, text: "Hel" });
     const stored = h.office.listMessages(employee.id);
-    expect(stored.map((m) => m.content)).toEqual(["Fix the bug", "Hello"]);
-    expect(stored.every((m) => ["user_text", "agent_text", "tool_call", "tool_result", "system"].includes(m.kind))).toBe(true);
+    expect(stored.map((m) => m.content)).toEqual(["Fix the bug", "hmm", "Hello"]);
+    expect(stored.every((m) => ["user_text", "agent_text", "tool_call", "tool_result", "thinking", "system"].includes(m.kind))).toBe(true);
   });
 
   it("US-03 / AC-05: listing messages again returns the same stored entries without duplicates", async () => {

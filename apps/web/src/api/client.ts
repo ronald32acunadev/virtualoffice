@@ -1,15 +1,18 @@
 import type {
   ApprovalRequest,
+  AttachmentUpload,
   Catalog,
   BossId,
-  ClaudeSessionSummary,
   Decision,
-  ImportResult,
   Employee,
+  MediaPlaybackState,
+  MediaPreset,
+  MediaProvider,
   Message,
   ServerEvent,
   Species,
   StateSnapshot,
+  SyncSummary,
 } from "./types";
 
 const TOKEN_KEY = "virtualoffice.token";
@@ -88,6 +91,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   getState: () => request<StateSnapshot>("GET", "/api/state"),
+  syncProviders: () => request<SyncSummary>("POST", "/api/sync"),
   getMessages: (employeeId: string) =>
     request<{ messages: Message[] }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/messages`),
   createEmployee: (input: {
@@ -97,6 +101,7 @@ export const api = {
     name?: string;
     species?: Species;
     role?: string;
+    jobTitle?: string;
   }) => request<{ employee: Employee }>("POST", "/api/employees", input),
   getFolderCatalog: (workingDirectory: string, refresh = false) => {
     const query = new URLSearchParams({ workingDirectory });
@@ -108,33 +113,40 @@ export const api = {
       "GET",
       `/api/employees/${encodeURIComponent(employeeId)}/catalog${refresh ? "?refresh=true" : ""}`,
     ),
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species }) =>
+  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) =>
     request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
-  listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {
-    const query = new URLSearchParams({
-      limit: String(params.limit),
-      offset: String(params.offset),
-    });
-    if (params.q.trim()) query.set("q", params.q.trim());
-    return request<{ sessions: ClaudeSessionSummary[]; total: number }>(
-      "GET",
-      `/api/imports/claude/sessions?${query.toString()}`,
-    );
-  },
-  importClaudeSessions: (sessionIds: string[]) =>
-    request<ImportResult>("POST", "/api/imports/claude", { sessionIds }),
-  sendMessage: (employeeId: string, text: string) =>
+  sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
       text,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     }),
   stopEmployee: (employeeId: string) =>
     request<{ employee: Employee }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/stop`),
+  deleteEmployee: (employeeId: string) => request<{ deleted: boolean; providerDeleted: boolean }>("DELETE", `/api/employees/${encodeURIComponent(employeeId)}`),
+  resumeBoss: (bossId: BossId) =>
+    request<{ boss: import("./types").Boss }>("POST", `/api/bosses/${encodeURIComponent(bossId)}/resume`),
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) =>
     request<{ approval: ApprovalRequest }>(
       "POST",
       `/api/approvals/${encodeURIComponent(approvalId)}/decision`,
       answers ? { decision, answers } : { decision },
     ),
+
+  getMedia: () =>
+    request<{ media: MediaPlaybackState | null; presets: MediaPreset[] }>("GET", "/api/media"),
+
+  setMediaPlayback: (input: { url: string; provider?: MediaProvider; title?: string }) =>
+    request<{ media: MediaPlaybackState }>("PUT", "/api/media/playback", input),
+
+  clearMediaPlayback: () =>
+    request<{ media: null }>("DELETE", "/api/media/playback"),
+
+  addMediaPreset: (input: { url: string; provider?: MediaProvider; title?: string }) =>
+    request<{ preset: MediaPreset; presets: MediaPreset[] }>("POST", "/api/media/presets", input),
+
+  deleteMediaPreset: (id: string) =>
+    request<{ deleted: boolean; presets: MediaPreset[] }>("DELETE", `/api/media/presets/${encodeURIComponent(id)}`),
+
 };
 
 export type SocketHandlers = {

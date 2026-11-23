@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ApprovalRequest, Employee, Message } from "../api/types";
+import type { ApprovalRequest, Employee, MediaPreset, Message, StateSnapshot } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 const employee = (over: Partial<Employee> = {}): Employee => ({
@@ -12,6 +12,7 @@ const employee = (over: Partial<Employee> = {}): Employee => ({
   species: "fox",
   importedAt: null,
   role: null,
+  jobTitle: null,
   providerSessionId: null,
   status: "working",
   failureReason: null,
@@ -170,5 +171,168 @@ describe("office reducer", () => {
     expect(state.liveText).toEqual({});
     expect(state.selectedId).toBeNull();
     expect(state.loaded).toBe(true);
+  });
+
+  it("US-04 / AC-02: tracks active terminals from the snapshot and events", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [], activeTerminals: ["e1"] },
+    });
+    expect(state.activeTerminals).toEqual(["e1"]);
+
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e2", active: true },
+    });
+    expect(state.activeTerminals).toEqual(["e1", "e2"]);
+
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e2", active: true },
+    });
+    expect(state.activeTerminals).toEqual(["e1", "e2"]);
+  });
+
+  it("US-04 / AC-03: removes a terminal when it ends", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [], activeTerminals: ["e1", "e2"] },
+    });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "terminal_updated", employeeId: "e1", active: false },
+    });
+    expect(state.activeTerminals).toEqual(["e2"]);
+
+    state = apply(state, {
+      type: "state_loaded",
+      snapshot: { bosses: [], employees: [employee()], approvals: [] },
+    });
+    expect(state.activeTerminals).toEqual([]);
+  });
+
+  it("US-04 / AC-03: receives employee_removed and cleans up state properly", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: {
+        bosses: [],
+        employees: [employee({ id: "e1", name: "Ada" }), employee({ id: "e2", name: "Bob" })],
+        approvals: [approval({ employeeId: "e1" }), approval({ employeeId: "e2", id: "a2" })],
+      },
+    });
+    state = apply(state, {
+      type: "messages_loaded",
+      employeeId: "e1",
+      messages: [message({ employeeId: "e1" })],
+    });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "message_delta", employeeId: "e1", text: "live" },
+    });
+    state = apply(state, { type: "select", employeeId: "e1" });
+
+    // Remove e1
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "employee_removed", employeeId: "e1" },
+    });
+
+    expect(state.employees.map((e) => e.id)).toEqual(["e2"]);
+    expect(state.approvals.map((a) => a.id)).toEqual(["a2"]);
+    expect(state.messages["e1"]).toBeUndefined();
+    expect(state.liveText["e1"]).toBeUndefined();
+    expect(state.selectedId).toBeNull();
+
+    // Now select e2 and remove a different employee, selectedId should remain e2
+    state = apply(state, { type: "select", employeeId: "e2" });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "employee_removed", employeeId: "e99" },
+    });
+    expect(state.selectedId).toBe("e2");
+  });
+});
+
+describe("US-02 / AC-06 media state", () => {
+  it("hydrates media and mediaPresets via state_loaded and applies media_updated", () => {
+    const snapshot: StateSnapshot = {
+      bosses: [],
+      employees: [employee({ id: "e1" })],
+      approvals: [approval({ id: "a1" })],
+      media: {
+        provider: "spotify",
+        mediaKind: "audio",
+        sourceUrl: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+        embedUrl: "https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT?utm_source=generator",
+        title: "Test Track",
+        thumbnailUrl: "https://example.com/thumb.jpg",
+        updatedAt: "2025-01-01T00:00:00Z",
+      },
+      mediaPresets: [],
+    };
+
+    const hydrated = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot,
+    });
+    expect(hydrated.media).toEqual(snapshot.media);
+    expect(hydrated.mediaPresets).toEqual([]);
+
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_updated", media: snapshot.media! },
+    });
+
+    expect(state.media).toEqual(snapshot.media);
+  });
+
+  it("applies media_updated with null to clear the playback state", () => {
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_updated", media: null },
+    });
+
+    expect(state.media).toBeNull();
+  });
+
+  it("applies media_presets_updated to replace the preset list", () => {
+    const presets: MediaPreset[] = [
+      {
+        id: "p1",
+        provider: "youtube_music",
+        mediaKind: "video",
+        sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        embedUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        title: "Preset Video",
+        thumbnailUrl: null,
+        createdAt: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "p2",
+        provider: "apple_music",
+        mediaKind: "audio",
+        sourceUrl: "https://music.apple.com/us/album/abbey-road/1441164426",
+        embedUrl: "https://embed.music.apple.com/us/album/abbey-road/1441164426",
+        title: "Preset Audio",
+        thumbnailUrl: "https://example.com/p2-thumb.jpg",
+        createdAt: "2025-01-02T00:00:00Z",
+      },
+    ];
+
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_presets_updated", presets },
+    });
+
+    expect(state.mediaPresets).toEqual(presets);
+  });
+
+  it("applies media_presets_updated with an empty array to clear presets", () => {
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_presets_updated", presets: [] },
+    });
+
+    expect(state.mediaPresets).toEqual([]);
   });
 });

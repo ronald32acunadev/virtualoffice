@@ -4,6 +4,7 @@ import type { AgentMessage } from "../../office/ports/agent-adapter.ts";
 export type LooseBlock = {
   type?: string;
   text?: string;
+  thinking?: string;
   id?: string;
   name?: string;
   input?: unknown;
@@ -38,6 +39,21 @@ export function mapAssistantContent(content: unknown, ctx: MappingContext): Agen
   for (const block of asBlocks(content)) {
     if (block.type === "text" && typeof block.text === "string" && block.text.trim() !== "") {
       out.push({ kind: "agent_text", content: block.text, parentToolUseId: ctx.parentToolUseId, sourceUuid: ctx.sourceUuid });
+    } else if (block.type === "thinking") {
+      const text =
+        typeof block.thinking === "string" && block.thinking.trim() !== ""
+          ? block.thinking
+          : typeof block.text === "string"
+            ? block.text
+            : "";
+      if (text.trim() !== "") {
+        out.push({
+          kind: "thinking",
+          content: text.trim(),
+          parentToolUseId: ctx.parentToolUseId,
+          sourceUuid: ctx.sourceUuid,
+        });
+      }
     } else if (block.type === "tool_use") {
       out.push({
         kind: "tool_call",

@@ -3,6 +3,9 @@ import type { LightingMood } from "./officeTheme";
 export const DEFAULT_CAMERA_POSITION: [number, number, number] = [0, 17, 21];
 export const DEFAULT_CAMERA_TARGET: [number, number, number] = [0, 0.5, 0];
 
+export const TV_FOCUS_CAMERA_POSITION: [number, number, number] = [0.2, 3.4, -4.6];
+export const TV_FOCUS_CAMERA_TARGET: [number, number, number] = [0.2, 2.85, -12];
+
 export const PAN_BOUNDS = {
   minX: -12,
   maxX: 12,
