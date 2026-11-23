@@ -266,6 +266,13 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 .tool-caption { color: var(--muted); font-size: 11px; text-transform: uppercase; }
 .msg-children { margin: 4px 0 0 16px; padding-left: 8px; border-left: 2px dashed var(--border); display: flex; flex-direction: column; gap: 6px; }
 
+.thought-card { align-self: stretch; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 4px 0; }
+.thought-summary { cursor: pointer; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; font-weight: 500; user-select: none; }
+.thought-summary:hover { color: var(--text); }
+.thought-icon { font-size: 14px; line-height: 1; }
+.thought-body { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.thought-body:hover { color: var(--text); }
+
 .composer { position: relative; padding: 8px 20px 16px; background: var(--bg); }
 .composer-inner { width: 100%; max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
 .break-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 12px; background: rgba(217, 146, 74, 0.14); border: 1px solid rgba(217, 146, 74, 0.45); color: #f6d5a9; font-size: 13px; }

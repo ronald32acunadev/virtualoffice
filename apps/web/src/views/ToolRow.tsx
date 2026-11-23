@@ -208,6 +208,18 @@ export function TextBubble({ item }: { item: TimelineItem }) {
           <RichMarkdown content={message.content} />
         </div>
       );
+    case "thinking":
+      return (
+        <details className="thought-card">
+          <summary className="thought-summary">
+            <span className="thought-icon" aria-hidden="true">💭</span>
+            <span>Thought</span>
+          </summary>
+          <div className="thought-body markdown">
+            <RichMarkdown content={message.content} />
+          </div>
+        </details>
+      );
     default:
       return <div className="bubble-system">{message.content}</div>;
   }

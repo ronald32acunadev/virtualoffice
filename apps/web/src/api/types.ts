@@ -73,7 +73,7 @@ export type AttachmentUpload = {
   dataBase64: string;
 };
 
-export type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "system";
+export type MessageKind = "user_text" | "agent_text" | "tool_call" | "tool_result" | "thinking" | "system";
 export type Message = {
   id: string;
   employeeId: string;

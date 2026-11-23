@@ -133,8 +133,16 @@ function createAntigravityParser(sink: AgentSink): CliLineParser {
 
         emitSessionStarted(asString(step.conversation_id) ?? asString(event.conversation_id));
 
-        const stepType = asString(step.step_type);
+        const stepType = asString(step.step_type) ?? asString(step.type);
         const state = asString(step.state);
+
+        if (stepType === "thinking" || stepType === "thought" || stepType === "reasoning") {
+          const rawText = asString(step.text) ?? asString(step.thinking) ?? asString(step.thought) ?? asString(event.text) ?? asString(event.thinking) ?? asString(event.thought);
+          if (rawText !== undefined && rawText.trim() !== "") {
+            sink.onMessage({ kind: "thinking", content: rawText.trim() });
+          }
+          return;
+        }
 
         if (stepType === "agent_response") {
           const textDelta = asString(step.text_delta);

@@ -98,6 +98,20 @@ function createCodexParser(sink: AgentSink): CliLineParser {
           if (text !== undefined) {
             sink.onMessage({ kind: "agent_text", content: text });
           }
+        } else if (itemType === "reasoning") {
+          const rawText = asString(item.text);
+          let text = rawText !== undefined ? rawText : "";
+          if (!text && Array.isArray(item.summary)) {
+            const parts = item.summary
+              .map((s) => asRecord(s))
+              .filter((s): s is Record<string, unknown> => s !== null)
+              .map((s) => asString(s.text))
+              .filter((t): t is string => t !== undefined && t.trim() !== "");
+            text = parts.join("\n");
+          }
+          if (text.trim() !== "") {
+            sink.onMessage({ kind: "thinking", content: text.trim() });
+          }
         }
         // item.type === "error" is a non-fatal advisory warning in Codex JSONL
         return;

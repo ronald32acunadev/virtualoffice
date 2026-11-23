@@ -10,8 +10,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Remove embedded desktop app streaming (`App` tab, noVNC, and Xvnc host) | — | complete |
-| US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | in progress |
-| US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | pending |
+| US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | complete |
+| US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | in progress |
 | US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | pending |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -67,8 +67,8 @@ As the owner, I want to see when an agent is reasoning and optionally expand its
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01`, `US-02 / AC-02` | `apps/server/test/agents/thinking-mapping.test.ts` (Claude, Codex, OpenCode, Antigravity thinking mapping + SQLite persistence round-trip) | Pending |
-| `US-02 / AC-03` | `apps/web/src/state/timeline.test.ts` (timeline preservation of `thinking` items alongside tool calls and text) + `npm run typecheck`, `npm run build` | Pending |
+| `US-02 / AC-01`, `US-02 / AC-02` | `apps/server/test/agents/thinking-mapping.test.ts` (Claude, Codex, OpenCode, Antigravity thinking mapping + SQLite persistence round-trip) | Passed (`5/5` tests in `thinking-mapping.test.ts`; `apps/server` 38/38 files 269/269 tests) |
+| `US-02 / AC-03` | `apps/web/src/state/timeline.test.ts` (timeline preservation of `thinking` items alongside tool calls and text) + `npm run typecheck`, `npm run build` | Passed (`1/1` test in `timeline.test.ts`; `apps/web` 23/23 files 120/120 tests; `typecheck` & `vite build` clean) |
 
 ---
 

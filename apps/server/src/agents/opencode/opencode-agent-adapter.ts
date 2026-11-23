@@ -53,6 +53,15 @@ function createOpenCodeParser(sink: AgentSink): CliLineParser {
         return;
       }
 
+      if (type === "reasoning") {
+        const part = asRecord(event.part);
+        const text = asString(part?.text) ?? asString(event.text);
+        if (text !== undefined && text.trim() !== "") {
+          sink.onMessage({ kind: "thinking", content: text.trim() });
+        }
+        return;
+      }
+
       if (type === "tool_use") {
         const part = asRecord(event.part);
         if (!part) return;
