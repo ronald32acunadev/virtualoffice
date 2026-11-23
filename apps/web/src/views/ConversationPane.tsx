@@ -26,6 +26,7 @@ import { OpenExternalMenu } from "./OpenExternalMenu";
 import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { groupTimelineBlocks } from "../state/activityGroups";
+import { deriveLiveStatus, isNearBottom, STARTER_PROMPTS } from "../state/chatErgonomics";
 import { ActivityGroup } from "./ActivityGroup";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
@@ -188,7 +189,7 @@ function Header({
   );
 }
 
-export type PendingInsert = { name: string; nonce: number };
+export type PendingInsert = { name?: string; prompt?: string; nonce: number };
 
 type StagedAttachment = {
   id: string;
@@ -253,9 +254,14 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   useEffect(() => {
     if (!pendingInsert || lastNonce.current === pendingInsert.nonce) return;
     lastNonce.current = pendingInsert.nonce;
-    const result = insertSkillAtStart(text, pendingInsert.name);
-    nextCaret.current = result.caret;
-    setText(result.text);
+    if (pendingInsert.name) {
+      const result = insertSkillAtStart(text, pendingInsert.name);
+      nextCaret.current = result.caret;
+      setText(result.text);
+    } else if (pendingInsert.prompt) {
+      setText(pendingInsert.prompt);
+      nextCaret.current = pendingInsert.prompt.length;
+    }
     setDismissed(true);
     areaRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -603,12 +609,26 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
   const timeline = useMemo(() => buildTimeline(messages ?? []), [messages]);
   const activityBlocks = useMemo(() => groupTimelineBlocks(timeline, busy), [timeline, busy]);
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
   const [view, setView] = useState<"chat" | "terminal">("chat");
 
+  const liveStatus = useMemo(
+    () =>
+      deriveLiveStatus({
+        status: employee?.status,
+        timeline,
+        liveText: live,
+      }),
+    [employee?.status, timeline, live]
+  );
+
   useEffect(() => {
-    endRef.current?.scrollIntoView?.({ block: "end" });
-  }, [timeline.length, live]);
+    if (pinnedToBottom) {
+      endRef.current?.scrollIntoView?.({ block: "end" });
+    }
+  }, [timeline.length, live, pinnedToBottom]);
 
   return (
     <section className="conversation-pane">
@@ -625,38 +645,81 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
           Terminal
         </button>
       </div>
-      <div className="conv-scroll" hidden={view !== "chat"}>
-        <div className="conv-column">
-          {approvals.length > 0 ? (
-            <ul className="approval-list conv-approvals">
-              {approvals.map((approval) => (
-                <ApprovalCard
-                  key={approval.id}
-                  approval={approval}
-                  employee={state.employees.find((e) => e.id === approval.employeeId)}
-                  onSelectEmployee={actions.select}
-                  onDecide={actions.decide}
-                />
-              ))}
-            </ul>
-          ) : null}
-          {timeline.length === 0 && !live ? <p className="muted">No messages yet.</p> : null}
-          {activityBlocks.map((block) =>
-            block.kind === "activity_group" ? (
-              <ActivityGroup key={block.id} block={block} />
-            ) : block.item.message.kind === "tool_call" || block.item.message.kind === "tool_result" ? (
-              <ToolRow key={block.item.message.id} item={block.item} />
-            ) : (
-              <TextBubble key={block.item.message.id} item={block.item} />
-            ),
-          )}
-          {live ? (
-            <div className="bubble bubble-agent markdown bubble-live">
-              <RichMarkdown content={live} />
-            </div>
-          ) : null}
-          <div ref={endRef} />
+      <div className="conv-scroll-wrap" hidden={view !== "chat"}>
+        <div
+          ref={scrollRef}
+          className="conv-scroll"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            setPinnedToBottom(isNearBottom({ scrollTop: el.scrollTop, clientHeight: el.clientHeight, scrollHeight: el.scrollHeight }));
+          }}
+        >
+          <div className="conv-column">
+            {approvals.length > 0 ? (
+              <ul className="approval-list conv-approvals">
+                {approvals.map((approval) => (
+                  <ApprovalCard
+                    key={approval.id}
+                    approval={approval}
+                    employee={state.employees.find((e) => e.id === approval.employeeId)}
+                    onSelectEmployee={actions.select}
+                    onDecide={actions.decide}
+                  />
+                ))}
+              </ul>
+            ) : null}
+            {timeline.length === 0 && !live ? (
+              <div className="chat-empty-state">
+                <p className="muted">No messages yet.</p>
+                <div className="starter-chips">
+                  {STARTER_PROMPTS.map((sp) => (
+                    <button
+                      key={sp.label}
+                      type="button"
+                      className="starter-chip"
+                      onClick={() => setPendingInsert({ prompt: sp.prompt, nonce: Date.now() + Math.random() })}
+                    >
+                      {sp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {activityBlocks.map((block) =>
+              block.kind === "activity_group" ? (
+                <ActivityGroup key={block.id} block={block} />
+              ) : block.item.message.kind === "tool_call" || block.item.message.kind === "tool_result" ? (
+                <ToolRow key={block.item.message.id} item={block.item} />
+              ) : (
+                <TextBubble key={block.item.message.id} item={block.item} />
+              ),
+            )}
+            {live ? (
+              <div className="bubble bubble-agent markdown bubble-live">
+                <RichMarkdown content={live} />
+              </div>
+            ) : null}
+            {liveStatus ? (
+              <div className="live-status-bar" role="status" aria-live="polite">
+                <span className="live-status-dot" aria-hidden="true" />
+                <span>{liveStatus}</span>
+              </div>
+            ) : null}
+            <div ref={endRef} />
+          </div>
         </div>
+        {!pinnedToBottom && (timeline.length > 0 || live) ? (
+          <button
+            type="button"
+            className="jump-latest-btn"
+            onClick={() => {
+              setPinnedToBottom(true);
+              endRef.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+            }}
+          >
+            Jump to latest ↓
+          </button>
+        ) : null}
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
       {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} /> : null}

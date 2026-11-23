@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Remove embedded desktop app streaming (`App` tab, noVNC, and Xvnc host) | — | complete |
 | US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | complete |
 | US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | complete |
-| US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | in progress |
+| US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -101,5 +101,5 @@ As the owner, I want clear live progress feedback while an agent is working, non
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01`, `US-04 / AC-02` | `apps/web/src/state/chatErgonomics.test.ts` (live status derivation for pending tool / streaming / thinking / idle, near-bottom auto-scroll decision helper) | Pending |
-| `US-04 / AC-03` + full suite regression | `npm run typecheck`, `npm test`, `npm run build`, plus manual browser check | Pending |
+| `US-04 / AC-01`, `US-04 / AC-02` | `apps/web/src/state/chatErgonomics.test.ts` (live status derivation for pending tool / streaming / thinking / idle, near-bottom auto-scroll decision helper) | Passed (`7/7` tests in `chatErgonomics.test.ts`) |
+| `US-04 / AC-03` + full suite regression | `npm run typecheck`, `npm test`, `npm run build`, plus manual browser check | Automated: passed (`apps/server` 38/38 files 269/269 tests, `apps/web` 25/25 files 133/133 tests, `typecheck` & `vite build` clean); manual browser check pending owner run |

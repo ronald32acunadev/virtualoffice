@@ -202,12 +202,27 @@ export function TextBubble({ item }: { item: TimelineItem }) {
         </div>
       );
     }
-    case "agent_text":
+    case "agent_text": {
+      const [copied, setCopied] = useState(false);
+      const copy = () => {
+        void navigator.clipboard?.writeText(message.content).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1600);
+        });
+      };
       return (
-        <div className="bubble bubble-agent markdown">
-          <RichMarkdown content={message.content} />
+        <div className="bubble-agent-wrap">
+          <div className="bubble bubble-agent markdown">
+            <RichMarkdown content={message.content} />
+          </div>
+          <div className="bubble-agent-actions">
+            <button type="button" className="bubble-copy-btn" onClick={copy}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
         </div>
       );
+    }
     case "thinking":
       return (
         <details className="thought-card">
