@@ -289,7 +289,7 @@ export class OfficeService {
 
   async listMessagesWithCatchUp(employeeId: string): Promise<Message[]> {
     const employee = this.requireEmployee(employeeId);
-    if (!this.sessions.get(employeeId)?.active) {
+    if (!this.sessions.get(employeeId)?.active || !this.adapterFor(employee.bossId)?.hasSession(employeeId)) {
       await this.catchUp(employee);
     }
     return this.repository.listMessages(employeeId);

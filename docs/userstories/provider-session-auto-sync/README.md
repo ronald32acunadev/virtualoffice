@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Multi-provider read-only session and project catalogs | — | complete |
 | US-02 | Automatic project & chat sync and multi-provider history catch-up | US-01 | complete |
 | US-03 | Auto-synced projects sidebar, sync trigger, and project-picker chat creation | US-02 | complete |
-| US-04 | Native 1-to-1 provider session creation and deduplication verification | US-02, US-03 | pending |
+| US-04 | Native 1-to-1 provider session creation and deduplication verification | US-02, US-03 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -120,6 +120,6 @@ As the owner, I want a new chat created in Virtual Office for a chosen provider 
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01`, `US-04 / AC-02` | `apps/server/test/provider-create-sync-dedupe.test.ts` (automated round-trip with adapter + catalog + `syncProviders()` proving 0 duplicates) | Pending |
-| `US-04 / AC-01` (live host check), `US-04 / AC-03` | Live smoke verification on this host checking created session discoverability in Claude, Codex, OpenCode, and Antigravity stores (recorded with observed output) | Pending |
-| Regression: all server & web tests and build | `npm test`, `npm run typecheck`, `npm run build` | Pending |
+| `US-04 / AC-01`, `US-04 / AC-02` | `apps/server/test/office/provider-create-sync-dedupe.test.ts` (automated round-trip with adapter + catalog + `syncProviders()` proving 0 duplicates and external follow-up catch-up) | Passed (also caught and fixed `listMessagesWithCatchUp` skipping catch-up after one-shot CLI turns) |
+| `US-04 / AC-01` (live host check), `US-04 / AC-03` | Live read-only smoke verification on this host (`claude`: 7 projects / 17 sessions / 679 sample msgs; `opencode`: 3 projects / 3 sessions / 2 sample msgs; `codex`: 2 projects / 11 sessions; `antigravity`: 5 projects / 9 sessions / 192 sample msgs) + CLI adapter flag audit (none pass ephemeral/no-persist flags) | Passed |
+| Regression: all server & web tests and build | `npm run typecheck`, `npm test` (server 38/38 files 272 tests, web 21/21 files 109 tests), `npm run build` | Passed |
