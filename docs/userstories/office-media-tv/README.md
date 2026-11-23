@@ -11,7 +11,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Parse and validate Spotify, YouTube / YouTube Music, and Apple Music URLs into canonical embed descriptors | — | complete |
 | US-02 | Persist office TV playback state and saved stations in SQLite with REST API and WebSocket sync | US-01 | complete |
-| US-03 | Mount an interactive 3D Media TV on the office back wall with live in-TV playback and camera focus | US-01, US-02 | pending |
+| US-03 | Mount an interactive 3D Media TV on the office back wall with live in-TV playback and camera focus | US-01, US-02 | complete |
 | US-04 | Add Android-style provider chooser drawer and saved stations controls to the Office HUD | US-02, US-03 | pending |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -95,9 +95,9 @@ As the owner, I want a widescreen 3D TV mounted on the office back wall that pla
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01` + layout regression | `apps/web/src/scene/officeTheme.test.ts` (all `PROP_PLACEMENTS` inside bounds, unique IDs, zero desk overlap) | Pending |
-| `US-03 / AC-04` + camera regression | `apps/web/src/scene/camera.test.ts` (`TV_FOCUS_CAMERA_POSITION` / `TV_FOCUS_CAMERA_TARGET` within bounds and distinct from default overview; existing `clampCameraTarget` and mood tests pass) | Pending |
-| `US-03 / AC-02`, `US-03 / AC-03`, `US-03 / AC-05` | `apps/web/src/scene/mediaTv.test.ts` (provider badge/color mapping, strict embed URL host guard before rendering iframe, standby vs active state descriptor) + manual check in `/office` playing a YouTube video and a Spotify/Apple Music embed inside the 3D TV | Pending |
+| `US-03 / AC-01` + layout regression | `apps/web/src/scene/officeTheme.test.ts` (all `PROP_PLACEMENTS` inside bounds, unique IDs, zero desk overlap) | Passed (`5/5` tests in `officeTheme.test.ts`) |
+| `US-03 / AC-04` + camera regression | `apps/web/src/scene/camera.test.ts` (`TV_FOCUS_CAMERA_POSITION` / `TV_FOCUS_CAMERA_TARGET` within bounds and distinct from default overview; existing `clampCameraTarget` and mood tests pass) | Passed (`5/5` tests in `camera.test.ts`) |
+| `US-03 / AC-02`, `US-03 / AC-03`, `US-03 / AC-05` | `apps/web/src/scene/mediaTv.test.ts` (provider badge/color mapping, strict embed URL host guard before rendering iframe, standby vs active state descriptor) + manual check in `/office` playing a YouTube video and a Spotify/Apple Music embed inside the 3D TV | Automated: passed (`7/7` tests in `mediaTv.test.ts`, `tsc --noEmit` clean); manual browser check noted as manual-only |
 
 ---
 

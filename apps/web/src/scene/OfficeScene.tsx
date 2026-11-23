@@ -8,9 +8,12 @@ import { BossArea } from "./BossArea";
 import {
   DEFAULT_CAMERA_POSITION,
   DEFAULT_CAMERA_TARGET,
+  TV_FOCUS_CAMERA_POSITION,
+  TV_FOCUS_CAMERA_TARGET,
   clampCameraTarget,
 } from "./camera";
 import { Character } from "./Character";
+import { OfficeMediaTv } from "./OfficeMediaTv";
 import { employeeDeskPosition } from "./layout";
 import { pickOfficeQuote, pickSpeaker } from "./officeQuotes";
 import { OfficeRoom } from "./OfficeRoom";
@@ -23,37 +26,48 @@ const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
   { id: "gemini", name: "Gemini", available: false },
 ];
 
-function CameraRig({ resetToken }: { resetToken: number }) {
+function CameraRig({ resetToken, focusTvToken }: { resetToken: number; focusTvToken: number }) {
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
   const { camera } = useThree();
-  const resettingRef = useRef(false);
-  const prevTokenRef = useRef(resetToken);
+  const goalRef = useRef<{ position: Vector3; target: Vector3 } | null>(null);
+  const prevResetTokenRef = useRef(resetToken);
+  const prevFocusTvTokenRef = useRef(focusTvToken);
   const defaultPosRef = useRef(new Vector3(...DEFAULT_CAMERA_POSITION));
   const defaultTargetRef = useRef(new Vector3(...DEFAULT_CAMERA_TARGET));
+  const tvPosRef = useRef(new Vector3(...TV_FOCUS_CAMERA_POSITION));
+  const tvTargetRef = useRef(new Vector3(...TV_FOCUS_CAMERA_TARGET));
 
   useEffect(() => {
-    if (resetToken !== prevTokenRef.current) {
-      prevTokenRef.current = resetToken;
-      resettingRef.current = true;
+    if (resetToken !== prevResetTokenRef.current) {
+      prevResetTokenRef.current = resetToken;
+      goalRef.current = { position: defaultPosRef.current, target: defaultTargetRef.current };
     }
   }, [resetToken]);
 
+  useEffect(() => {
+    if (focusTvToken !== prevFocusTvTokenRef.current) {
+      prevFocusTvTokenRef.current = focusTvToken;
+      goalRef.current = { position: tvPosRef.current, target: tvTargetRef.current };
+    }
+  }, [focusTvToken]);
+
   useFrame((_, delta) => {
-    if (!resettingRef.current || !controlsRef.current) return;
+    const goal = goalRef.current;
+    if (!goal || !controlsRef.current) return;
     const controls = controlsRef.current;
     const alpha = 1 - Math.exp(-7 * Math.min(delta, 0.1));
-    camera.position.lerp(defaultPosRef.current, alpha);
-    controls.target.lerp(defaultTargetRef.current, alpha);
+    camera.position.lerp(goal.position, alpha);
+    controls.target.lerp(goal.target, alpha);
     controls.update();
 
     if (
-      camera.position.distanceTo(defaultPosRef.current) < 0.05 &&
-      controls.target.distanceTo(defaultTargetRef.current) < 0.03
+      camera.position.distanceTo(goal.position) < 0.05 &&
+      controls.target.distanceTo(goal.target) < 0.03
     ) {
-      camera.position.copy(defaultPosRef.current);
-      controls.target.copy(defaultTargetRef.current);
+      camera.position.copy(goal.position);
+      controls.target.copy(goal.target);
       controls.update();
-      resettingRef.current = false;
+      goalRef.current = null;
     }
   });
 
@@ -70,7 +84,7 @@ function CameraRig({ resetToken }: { resetToken: number }) {
       maxPolarAngle={Math.PI / 2.25}
       target={DEFAULT_CAMERA_TARGET}
       onStart={() => {
-        resettingRef.current = false;
+        goalRef.current = null;
       }}
       onChange={() => {
         const controls = controlsRef.current;
@@ -96,12 +110,20 @@ export function OfficeScene({
   mood = "day",
   resetToken = 0,
   chatterEnabled = true,
+  focusTvToken = 0,
+  onOpenMediaDrawer = () => {},
+  onFocusTv = () => {},
+  onTurnOffMedia = () => {},
 }: {
   onSelectEmployee: (employeeId: string) => void;
   onClear: () => void;
   mood?: LightingMood;
   resetToken?: number;
   chatterEnabled?: boolean;
+  focusTvToken?: number;
+  onOpenMediaDrawer?: () => void;
+  onFocusTv?: () => void;
+  onTurnOffMedia?: () => void;
 }) {
   const { state } = useOffice();
   const bosses: Boss[] = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
@@ -201,6 +223,13 @@ export function OfficeScene({
       <directionalLight position={[-12, 10, -10]} intensity={palette.fillIntensity} color={palette.fillColor} />
 
       <OfficeRoom mood={mood} />
+      <OfficeMediaTv
+        media={state.media}
+        mood={mood}
+        onOpenDrawer={onOpenMediaDrawer}
+        onFocusTv={onFocusTv}
+        onTurnOff={onTurnOffMedia}
+      />
 
       {bosses.map((boss) => (
         <BossArea
@@ -221,7 +250,7 @@ export function OfficeScene({
           speechText={activeSpeech?.speakerId === employee.id ? activeSpeech.text : null}
         />
       ))}
-      <CameraRig resetToken={resetToken} />
+      <CameraRig resetToken={resetToken} focusTvToken={focusTvToken} />
     </Canvas>
   );
 }

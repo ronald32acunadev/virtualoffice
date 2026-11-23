@@ -4,6 +4,8 @@ import {
   DEFAULT_CAMERA_TARGET,
   MOOD_STORAGE_KEY,
   PAN_BOUNDS,
+  TV_FOCUS_CAMERA_POSITION,
+  TV_FOCUS_CAMERA_TARGET,
   clampCameraTarget,
   readSavedMood,
   saveMood,
@@ -68,5 +70,23 @@ describe("camera", () => {
 
     expect(readSavedMood(throwingStorage)).toBe("day");
     expect(() => saveMood("evening", throwingStorage)).not.toThrow();
+  });
+});
+
+describe("TV focus camera", () => {
+  it("keeps TV_FOCUS_CAMERA_TARGET inside PAN_BOUNDS", () => {
+    expect(clampCameraTarget(...TV_FOCUS_CAMERA_TARGET)).toEqual(TV_FOCUS_CAMERA_TARGET);
+  });
+
+  it("uses a distinct position from the default camera", () => {
+    expect(TV_FOCUS_CAMERA_POSITION).not.toEqual(DEFAULT_CAMERA_POSITION);
+  });
+
+  it("keeps the camera-to-target distance at least 7", () => {
+    const dx = TV_FOCUS_CAMERA_POSITION[0]! - TV_FOCUS_CAMERA_TARGET[0]!;
+    const dy = TV_FOCUS_CAMERA_POSITION[1]! - TV_FOCUS_CAMERA_TARGET[1]!;
+    const dz = TV_FOCUS_CAMERA_POSITION[2]! - TV_FOCUS_CAMERA_TARGET[2]!;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    expect(distance).toBeGreaterThanOrEqual(7);
   });
 });
