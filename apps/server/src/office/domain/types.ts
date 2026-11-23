@@ -1,3 +1,7 @@
+import type { MediaKind, MediaPlaybackState, MediaPreset, MediaProvider } from "./media.ts";
+
+export type { MediaKind, MediaPlaybackState, MediaPreset, MediaProvider };
+
 export type MessageAttachment = {
   id: string;
   name: string;
@@ -172,7 +176,9 @@ export type ServerEvent =
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_updated"; approval: ApprovalRequest }
   | { type: "terminal_updated"; employeeId: string; active: boolean }
-  | { type: "projects_updated"; projects: Project[] };
+  | { type: "projects_updated"; projects: Project[] }
+  | { type: "media_updated"; media: MediaPlaybackState | null }
+  | { type: "media_presets_updated"; presets: MediaPreset[] };
 
 export const BOSSES: readonly Boss[] = [
   { id: "claude", name: "Claude", available: true },

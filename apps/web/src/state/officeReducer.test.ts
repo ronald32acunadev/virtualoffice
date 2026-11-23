@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ApprovalRequest, Employee, Message } from "../api/types";
+import type { ApprovalRequest, Employee, MediaPreset, Message, StateSnapshot } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 const employee = (over: Partial<Employee> = {}): Employee => ({
@@ -250,5 +250,89 @@ describe("office reducer", () => {
       event: { type: "employee_removed", employeeId: "e99" },
     });
     expect(state.selectedId).toBe("e2");
+  });
+});
+
+describe("US-02 / AC-06 media state", () => {
+  it("hydrates media and mediaPresets via state_loaded and applies media_updated", () => {
+    const snapshot: StateSnapshot = {
+      bosses: [],
+      employees: [employee({ id: "e1" })],
+      approvals: [approval({ id: "a1" })],
+      media: {
+        provider: "spotify",
+        mediaKind: "audio",
+        sourceUrl: "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+        embedUrl: "https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT?utm_source=generator",
+        title: "Test Track",
+        thumbnailUrl: "https://example.com/thumb.jpg",
+        updatedAt: "2025-01-01T00:00:00Z",
+      },
+      mediaPresets: [],
+    };
+
+    const hydrated = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot,
+    });
+    expect(hydrated.media).toEqual(snapshot.media);
+    expect(hydrated.mediaPresets).toEqual([]);
+
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_updated", media: snapshot.media! },
+    });
+
+    expect(state.media).toEqual(snapshot.media);
+  });
+
+  it("applies media_updated with null to clear the playback state", () => {
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_updated", media: null },
+    });
+
+    expect(state.media).toBeNull();
+  });
+
+  it("applies media_presets_updated to replace the preset list", () => {
+    const presets: MediaPreset[] = [
+      {
+        id: "p1",
+        provider: "youtube_music",
+        mediaKind: "video",
+        sourceUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        embedUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        title: "Preset Video",
+        thumbnailUrl: null,
+        createdAt: "2025-01-01T00:00:00Z",
+      },
+      {
+        id: "p2",
+        provider: "apple_music",
+        mediaKind: "audio",
+        sourceUrl: "https://music.apple.com/us/album/abbey-road/1441164426",
+        embedUrl: "https://embed.music.apple.com/us/album/abbey-road/1441164426",
+        title: "Preset Audio",
+        thumbnailUrl: "https://example.com/p2-thumb.jpg",
+        createdAt: "2025-01-02T00:00:00Z",
+      },
+    ];
+
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_presets_updated", presets },
+    });
+
+    expect(state.mediaPresets).toEqual(presets);
+  });
+
+  it("applies media_presets_updated with an empty array to clear presets", () => {
+    const state = apply(initialOfficeState, {
+      type: "server_event",
+      event: { type: "media_presets_updated", presets: [] },
+    });
+
+    expect(state.mediaPresets).toEqual([]);
   });
 });

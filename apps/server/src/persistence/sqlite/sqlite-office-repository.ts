@@ -13,6 +13,10 @@ import type {
   Decision,
   Species,
   Project,
+  MediaKind,
+  MediaPlaybackState,
+  MediaPreset,
+  MediaProvider,
 } from "../../office/domain/types.ts";
 
 type Row = Record<string, unknown>;
@@ -68,6 +72,27 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   providers TEXT NOT NULL,
   last_seen_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_state (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  media_kind TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  embed_url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail_url TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS media_presets (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  id TEXT NOT NULL UNIQUE,
+  provider TEXT NOT NULL,
+  media_kind TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  embed_url TEXT NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail_url TEXT,
+  created_at TEXT NOT NULL
 );
 `;
 
@@ -154,6 +179,31 @@ function toProject(row: Row): Project {
     name: str(row.name),
     providers: JSON.parse(str(row.providers)) as BossId[],
     lastSeenAt: str(row.last_seen_at),
+  };
+}
+
+function toMediaPlaybackState(row: Row): MediaPlaybackState {
+  return {
+    provider: str(row.provider) as MediaProvider,
+    mediaKind: str(row.media_kind) as MediaKind,
+    sourceUrl: str(row.source_url),
+    embedUrl: str(row.embed_url),
+    title: str(row.title),
+    thumbnailUrl: nullableStr(row.thumbnail_url),
+    updatedAt: str(row.updated_at),
+  };
+}
+
+function toMediaPreset(row: Row): MediaPreset {
+  return {
+    id: str(row.id),
+    provider: str(row.provider) as MediaProvider,
+    mediaKind: str(row.media_kind) as MediaKind,
+    sourceUrl: str(row.source_url),
+    embedUrl: str(row.embed_url),
+    title: str(row.title),
+    thumbnailUrl: nullableStr(row.thumbnail_url),
+    createdAt: str(row.created_at),
   };
 }
 
@@ -344,6 +394,52 @@ export class SqliteOfficeRepository implements OfficeRepository {
   listProjects(): Project[] {
     const rows = this.db.prepare("SELECT * FROM projects ORDER BY last_seen_at DESC, path ASC").all() as Row[];
     return rows.map((row) => toProject(row));
+  }
+
+  getMediaState(): MediaPlaybackState | null {
+    const row = this.db.prepare("SELECT * FROM media_state WHERE id = 'office_tv'").get() as Row | undefined;
+    if (row === undefined) return null;
+    return toMediaPlaybackState(row);
+  }
+
+  setMediaState(state: MediaPlaybackState | null): void {
+    if (state === null) {
+      this.db.prepare("DELETE FROM media_state WHERE id = 'office_tv'").run();
+      return;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO media_state (id, provider, media_kind, source_url, embed_url, title, thumbnail_url, updated_at)
+         VALUES ('office_tv', ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           provider = excluded.provider,
+           media_kind = excluded.media_kind,
+           source_url = excluded.source_url,
+           embed_url = excluded.embed_url,
+           title = excluded.title,
+           thumbnail_url = excluded.thumbnail_url,
+           updated_at = excluded.updated_at`,
+      )
+      .run(state.provider, state.mediaKind, state.sourceUrl, state.embedUrl, state.title, state.thumbnailUrl, state.updatedAt);
+  }
+
+  insertMediaPreset(preset: MediaPreset): void {
+    this.db
+      .prepare(
+        `INSERT INTO media_presets (id, provider, media_kind, source_url, embed_url, title, thumbnail_url, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(preset.id, preset.provider, preset.mediaKind, preset.sourceUrl, preset.embedUrl, preset.title, preset.thumbnailUrl, preset.createdAt);
+  }
+
+  listMediaPresets(): MediaPreset[] {
+    const rows = this.db.prepare("SELECT * FROM media_presets ORDER BY created_at DESC, seq DESC").all() as Row[];
+    return rows.map((row) => toMediaPreset(row));
+  }
+
+  deleteMediaPreset(id: string): boolean {
+    const result = this.db.prepare("DELETE FROM media_presets WHERE id = ?").run(id);
+    return Number(result.changes) > 0;
   }
 
   close(): void {

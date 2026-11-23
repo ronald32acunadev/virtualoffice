@@ -124,6 +124,19 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.get("/api/state", async () => office.getState());
   app.post("/api/sync", async () => office.syncProviders());
 
+  app.get("/api/media", async () => office.getMedia());
+  app.put("/api/media/playback", async (request) => {
+    const body = asRecord(request.body);
+    return { media: await office.setMediaPlayback({ url: body.url, provider: body.provider, title: body.title }) };
+  });
+  app.delete("/api/media/playback", async () => ({ media: office.clearMediaPlayback() }));
+  app.post("/api/media/presets", async (request, reply) => {
+    const body = asRecord(request.body);
+    const result = await office.addMediaPreset({ url: body.url, provider: body.provider, title: body.title });
+    return reply.code(201).send(result);
+  });
+  app.delete<{ Params: { id: string } }>("/api/media/presets/:id", async (request) => office.deleteMediaPreset(request.params.id));
+
   app.get<{ Params: { id: string } }>("/api/employees/:id/messages", async (request) => ({
     messages: await office.listMessagesWithCatchUp(request.params.id),
   }));

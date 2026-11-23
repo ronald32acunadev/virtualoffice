@@ -1,4 +1,4 @@
-import type { ApprovalRequest, Employee, Message, MessageAttachment, Project } from "../domain/types.ts";
+import type { ApprovalRequest, Employee, MediaPlaybackState, MediaPreset, Message, MessageAttachment, Project } from "../domain/types.ts";
 
 export interface OfficeRepository {
   insertEmployee(employee: Employee): void;
@@ -22,6 +22,12 @@ export interface OfficeRepository {
 
   upsertProject(project: Project): void;
   listProjects(): Project[];
+
+  getMediaState(): MediaPlaybackState | null;
+  setMediaState(state: MediaPlaybackState | null): void;
+  insertMediaPreset(preset: MediaPreset): void;
+  listMediaPresets(): MediaPreset[];
+  deleteMediaPreset(id: string): boolean;
 
   close(): void;
 }

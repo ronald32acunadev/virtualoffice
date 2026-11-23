@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, AttachmentUpload, Species, SyncSummary } from "../api/types";
+import type { BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -30,6 +30,10 @@ export type OfficeActions = {
   deleteEmployee: (employeeId: string) => Promise<void>;
   resumeBoss: (bossId: BossId) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
+  setMediaPlayback: (input: { url: string; provider?: MediaProvider; title?: string }) => Promise<MediaPlaybackState>;
+  clearMediaPlayback: () => Promise<void>;
+  addMediaPreset: (input: { url: string; provider?: MediaProvider; title?: string }) => Promise<MediaPreset>;
+  deleteMediaPreset: (id: string) => Promise<void>;
 };
 
 type OfficeContextValue = { state: OfficeState; actions: OfficeActions };
@@ -134,6 +138,24 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
           if (error instanceof ApiError && error.status === 409) await refresh();
           throw error;
         }
+      },
+      setMediaPlayback: async (input) => {
+        const { media } = await api.setMediaPlayback(input);
+        dispatch({ type: "server_event", event: { type: "media_updated", media } });
+        return media;
+      },
+      clearMediaPlayback: async () => {
+        await api.clearMediaPlayback();
+        dispatch({ type: "server_event", event: { type: "media_updated", media: null } });
+      },
+      addMediaPreset: async (input) => {
+        const { preset, presets } = await api.addMediaPreset(input);
+        dispatch({ type: "server_event", event: { type: "media_presets_updated", presets } });
+        return preset;
+      },
+      deleteMediaPreset: async (id) => {
+        const { presets } = await api.deleteMediaPreset(id);
+        dispatch({ type: "server_event", event: { type: "media_presets_updated", presets } });
       },
     }),
     [refresh],

@@ -2,6 +2,8 @@ import type {
   ApprovalRequest,
   Boss,
   Employee,
+  MediaPlaybackState,
+  MediaPreset,
   Message,
   Project,
   ServerEvent,
@@ -24,6 +26,8 @@ export type OfficeState = {
   selectedId: string | null;
   connection: ConnectionState;
   loaded: boolean;
+  media: MediaPlaybackState | null;
+  mediaPresets: MediaPreset[];
 };
 
 export type OfficeAction =
@@ -44,6 +48,8 @@ export const initialOfficeState: OfficeState = {
   selectedId: null,
   connection: "connecting",
   loaded: false,
+  media: null,
+  mediaPresets: [],
 };
 
 function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
@@ -129,6 +135,10 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
     }
     case "projects_updated":
       return { ...state, projects: event.projects };
+    case "media_updated":
+      return { ...state, media: event.media };
+    case "media_presets_updated":
+      return { ...state, mediaPresets: event.presets };
   }
 }
 
@@ -149,6 +159,8 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
         activeTerminals: snapshot.activeTerminals ?? [],
         selectedId: selectedStillExists ? state.selectedId : null,
         loaded: true,
+        media: snapshot.media ?? null,
+        mediaPresets: snapshot.mediaPresets ?? [],
       };
     }
     case "messages_loaded":

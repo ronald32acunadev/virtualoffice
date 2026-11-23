@@ -18,6 +18,7 @@ import type { TerminalGuard } from "../ports/terminal-guard.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
+import { isMediaProvider, parseMediaUrl, resolveMediaMetadata, type FetchLike, type MediaKind, type MediaPlaybackState, type MediaPreset, type MediaProvider } from "../domain/media.ts";
 import { AttachmentStore, validateAndDecodeAttachments, type DecodedAttachment } from "./attachments.ts";
 import {
   BOSSES,
@@ -71,6 +72,7 @@ export type OfficeDeps = {
   /** Read-only view of the embedded terminals; chat is refused while one is active. */
   terminals?: TerminalGuard;
   attachmentsDir?: string;
+  mediaFetch?: FetchLike;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -116,6 +118,7 @@ export class OfficeService {
   private readonly bossNames: Partial<Record<BossId, string>>;
   private readonly terminals: TerminalGuard | undefined;
   private readonly attachmentStore: AttachmentStore;
+  private readonly mediaFetch: FetchLike | undefined;
   /** Catalogs per absolute folder; only successful reads are stored. */
   private readonly catalogCache = new Map<string, Catalog>();
   /** In-flight probes per folder, so concurrent requests share one. */
@@ -144,6 +147,7 @@ export class OfficeService {
     this.bossNames = deps.bossNames ?? {};
     this.terminals = deps.terminals;
     this.attachmentStore = new AttachmentStore(deps.attachmentsDir ?? path.join(os.tmpdir(), "virtualoffice-attachments"));
+    this.mediaFetch = deps.mediaFetch;
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -279,6 +283,8 @@ export class OfficeService {
     approvals: ApprovalRequest[];
     activeTerminals: string[];
     projects: Project[];
+    media: MediaPlaybackState | null;
+    mediaPresets: MediaPreset[];
   } {
     return {
       bosses: this.listBosses(),
@@ -286,7 +292,114 @@ export class OfficeService {
       approvals: this.repository.listPendingApprovals(),
       activeTerminals: this.terminals?.listActive() ?? [],
       projects: this.repository.listProjects(),
+      media: this.repository.getMediaState(),
+      mediaPresets: this.repository.listMediaPresets(),
     };
+  }
+
+  getMedia(): { media: MediaPlaybackState | null; presets: MediaPreset[] } {
+    return {
+      media: this.repository.getMediaState(),
+      presets: this.repository.listMediaPresets(),
+    };
+  }
+
+  private async resolveMediaInput(input: { url: unknown; provider?: unknown; title?: unknown }): Promise<{
+    provider: MediaProvider;
+    mediaKind: MediaKind;
+    canonicalUrl: string;
+    embedUrl: string;
+    title: string;
+    thumbnailUrl: string | null;
+  }> {
+    if (typeof input.url !== "string") {
+      throw new OfficeError("validation_error", "Media URL is required", "url");
+    }
+    const url = input.url;
+
+    let expectedProvider: MediaProvider | undefined;
+    if (input.provider !== undefined && input.provider !== null && input.provider !== "") {
+      if (!isMediaProvider(input.provider)) {
+        throw new OfficeError("validation_error", "Unsupported media provider", "provider");
+      }
+      expectedProvider = input.provider;
+    }
+
+    let customTitle: string | undefined;
+    if (input.title !== undefined && input.title !== null) {
+      if (typeof input.title !== "string") {
+        throw new OfficeError("validation_error", "Title must be a string", "title");
+      }
+      const trimmed = input.title.trim();
+      if (trimmed.length > 0) {
+        customTitle = trimmed.slice(0, 160);
+      }
+    }
+
+    const parsed = parseMediaUrl(url, expectedProvider);
+    if (!parsed.ok) {
+      throw new OfficeError("validation_error", parsed.error, "url");
+    }
+
+    const meta = await resolveMediaMetadata(parsed.value, this.mediaFetch ? { fetchImpl: this.mediaFetch } : undefined);
+
+    return {
+      provider: parsed.value.provider,
+      mediaKind: parsed.value.mediaKind,
+      canonicalUrl: parsed.value.canonicalUrl,
+      embedUrl: parsed.value.embedUrl,
+      title: customTitle || meta.title,
+      thumbnailUrl: meta.thumbnailUrl,
+    };
+  }
+
+  async setMediaPlayback(input: { url: unknown; provider?: unknown; title?: unknown }): Promise<MediaPlaybackState> {
+    const resolved = await this.resolveMediaInput(input);
+    const state: MediaPlaybackState = {
+      provider: resolved.provider,
+      mediaKind: resolved.mediaKind,
+      sourceUrl: resolved.canonicalUrl,
+      embedUrl: resolved.embedUrl,
+      title: resolved.title,
+      thumbnailUrl: resolved.thumbnailUrl,
+      updatedAt: this.now().toISOString(),
+    };
+    this.repository.setMediaState(state);
+    this.events.publish({ type: "media_updated", media: state });
+    return state;
+  }
+
+  clearMediaPlayback(): null {
+    this.repository.setMediaState(null);
+    this.events.publish({ type: "media_updated", media: null });
+    return null;
+  }
+
+  async addMediaPreset(input: { url: unknown; provider?: unknown; title?: unknown }): Promise<{ preset: MediaPreset; presets: MediaPreset[] }> {
+    const resolved = await this.resolveMediaInput(input);
+    const preset: MediaPreset = {
+      id: this.newId(),
+      provider: resolved.provider,
+      mediaKind: resolved.mediaKind,
+      sourceUrl: resolved.canonicalUrl,
+      embedUrl: resolved.embedUrl,
+      title: resolved.title,
+      thumbnailUrl: resolved.thumbnailUrl,
+      createdAt: this.now().toISOString(),
+    };
+    this.repository.insertMediaPreset(preset);
+    const presets = this.repository.listMediaPresets();
+    this.events.publish({ type: "media_presets_updated", presets });
+    return { preset, presets };
+  }
+
+  deleteMediaPreset(id: string): { deleted: true; presets: MediaPreset[] } {
+    if (!this.repository.deleteMediaPreset(id)) {
+      throw new OfficeError("not_found", `Media preset not found: ${id}`);
+    }
+    const presets = this.repository.listMediaPresets();
+    this.events.publish({ type: "media_presets_updated", presets });
+    return { deleted: true, presets };
   }
 
   listMessages(employeeId: string): Message[] {

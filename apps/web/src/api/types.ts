@@ -140,6 +140,28 @@ export type ApprovalRequest = {
   decidedAt: string | null;
 };
 
+export type MediaProvider = "spotify" | "youtube_music" | "apple_music";
+export type MediaKind = "audio" | "video";
+export type MediaPlaybackState = {
+  provider: MediaProvider;
+  mediaKind: MediaKind;
+  sourceUrl: string;
+  embedUrl: string;
+  title: string;
+  thumbnailUrl: string | null;
+  updatedAt: string;
+};
+export type MediaPreset = {
+  id: string;
+  provider: MediaProvider;
+  mediaKind: MediaKind;
+  sourceUrl: string;
+  embedUrl: string;
+  title: string;
+  thumbnailUrl: string | null;
+  createdAt: string;
+};
+
 export type ServerEvent =
   | { type: "boss_updated"; boss: Boss }
   | { type: "employee_updated"; employee: Employee }
@@ -149,7 +171,9 @@ export type ServerEvent =
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_updated"; approval: ApprovalRequest }
   | { type: "terminal_updated"; employeeId: string; active: boolean }
-  | { type: "projects_updated"; projects: Project[] };
+  | { type: "projects_updated"; projects: Project[] }
+  | { type: "media_updated"; media: MediaPlaybackState | null }
+  | { type: "media_presets_updated"; presets: MediaPreset[] };
 
 export type StateSnapshot = {
   bosses: Boss[];
@@ -157,6 +181,8 @@ export type StateSnapshot = {
   approvals: ApprovalRequest[];
   activeTerminals?: string[];
   projects?: Project[];
+  media?: MediaPlaybackState | null;
+  mediaPresets?: MediaPreset[];
 };
 
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

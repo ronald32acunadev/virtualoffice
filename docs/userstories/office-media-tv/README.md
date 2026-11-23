@@ -10,7 +10,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Parse and validate Spotify, YouTube / YouTube Music, and Apple Music URLs into canonical embed descriptors | — | complete |
-| US-02 | Persist office TV playback state and saved stations in SQLite with REST API and WebSocket sync | US-01 | pending |
+| US-02 | Persist office TV playback state and saved stations in SQLite with REST API and WebSocket sync | US-01 | complete |
 | US-03 | Mount an interactive 3D Media TV on the office back wall with live in-TV playback and camera focus | US-01, US-02 | pending |
 | US-04 | Add Android-style provider chooser drawer and saved stations controls to the Office HUD | US-02, US-03 | pending |
 
@@ -75,9 +75,9 @@ As the owner, I want the active office TV playback state and my saved favorite s
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01` + migration regression | `apps/server/test/persistence/migration.test.ts` (existing DB upgraded cleanly with `media_state` and `media_presets` tables intact alongside existing data) | Pending |
-| `US-02 / AC-02`, `US-02 / AC-03`, `US-02 / AC-04`, `US-02 / AC-05` | `apps/server/test/http/media-api.test.ts` (GET/PUT/DELETE playback, POST/DELETE presets, invalid URL 400 leaves state unchanged, unknown preset 404, auth guard 401, WebSocket `media_updated` and `media_presets_updated` broadcasts) | Pending |
-| `US-02 / AC-06` + reducer regression | `apps/web/src/state/officeReducer.test.ts` (`snapshot` hydrates `media` and `mediaPresets`; `media_updated` and `media_presets_updated` update state immutably without affecting employees/approvals) | Pending |
+| `US-02 / AC-01` + migration regression | `apps/server/test/persistence/migration.test.ts` (existing DB upgraded cleanly with `media_state` and `media_presets` tables intact alongside existing data) | Passed (`5/5` tests in `migration.test.ts`) |
+| `US-02 / AC-02`, `US-02 / AC-03`, `US-02 / AC-04`, `US-02 / AC-05` | `apps/server/test/http/media-api.test.ts` (GET/PUT/DELETE playback, POST/DELETE presets, invalid URL 400 leaves state unchanged, unknown preset 404, auth guard 401, WebSocket `media_updated` and `media_presets_updated` broadcasts) | Passed (`10/10` tests in `media-api.test.ts`) |
+| `US-02 / AC-06` + reducer regression | `apps/web/src/state/officeReducer.test.ts` (`snapshot` hydrates `media` and `mediaPresets`; `media_updated` and `media_presets_updated` update state immutably without affecting employees/approvals) | Passed (`15/15` tests in `officeReducer.test.ts`; full `npm run typecheck` clean) |
 
 ---
 

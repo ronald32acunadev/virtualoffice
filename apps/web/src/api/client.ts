@@ -5,6 +5,9 @@ import type {
   BossId,
   Decision,
   Employee,
+  MediaPlaybackState,
+  MediaPreset,
+  MediaProvider,
   Message,
   ServerEvent,
   Species,
@@ -129,6 +132,20 @@ export const api = {
       answers ? { decision, answers } : { decision },
     ),
 
+  getMedia: () =>
+    request<{ media: MediaPlaybackState | null; presets: MediaPreset[] }>("GET", "/api/media"),
+
+  setMediaPlayback: (input: { url: string; provider?: MediaProvider; title?: string }) =>
+    request<{ media: MediaPlaybackState }>("PUT", "/api/media/playback", input),
+
+  clearMediaPlayback: () =>
+    request<{ media: null }>("DELETE", "/api/media/playback"),
+
+  addMediaPreset: (input: { url: string; provider?: MediaProvider; title?: string }) =>
+    request<{ preset: MediaPreset; presets: MediaPreset[] }>("POST", "/api/media/presets", input),
+
+  deleteMediaPreset: (id: string) =>
+    request<{ deleted: boolean; presets: MediaPreset[] }>("DELETE", `/api/media/presets/${encodeURIComponent(id)}`),
 
 };
 
