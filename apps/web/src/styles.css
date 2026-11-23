@@ -365,11 +365,23 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 .toolbox-button { display: inline-flex; gap: 4px; align-items: center; transition: transform .12s ease, filter .12s ease; }
 .toolbox-button:hover { filter: brightness(1.15); }
 .toolbox-button.is-open { transform: rotate(-3deg); }
-.toolbox-popover { position: absolute; top: calc(100% + 6px); right: 0; width: min(420px, 90vw); max-height: 380px; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-popover); z-index: 30; transform-origin: top right; }
+.toolbox-popover { position: absolute; top: calc(100% + 6px); right: 0; width: min(460px, 92vw); max-height: 460px; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-popover); z-index: 30; transform-origin: top right; }
 .toolbox-tabs { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .toolbox-tabs [role="tablist"] { display: flex; gap: 4px; }
 .tab { background: none; color: var(--muted); padding: 4px 10px; border-radius: 6px; }
 .tab[aria-selected="true"] { background: var(--card); color: var(--text); }
+.toolbox-search-bar { position: relative; display: flex; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.toolbox-search { width: 100%; padding: 6px 28px 6px 10px; font-size: 13px; background: var(--input-bg, var(--card)); color: var(--text); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+.toolbox-search:focus { border-color: var(--accent); }
+.toolbox-search-clear { position: absolute; right: 16px; background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+.toolbox-search-clear:hover { color: var(--text); background: var(--surface-hover); }
+.toolbox-group { margin-bottom: 4px; }
+.toolbox-group-head { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 6px 10px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: var(--card); border: none; border-bottom: 1px solid var(--border); text-align: left; cursor: default; }
+.toolbox-group-toggle { cursor: pointer; transition: background 0.1s ease; }
+.toolbox-group-toggle:hover { background: var(--surface-hover); color: var(--text); }
+.toolbox-chevron { display: inline-block; width: 14px; text-align: center; font-family: ui-monospace, monospace; }
+.toolbox-count { font-size: 11px; background: var(--badge-bg, var(--border)); color: var(--badge-text, var(--muted)); padding: 1px 6px; border-radius: 10px; font-weight: 500; }
+.toolbox-sublist { list-style: none; margin: 0; padding: 0; }
 .toolbox-body { overflow-y: auto; padding: 4px; }
 .tool-list { list-style: none; margin: 0; padding: 0; }
 

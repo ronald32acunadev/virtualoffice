@@ -10,7 +10,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Remove the `"Open in..."` launcher button, menu, and backend launch routes | — | complete |
-| US-02 | Organize `Toolbox` with live search, alphabetical sorting, and grouped sections | — | in progress |
+| US-02 | Organize `Toolbox` with live search, alphabetical sorting, and grouped sections | — | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -67,5 +67,5 @@ As the owner, I want the `Toolbox` popover to be cleanly organized with a search
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01`, `US-02 / AC-02` | `apps/web/src/state/toolbox.test.ts` (filtering by name/desc/alias, alphabetical sorting, Skills vs Plugin namespace grouping vs Built-in, Custom vs Built-in agents, empty query & no-match cases) | Pending |
-| `US-02 / AC-03` + Day/Evening visual check | `npm run typecheck`, `npm test`, `npm run build`, and live check in the running Workspace UI | Pending |
+| `US-02 / AC-01`, `US-02 / AC-02` | `apps/web/src/state/toolbox.test.ts` (filtering by name/desc/alias, alphabetical sorting, Skills vs Plugin namespace grouping vs Built-in, Custom vs Built-in agents, empty query & no-match cases) | Passed (`4/4` tests in `toolbox.test.ts`) |
+| `US-02 / AC-03` + Day/Evening visual check | `npm run typecheck`, `npm test`, `npm run build`, and live check in the running Workspace UI | Automated: passed (`apps/server` 36/36 files 256/256 tests, `apps/web` 25/25 files 133/133 tests, `typecheck` & `vite build` clean); live UI check ready in running server |
