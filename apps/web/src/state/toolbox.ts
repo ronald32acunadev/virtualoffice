@@ -1,4 +1,29 @@
-import type { SlashCommand, AgentInfo } from "../api/types";
+import type { SlashCommand, AgentInfo, BossId, Message } from "../api/types";
+
+export type ToolboxTab = "skills" | "agents" | "workspace";
+
+export function defaultToolboxTab(bossId: BossId, skillCount: number): ToolboxTab {
+  return bossId === "claude" || skillCount > 0 ? "skills" : "workspace";
+}
+
+export function buildAgentDelegationPrompt(agentName: string): string {
+  return `Ask ${agentName.trim()} to `;
+}
+
+export function countConversationAttachments(messages: readonly Message[] | undefined): number {
+  if (!messages) return 0;
+  let total = 0;
+  for (const m of messages) {
+    total += m.attachments?.length ?? 0;
+  }
+  return total;
+}
+
+export function formatTokenCount(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
 
 export type PluginCommandGroup = {
   plugin: string;

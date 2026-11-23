@@ -11,7 +11,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Remove `"Import from Claude"` button, modal, and manual import routes | — | complete |
 | US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | complete |
-| US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | in progress |
+| US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | complete |
 | US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | in progress |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -82,7 +82,7 @@ As the owner, I want `Toolbox` to be genuinely useful across every provider by o
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01`, `US-03 / AC-02`, `US-03 / AC-03` | `apps/web/src/state/toolbox.test.ts` (default tab selection, agent delegation prompt builder, workspace summary/attachment count helper) + `npm run typecheck`, `npm test`, `npm run build` | Pending |
+| `US-03 / AC-01`, `US-03 / AC-02`, `US-03 / AC-03` | `apps/web/src/state/toolbox.test.ts` (default tab selection, agent delegation prompt builder, workspace summary/attachment count helper) + `npm run typecheck`, `npm test`, `npm run build` | Passed (`8/8` tests in `toolbox.test.ts`, `24/24` web files `137/137` tests, `typecheck` & `vite build` clean) |
 
 ---
 

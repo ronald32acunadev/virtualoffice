@@ -37,9 +37,11 @@ const FOLDER_MISSING_TEXT =
 function Header({
   employeeId,
   onInsertSkill,
+  onInsertPrompt,
 }: {
   employeeId: string;
   onInsertSkill: (name: string) => void;
+  onInsertPrompt: (prompt: string) => void;
 }) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -162,7 +164,11 @@ function Header({
             </option>
           ))}
         </select>
-        <Toolbox employeeId={employee.id} onInsertSkill={onInsertSkill} />
+        <Toolbox
+          employeeId={employee.id}
+          onInsertSkill={onInsertSkill}
+          onInsertPrompt={onInsertPrompt}
+        />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop
@@ -627,6 +633,7 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
       <Header
         employeeId={employeeId}
         onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })}
+        onInsertPrompt={(prompt) => setPendingInsert({ prompt, nonce: Date.now() + Math.random() })}
       />
       <div className="conv-tabs" role="tablist" aria-label="Conversation view">
         <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "conv-tab active" : "conv-tab"} onClick={() => setView("chat")}>

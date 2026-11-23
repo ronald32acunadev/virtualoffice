@@ -949,3 +949,53 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   background: var(--surface-hover);
   border-color: var(--border-strong);
 }
+
+/* US-03 Toolbox Workspace Inspector Styles */
+.toolbox-workspace {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbox-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolbox-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.toolbox-info-label {
+  color: var(--muted);
+  font-weight: 500;
+  flex: none;
+}
+
+.toolbox-info-value {
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.toolbox-copy-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+  flex: none;
+}

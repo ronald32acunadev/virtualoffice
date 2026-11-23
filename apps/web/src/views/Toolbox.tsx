@@ -1,29 +1,49 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useCatalog } from "../state/useCatalog";
 import { commandKind, KIND_ICON, KIND_LABEL } from "../state/slashMenu";
-import { organizeToolboxAgents, organizeToolboxCommands } from "../state/toolbox";
+import { organizeToolboxAgents, organizeToolboxCommands, defaultToolboxTab, buildAgentDelegationPrompt, countConversationAttachments, formatTokenCount, type ToolboxTab } from "../state/toolbox";
 import { usePresence } from "../ui/usePresence";
+import { useOffice } from "../state/OfficeProvider";
 import type { SlashCommand } from "../api/types";
 
-type Props = { employeeId: string; onInsertSkill: (name: string) => void };
+type Props = {
+  employeeId: string;
+  onInsertSkill: (name: string) => void;
+  onInsertPrompt: (prompt: string) => void;
+};
 
-export function Toolbox({ employeeId, onInsertSkill }: Props) {
+export function Toolbox({ employeeId, onInsertSkill, onInsertPrompt }: Props) {
+  const { state } = useOffice();
+  const employee = state.employees.find((e) => e.id === employeeId);
+  const boss = state.bosses.find((b) => b.id === employee?.bossId);
+  const attachmentCount = countConversationAttachments(state.messages[employeeId]);
+
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"skills" | "agents">("skills");
+  const [tab, setTab] = useState<ToolboxTab>("skills");
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ builtin: true });
+  const [copiedDir, setCopiedDir] = useState(false);
+  const [copiedSession, setCopiedSession] = useState(false);
+
   const { entry, load, refresh } = useCatalog({ kind: "employee", id: employeeId });
   const { mounted, visible } = usePresence(open);
   const root = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const catalog = "catalog" in entry ? entry.catalog : undefined;
+
   useEffect(() => {
     setQuery("");
-  }, [employeeId]);
+    if (employee) {
+      setTab(defaultToolboxTab(employee.bossId, catalog?.commands.length ?? 0));
+    }
+  }, [employeeId, catalog?.commands.length]);
 
   useEffect(() => {
     if (!open) return;
-    searchRef.current?.focus();
+    if (tab !== "workspace") {
+      searchRef.current?.focus();
+    }
     const onDown = (event: MouseEvent) => {
       if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
     };
@@ -36,14 +56,18 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, tab]);
 
   const toggle = () => {
-    if (!open) load();
+    if (!open) {
+      load();
+      if (employee) {
+        setTab(defaultToolboxTab(employee.bossId, catalog?.commands.length ?? 0));
+      }
+    }
     setOpen((v) => !v);
   };
 
-  const catalog = "catalog" in entry ? entry.catalog : undefined;
   const loading = entry.status === "loading";
   const isSearching = query.trim() !== "";
 
@@ -89,7 +113,96 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
   };
 
   let body;
-  if (!catalog && (entry.status === "idle" || loading)) {
+  if (tab === "workspace") {
+    if (!employee) {
+      body = <div className="menu-note">Employee not found</div>;
+    } else {
+      const usage = employee.usage;
+      const inputTokens = usage?.inputTokens ?? 0;
+      const outputTokens = usage?.outputTokens ?? 0;
+      const costUsd = usage?.costUsd;
+
+      body = (
+        <div className="toolbox-workspace">
+          <div className="toolbox-info-grid">
+            <div className="toolbox-info-row">
+              <span className="toolbox-info-label">Agent / Provider</span>
+              <span className="toolbox-info-value">
+                <span className="composer-boss-pill" data-boss={employee.bossId} style={{ display: "inline-flex", padding: "2px 8px" }}>
+                  <span className="boss-accent-dot" aria-hidden="true" />
+                  {boss?.name ?? employee.bossId}
+                </span>
+                <span className={`status status-${employee.status}`} style={{ marginLeft: "8px" }}>
+                  {employee.status.replace("_", " ")}
+                </span>
+              </span>
+            </div>
+            <div className="toolbox-info-row">
+              <span className="toolbox-info-label">Working Directory</span>
+              <span className="toolbox-info-value">
+                <span className="mono" title={employee.workingDirectory} style={{ wordBreak: "break-all" }}>
+                  {employee.workingDirectory}
+                </span>
+                <button
+                  type="button"
+                  className="toolbox-copy-btn secondary"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(employee.workingDirectory);
+                    setCopiedDir(true);
+                    setTimeout(() => setCopiedDir(false), 2000);
+                  }}
+                >
+                  {copiedDir ? "Copied" : "Copy"}
+                </button>
+              </span>
+            </div>
+            <div className="toolbox-info-row">
+              <span className="toolbox-info-label">Session ID</span>
+              <span className="toolbox-info-value">
+                <span className="mono" style={{ wordBreak: "break-all" }}>
+                  {employee.providerSessionId || "Not started yet"}
+                </span>
+                {employee.providerSessionId ? (
+                  <button
+                    type="button"
+                    className="toolbox-copy-btn secondary"
+                    onClick={() => {
+                      if (employee.providerSessionId) {
+                        void navigator.clipboard.writeText(employee.providerSessionId);
+                        setCopiedSession(true);
+                        setTimeout(() => setCopiedSession(false), 2000);
+                      }
+                    }}
+                  >
+                    {copiedSession ? "Copied" : "Copy"}
+                  </button>
+                ) : null}
+              </span>
+            </div>
+            <div className="toolbox-info-row">
+              <span className="toolbox-info-label">Role / Job Title</span>
+              <span className="toolbox-info-value">
+                {employee.role ?? "General"} · {employee.jobTitle ?? "—"}
+              </span>
+            </div>
+            {usage ? (
+              <div className="toolbox-info-row">
+                <span className="toolbox-info-label">Usage</span>
+                <span className="toolbox-info-value">
+                  In: {formatTokenCount(inputTokens)} · Out: {formatTokenCount(outputTokens)}
+                  {costUsd !== null && costUsd !== undefined ? ` · $${costUsd.toFixed(4)}` : ""}
+                </span>
+              </div>
+            ) : null}
+            <div className="toolbox-info-row">
+              <span className="toolbox-info-label">Attachments</span>
+              <span className="toolbox-info-value">{attachmentCount} shared in this chat</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  } else if (!catalog && (entry.status === "idle" || loading)) {
     body = <p className="menu-note menu-loading">Loading skills…</p>;
   } else if (!catalog) {
     body = (
@@ -171,16 +284,25 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
             </div>
             <ul className="toolbox-sublist">
               {custom.map((a) => (
-                <li key={a.name} className="tool-item tool-agent">
-                  <span className="kind-icon">🤖</span>
-                  <span className="menu-main">
-                    <span className="menu-name">
-                      {a.name}
-                      {a.model ? <span className="menu-alias">{a.model}</span> : null}
+                <li key={a.name}>
+                  <button
+                    type="button"
+                    className="tool-item tool-agent"
+                    onClick={() => {
+                      onInsertPrompt(buildAgentDelegationPrompt(a.name));
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="kind-icon">🤖</span>
+                    <span className="menu-main">
+                      <span className="menu-name">
+                        {a.name}
+                        {a.model ? <span className="menu-alias">{a.model}</span> : null}
+                      </span>
+                      <span className="menu-desc">{a.description}</span>
+                      <span className="menu-hint-line">Click to delegate in chat</span>
                     </span>
-                    <span className="menu-desc">{a.description}</span>
-                    <span className="menu-hint-line">Ask in chat to delegate</span>
-                  </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -195,16 +317,25 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
             </div>
             <ul className="toolbox-sublist">
               {builtins.map((a) => (
-                <li key={a.name} className="tool-item tool-agent">
-                  <span className="kind-icon">🤖</span>
-                  <span className="menu-main">
-                    <span className="menu-name">
-                      {a.name}
-                      <span className="menu-alias">built-in</span>
+                <li key={a.name}>
+                  <button
+                    type="button"
+                    className="tool-item tool-agent"
+                    onClick={() => {
+                      onInsertPrompt(buildAgentDelegationPrompt(a.name));
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="kind-icon">🤖</span>
+                    <span className="menu-main">
+                      <span className="menu-name">
+                        {a.name}
+                        <span className="menu-alias">built-in</span>
+                      </span>
+                      <span className="menu-desc">{a.description}</span>
+                      <span className="menu-hint-line">Click to delegate in chat</span>
                     </span>
-                    <span className="menu-desc">{a.description}</span>
-                    <span className="menu-hint-line">Ask in chat to delegate</span>
-                  </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -225,7 +356,7 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
         className={`toolbox-button secondary${open ? " is-open" : ""}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Skills and agents"
+        title="Skills, agents and workspace"
         onClick={toggle}
       >
         <span aria-hidden="true">🧰</span> Toolbox
@@ -240,33 +371,38 @@ export function Toolbox({ employeeId, onInsertSkill }: Props) {
               <button type="button" role="tab" aria-selected={tab === "agents"} className="tab" onClick={() => setTab("agents")}>
                 Agents{catalog ? ` (${organizedAgents.totalCount})` : ""}
               </button>
+              <button type="button" role="tab" aria-selected={tab === "workspace"} className="tab" onClick={() => setTab("workspace")}>
+                Workspace
+              </button>
             </div>
             <button type="button" className="link" disabled={loading} onClick={refresh} title="Re-read skills and agents">
               {loading ? "Refreshing…" : "↻ Refresh"}
             </button>
           </div>
-          <div className="toolbox-search-bar">
-            <input
-              ref={searchRef}
-              type="search"
-              className="toolbox-search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={tab === "skills" ? "Filter skills, plugins, commands..." : "Filter agents..."}
-              aria-label={tab === "skills" ? "Filter skills" : "Filter agents"}
-            />
-            {query !== "" && (
-              <button
-                type="button"
-                className="toolbox-search-clear"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                title="Clear search"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          {tab !== "workspace" && (
+            <div className="toolbox-search-bar">
+              <input
+                ref={searchRef}
+                type="search"
+                className="toolbox-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={tab === "skills" ? "Filter skills, plugins, commands..." : "Filter agents..."}
+                aria-label={tab === "skills" ? "Filter skills" : "Filter agents"}
+              />
+              {query !== "" && (
+                <button
+                  type="button"
+                  className="toolbox-search-clear"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
           <div className="toolbox-body">{body}</div>
         </div>
       ) : null}
