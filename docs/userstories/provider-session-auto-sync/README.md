@@ -9,7 +9,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Multi-provider read-only session and project catalogs | — | pending |
+| US-01 | Multi-provider read-only session and project catalogs | — | complete |
 | US-02 | Automatic project & chat sync and multi-provider history catch-up | US-01 | pending |
 | US-03 | Auto-synced projects sidebar, sync trigger, and project-picker chat creation | US-02 | pending |
 | US-04 | Native 1-to-1 provider session creation and deduplication verification | US-02, US-03 | pending |
@@ -56,12 +56,12 @@ As the owner, I want Virtual Office to read existing local projects and chats fr
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01` | `apps/server/test/claude-session-catalog.test.ts` (project derivation & existing list/history tests) | Pending |
-| `US-01 / AC-02` | `apps/server/test/opencode-session-catalog.test.ts` (fixture SQLite read-only listProjects, list, history, archived/child filtering) | Pending |
-| `US-01 / AC-03` | `apps/server/test/codex-session-catalog.test.ts` (fixture SQLite read-only listProjects, list, history, subagent/archived filtering) | Pending |
-| `US-01 / AC-04` | `apps/server/test/antigravity-session-catalog.test.ts` (fixture summaries DB + transcript JSONL, workspace URI parsing, subagent filtering) | Pending |
-| `US-01 / AC-05` | Missing/corrupt store test cases in each provider catalog test file | Pending |
-| Regression: existing Claude import & session catalog consumers | `apps/server/test/` full suite (`npm test --workspace=@virtualoffice/server`) | Pending |
+| `US-01 / AC-01` | `apps/server/test/agents/claude-session-catalog.test.ts` (project derivation & existing list/history tests) | Passed (2/2 tests, `tsc --noEmit` 0 errors) |
+| `US-01 / AC-02` | `apps/server/test/agents/opencode-session-catalog.test.ts` (fixture SQLite read-only listProjects, list, history, archived/child filtering) | Passed (2/2 tests) |
+| `US-01 / AC-03` | `apps/server/test/agents/codex-session-catalog.test.ts` (fixture SQLite read-only listProjects, list, history, subagent/archived filtering) | Passed (2/2 tests) |
+| `US-01 / AC-04` | `apps/server/test/agents/antigravity-session-catalog.test.ts` (fixture summaries DB + transcript JSONL, workspace URI parsing, subagent filtering) | Passed (4/4 tests) |
+| `US-01 / AC-05` | Missing/corrupt store test cases in each provider catalog test file | Passed (verified in all 4 catalog test files) |
+| Regression: existing Claude import & session catalog consumers | `apps/server/test/` full suite (`npm run test -w apps/server`) | Passed (36/36 files, 267/267 tests) |
 
 ---
 

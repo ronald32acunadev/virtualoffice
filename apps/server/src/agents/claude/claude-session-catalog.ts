@@ -1,7 +1,8 @@
 import { getSessionMessages, listSessions } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKSessionInfo, SessionMessage } from "@anthropic-ai/claude-agent-sdk";
+import path from "node:path";
 import type { AgentMessage } from "../../office/ports/agent-adapter.ts";
-import type { SessionCatalog, SessionInfo } from "../../office/ports/session-catalog.ts";
+import type { DiscoveredProject, SessionCatalog, SessionInfo } from "../../office/ports/session-catalog.ts";
 import { mapAssistantContent, mapUserContent } from "./message-mapping.ts";
 
 export type ListSessionsFunction = () => Promise<SDKSessionInfo[]>;
@@ -28,6 +29,29 @@ export class ClaudeSessionCatalog implements SessionCatalog {
       lastModified: s.lastModified,
       createdAt: s.createdAt ?? null,
     }));
+  }
+
+  async listProjects(): Promise<DiscoveredProject[]> {
+    try {
+      const sessions = await this.list();
+      const projectMap = new Map<string, DiscoveredProject>();
+      for (const s of sessions) {
+        if (!s.cwd) continue;
+        const resolved = path.resolve(s.cwd);
+        const name = path.basename(resolved) || resolved;
+        const existing = projectMap.get(resolved);
+        if (!existing || s.lastModified > existing.lastModified) {
+          projectMap.set(resolved, {
+            path: resolved,
+            name,
+            lastModified: s.lastModified,
+          });
+        }
+      }
+      return Array.from(projectMap.values()).sort((a, b) => b.lastModified - a.lastModified);
+    } catch {
+      return [];
+    }
   }
 
   async history(sessionId: string): Promise<AgentMessage[]> {
