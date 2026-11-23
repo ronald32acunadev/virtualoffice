@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
+import type { LightingMood } from "../scene/officeTheme";
 import { useOffice } from "../state/OfficeProvider";
 import { SPECIES_EMOJI, SPECIES_LIST, speciesLabel } from "../state/species";
 import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
@@ -66,7 +67,7 @@ function Header({
     });
 
   return (
-    <header className="conv-head">
+    <header className="conv-head" data-boss={employee.bossId}>
       <div className="conv-title">
         <span className="avatar avatar-lg">{SPECIES_EMOJI[employee.species]}</span>
         {editing ? (
@@ -417,7 +418,10 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
           </div>
           <div className="composer-footer">
             <div className="composer-meta">
-              <span className="composer-boss-pill">{boss?.name ?? employee.bossId}</span>
+              <span className="composer-boss-pill" data-boss={employee.bossId}>
+                <span className="boss-accent-dot" aria-hidden="true" />
+                {boss?.name ?? employee.bossId}
+              </span>
               {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
             </div>
             <div className="composer-status-right">
@@ -436,7 +440,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   );
 }
 
-export function ConversationPane({ employeeId }: { employeeId: string }) {
+export function ConversationPane({ employeeId, mood }: { employeeId: string; mood: LightingMood }) {
   const { state, actions } = useOffice();
   const messages = state.messages[employeeId];
   const live = state.liveText[employeeId] ?? "";
@@ -503,7 +507,7 @@ export function ConversationPane({ employeeId }: { employeeId: string }) {
         </div>
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
-      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} /> : null}
+      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} /> : null}
       {view === "app" && employee ? <AppPanel key={employeeId} employeeId={employeeId} bossId={employee.bossId} /> : null}
     </section>
   );

@@ -10,8 +10,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Shared 3D Office Day/Evening mood sync and workspace toggle | — | complete |
-| US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | in progress |
-| US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | pending |
+| US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | complete |
+| US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | in progress |
 | US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | pending |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -80,9 +80,9 @@ As the owner, I want the chat interface's colors to mirror the 3D Office's warm 
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01`, `US-02 / AC-02`, `US-02 / AC-03` | `apps/web/src/state/officeMood.test.ts` (theme palette & boss accent mapping derived from `MOOD_PALETTES` and `AREA_COLORS`, CSS token consistency checks) | Pending |
-| `US-02 / AC-04` | `apps/web/src/state/officeMood.test.ts` (xterm theme generator for `day` and `evening`) | Pending |
-| `US-02 / AC-05` + visual contrast check | Manual visual check in browser across Day and Evening modes in both `/workspace` and `/office`, plus `npm run build` and `npm run test -w apps/web` | Pending |
+| `US-02 / AC-01`, `US-02 / AC-02`, `US-02 / AC-03` | `apps/web/src/state/officeMood.test.ts` (theme palette & boss accent mapping derived from `MOOD_PALETTES` and `AREA_COLORS`, CSS token consistency checks) | Passed (`7/7` tests in `officeMood.test.ts`; `npm run test -w apps/web` 116/116) |
+| `US-02 / AC-04` | `apps/web/src/state/officeMood.test.ts` (xterm theme generator for `day` and `evening`) | Passed (`getTerminalTheme` verified for both moods, live update wired in `TerminalPanel.tsx`) |
+| `US-02 / AC-05` + visual contrast check | Manual visual check in browser across Day and Evening modes in both `/workspace` and `/office`, plus `npm run build` and `npm run test -w apps/web` | Automated: `npm run typecheck -w apps/web`, `npm run build -w apps/web`, `npm run test -w apps/web` (116/116) passed; manual visual check pending owner/browser run |
 
 ---
 

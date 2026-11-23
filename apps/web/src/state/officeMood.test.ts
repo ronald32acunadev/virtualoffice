@@ -1,8 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MOOD_STORAGE_KEY } from "../scene/camera";
 import type { LightingMood } from "../scene/officeTheme";
-import { createMoodSync, parseMoodValue, applyOfficeMood, type MoodRoot, type StorageEventLike } from "./officeMood";
+import { AREA_COLORS } from "../scene/layout";
+import {
+  createMoodSync,
+  parseMoodValue,
+  applyOfficeMood,
+  OFFICE_UI_PALETTES,
+  BOSS_ACCENTS,
+  getBossAccent,
+  getTerminalTheme,
+  type MoodRoot,
+  type StorageEventLike,
+} from "./officeMood";
 import type { ChannelLike } from "./windowChannel";
+import * as fs from "node:fs";
 
 type FakeChannel = ChannelLike & { sent: unknown[]; receive: (data: unknown) => void };
 
@@ -150,5 +162,39 @@ describe("officeMood", () => {
 
     expect(() => controller.setMood("evening")).not.toThrow();
     expect(() => controller.dispose()).not.toThrow();
+  });
+
+  it("US-02 / AC-01, AC-02, AC-03, AC-04: verifies palettes, boss accents, and terminal themes", () => {
+    expect(OFFICE_UI_PALETTES.day).toBeDefined();
+    expect(OFFICE_UI_PALETTES.evening).toBeDefined();
+    expect(JSON.stringify(OFFICE_UI_PALETTES)).not.toContain("#212121");
+    expect(JSON.stringify(OFFICE_UI_PALETTES)).not.toContain("#171717");
+
+    expect(BOSS_ACCENTS).toEqual(AREA_COLORS);
+    expect(getBossAccent("claude")).toBe(AREA_COLORS.claude);
+    expect(getBossAccent("codex")).toBe(AREA_COLORS.codex);
+    expect(getBossAccent("opencode")).toBe(AREA_COLORS.opencode);
+    expect(getBossAccent("gemini")).toBe(AREA_COLORS.gemini);
+
+    const dayTerm = getTerminalTheme("day");
+    const eveningTerm = getTerminalTheme("evening");
+    expect(dayTerm.background).toBeDefined();
+    expect(eveningTerm.background).toBeDefined();
+    expect(dayTerm.background).not.toBe("#171717");
+    expect(dayTerm.cursor).not.toBe("#4f8cff");
+    expect(eveningTerm.cursor).not.toBe("#4f8cff");
+
+    const cssPath = new URL("../styles.css", import.meta.url);
+    const cssContent = fs.readFileSync(cssPath, "utf-8");
+    expect(cssContent).toContain(':root[data-office-mood="day"]');
+    expect(cssContent).toContain(':root[data-office-mood="evening"]');
+    expect(cssContent).toContain("color-scheme: light");
+    expect(cssContent).toContain("color-scheme: dark");
+    expect(cssContent).toContain("--boss-claude");
+    expect(cssContent).toContain("--boss-codex");
+    expect(cssContent).toContain("--boss-opencode");
+    expect(cssContent).toContain("--boss-gemini");
+    expect(cssContent).not.toContain("#212121");
+    expect(cssContent).not.toContain("#171717");
   });
 });

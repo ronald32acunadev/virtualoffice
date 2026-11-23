@@ -3,6 +3,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { getToken } from "../api/client";
+import { getTerminalTheme } from "../state/officeMood";
+import type { LightingMood } from "../scene/officeTheme";
 import {
   buildTerminalUrl,
   createResizeScheduler,
@@ -17,7 +19,7 @@ import {
 
 type Status = "connecting" | "open" | "ended";
 /** Embedded xterm.js terminal attached to the employee's agent CLI over /ws/terminal. */
-export function TerminalPanel({ employeeId, busy }: { employeeId: string; busy: boolean }) {
+export function TerminalPanel({ employeeId, busy, mood }: { employeeId: string; busy: boolean; mood: LightingMood }) {
   const [status, setStatus] = useState<Status>("connecting");
   const [endText, setEndText] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -26,6 +28,15 @@ export function TerminalPanel({ employeeId, busy }: { employeeId: string; busy: 
   const canConnect = gate === "connect";
   const hostRef = useRef<HTMLDivElement>(null);
   const connectionRef = useRef<TerminalConnection | null>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const moodRef = useRef<LightingMood>(mood);
+  moodRef.current = mood;
+
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = getTerminalTheme(mood);
+    }
+  }, [mood]);
 
   useEffect(() => {
     if (!canConnect) return;
@@ -40,12 +51,9 @@ export function TerminalPanel({ employeeId, busy }: { employeeId: string; busy: 
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize: 13,
       scrollback: 5000,
-      theme: {
-        background: "#171717",
-        foreground: "#ececec",
-        cursor: "#4f8cff",
-      },
+      theme: getTerminalTheme(moodRef.current),
     });
+    termRef.current = term;
 
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -110,6 +118,9 @@ export function TerminalPanel({ employeeId, busy }: { employeeId: string; busy: 
         connectionRef.current = null;
       }
       term.dispose();
+      if (termRef.current === term) {
+        termRef.current = null;
+      }
     };
   }, [employeeId, generation, canConnect]);
 

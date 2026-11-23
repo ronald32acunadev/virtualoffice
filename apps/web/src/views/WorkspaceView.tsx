@@ -45,7 +45,7 @@ export function WorkspaceView() {
       />
       <main className="workspace-main">
         {selected ? (
-          <ConversationPane key={selected} employeeId={selected} />
+          <ConversationPane key={selected} employeeId={selected} mood={mood} />
         ) : (
           <div className="workspace-empty">
             <h1>Virtual Office</h1>

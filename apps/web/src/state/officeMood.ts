@@ -1,10 +1,73 @@
 import { MOOD_STORAGE_KEY, readSavedMood, saveMood } from "../scene/camera";
 import type { LightingMood } from "../scene/officeTheme";
+import { AREA_COLORS } from "../scene/layout";
+import type { BossId } from "../api/types";
 import { parseWindowMessage, openWindowChannel, type ChannelLike } from "./windowChannel";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type MoodRoot = { dataset: Record<string, string | undefined> };
 export type StorageEventLike = { key: string | null; newValue: string | null };
+
+export type OfficeUiPalette = {
+  bg: string;
+  panel: string;
+  card: string;
+  border: string;
+  text: string;
+  muted: string;
+  accent: string;
+};
+
+export const OFFICE_UI_PALETTES: Record<LightingMood, OfficeUiPalette> = {
+  day: {
+    bg: "#f7f2ea",
+    panel: "#ede5d8",
+    card: "#f2ece1",
+    border: "#d2bc9c",
+    text: "#2c2218",
+    muted: "#6d5c4b",
+    accent: "#c46d49",
+  },
+  evening: {
+    bg: "#1d263b",
+    panel: "#171f33",
+    card: "#242e48",
+    border: "#5a4b44",
+    text: "#f3ece2",
+    muted: "#b7ad9f",
+    accent: "#ffbe6b",
+  },
+};
+
+export const BOSS_ACCENTS: Record<BossId, string> = { ...AREA_COLORS };
+
+export function getBossAccent(bossId: BossId): string {
+  return BOSS_ACCENTS[bossId];
+}
+
+export type TerminalThemePalette = {
+  background: string;
+  foreground: string;
+  cursor: string;
+  selectionBackground: string;
+};
+
+export function getTerminalTheme(mood: LightingMood): TerminalThemePalette {
+  if (mood === "day") {
+    return {
+      background: "#f2ece1",
+      foreground: "#2c2218",
+      cursor: "#c46d49",
+      selectionBackground: "rgba(196, 109, 73, 0.25)",
+    };
+  }
+  return {
+    background: "#171f33",
+    foreground: "#f3ece2",
+    cursor: "#ffbe6b",
+    selectionBackground: "rgba(255, 190, 107, 0.25)",
+  };
+}
 
 export function parseMoodValue(raw: unknown): LightingMood | null {
   if (raw === "day" || raw === "evening") return raw;

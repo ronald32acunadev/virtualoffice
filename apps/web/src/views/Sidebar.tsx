@@ -217,7 +217,7 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onImport, onOpenOffice 
             const boss = state.bosses.find((b) => b.id === group.bossId);
             const isCollapsed = Boolean(collapsed[group.bossId]);
             return (
-              <section key={group.bossId} className="sidebar-section">
+              <section key={group.bossId} className="sidebar-section" data-boss={group.bossId}>
                 <button
                   type="button"
                   className="sidebar-group-head"
@@ -225,6 +225,7 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onImport, onOpenOffice 
                   onClick={() => toggleGroup(group.bossId)}
                 >
                   <span>
+                    <span className="boss-accent-dot" aria-hidden="true" />
                     {group.bossName}
                     {boss?.onBreak ? <span className="boss-break-tag">☕ On break</span> : null}
                   </span>
