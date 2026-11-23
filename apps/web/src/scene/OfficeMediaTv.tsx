@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { Html } from "@react-three/drei";
 import type { MediaPlaybackState } from "../api/types";
 import type { LightingMood } from "./officeTheme";
@@ -15,6 +16,7 @@ export type OfficeMediaTvProps = {
   onOpenDrawer: () => void;
   onFocusTv: () => void;
   onTurnOff: () => void;
+  portalRef?: RefObject<HTMLElement | null>;
 };
 
 export function OfficeMediaTv({
@@ -23,6 +25,7 @@ export function OfficeMediaTv({
   onOpenDrawer,
   onFocusTv,
   onTurnOff,
+  portalRef,
 }: OfficeMediaTvProps) {
   const screen = getTvScreenModel(media);
   const visual = screen.mode === "playing" ? MEDIA_PROVIDER_VISUALS[screen.provider] : null;
@@ -92,6 +95,7 @@ export function OfficeMediaTv({
 
       <Html
         transform
+        portal={portalRef as RefObject<HTMLElement> | undefined}
         position={[0, 0, TV_BEZEL_SIZE.depth / 2 + 0.02]}
         distanceFactor={TV_HTML_CONFIG.distanceFactor}
         zIndexRange={[8, 0]}

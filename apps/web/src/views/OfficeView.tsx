@@ -15,6 +15,7 @@ import { MediaDrawer } from "./MediaDrawer";
 
 export function OfficeView() {
   const { state, actions } = useOffice();
+  const officeViewRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const { mood, toggleMood } = useOfficeMood();
@@ -89,7 +90,7 @@ export function OfficeView() {
   };
 
   return (
-    <div className="office-view">
+    <div className="office-view" ref={officeViewRef}>
       <SceneErrorBoundary>
         <OfficeScene
           onSelectEmployee={(id) => void focusEmployee(id)}
@@ -101,6 +102,7 @@ export function OfficeView() {
           onOpenMediaDrawer={openMediaDrawer}
           onFocusTv={focusTv}
           onTurnOffMedia={turnOffMedia}
+          tvPortalRef={officeViewRef}
         />
       </SceneErrorBoundary>
       <div className="office-hud" role="toolbar" aria-label="Office view controls">

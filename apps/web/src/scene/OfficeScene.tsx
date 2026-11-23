@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
@@ -114,6 +114,7 @@ export function OfficeScene({
   onOpenMediaDrawer = () => {},
   onFocusTv = () => {},
   onTurnOffMedia = () => {},
+  tvPortalRef,
 }: {
   onSelectEmployee: (employeeId: string) => void;
   onClear: () => void;
@@ -124,6 +125,7 @@ export function OfficeScene({
   onOpenMediaDrawer?: () => void;
   onFocusTv?: () => void;
   onTurnOffMedia?: () => void;
+  tvPortalRef?: RefObject<HTMLElement | null>;
 }) {
   const { state } = useOffice();
   const bosses: Boss[] = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
@@ -229,6 +231,7 @@ export function OfficeScene({
         onOpenDrawer={onOpenMediaDrawer}
         onFocusTv={onFocusTv}
         onTurnOff={onTurnOffMedia}
+        portalRef={tvPortalRef}
       />
 
       {bosses.map((boss) => (
