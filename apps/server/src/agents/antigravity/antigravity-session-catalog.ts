@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -42,6 +42,7 @@ export class AntigravitySessionCatalog implements SessionCatalog {
     private readonly config: {
       summariesDbPath?: string;
       brainDir?: string;
+      conversationsDir?: string;
     } = {},
   ) {}
 
@@ -51,6 +52,10 @@ export class AntigravitySessionCatalog implements SessionCatalog {
 
   private get brainDir(): string {
     return this.config.brainDir ?? join(homedir(), ".gemini", "antigravity", "brain");
+  }
+
+  private get conversationsDir(): string {
+    return this.config.conversationsDir ?? join(homedir(), ".gemini", "antigravity", "conversations");
   }
 
   async list(): Promise<SessionInfo[]> {
@@ -175,6 +180,27 @@ export class AntigravitySessionCatalog implements SessionCatalog {
       return out;
     } catch {
       return [];
+    }
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    if (!sessionId || !/^[A-Za-z0-9._-]+$/.test(sessionId)) {
+      return false;
+    }
+    const resolvedConversationsDir = resolve(this.conversationsDir);
+    const expectedPrefix = resolvedConversationsDir + "/";
+    const candidate = resolve(resolvedConversationsDir, `${sessionId}.pb`);
+    if (!candidate.startsWith(resolvedConversationsDir)) {
+      return false;
+    }
+    try {
+      if (existsSync(candidate) && statSync(candidate).isFile()) {
+        rmSync(candidate, { force: true });
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
   }
 }

@@ -5,6 +5,7 @@ export interface OfficeRepository {
   updateEmployee(employee: Employee): void;
   getEmployee(id: string): Employee | undefined;
   listEmployees(): Employee[];
+  deleteEmployee(employeeId: string): boolean;
 
   insertMessage(message: Message): void;
   listMessages(employeeId: string): Message[];

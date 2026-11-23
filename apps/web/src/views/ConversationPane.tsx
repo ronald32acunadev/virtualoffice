@@ -169,6 +169,18 @@ function Header({
           onInsertSkill={onInsertSkill}
           onInsertPrompt={onInsertPrompt}
         />
+        <button
+          type="button"
+          className="link danger-link"
+          title="Delete chat (also removes the synced session from the agent)"
+          onClick={() => {
+            if (window.confirm(`Delete "${employee.name}"? This also removes the synced chat from its agent.`)) {
+              void run(() => actions.deleteEmployee(employee.id));
+            }
+          }}
+        >
+          🗑 Delete
+        </button>
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop

@@ -27,6 +27,7 @@ export type OfficeActions = {
   syncProviders: () => Promise<SyncSummary>;
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
+  deleteEmployee: (employeeId: string) => Promise<void>;
   resumeBoss: (bossId: BossId) => Promise<void>;
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) => Promise<void>;
 };
@@ -116,6 +117,10 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
       stopEmployee: async (employeeId) => {
         const { employee } = await api.stopEmployee(employeeId);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
+      },
+      deleteEmployee: async (employeeId) => {
+        await api.deleteEmployee(employeeId);
+        dispatch({ type: "server_event", event: { type: "employee_removed", employeeId } });
       },
       resumeBoss: async (bossId) => {
         const { boss } = await api.resumeBoss(bossId);

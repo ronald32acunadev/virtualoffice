@@ -23,4 +23,5 @@ export interface SessionCatalog {
   listProjects?(): Promise<DiscoveredProject[]>;
   /** Stored history as office messages, each carrying its provider uuid as `sourceUuid`. */
   history(sessionId: string): Promise<AgentMessage[]>;
+  deleteSession?(sessionId: string): Promise<boolean>;
 }

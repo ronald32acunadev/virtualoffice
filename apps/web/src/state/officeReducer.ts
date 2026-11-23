@@ -115,6 +115,18 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
       if (state.activeTerminals.includes(employeeId)) return state;
       return { ...state, activeTerminals: [...state.activeTerminals, employeeId] };
     }
+    case "employee_removed": {
+      const { employeeId } = event;
+      return {
+        ...state,
+        employees: state.employees.filter((e) => e.id !== employeeId),
+        approvals: state.approvals.filter((a) => a.employeeId !== employeeId),
+        messages: withoutKey(state.messages, employeeId),
+        liveText: withoutKey(state.liveText, employeeId),
+        activeTerminals: state.activeTerminals.filter((id) => id !== employeeId),
+        selectedId: state.selectedId === employeeId ? null : state.selectedId,
+      };
+    }
     case "projects_updated":
       return { ...state, projects: event.projects };
   }

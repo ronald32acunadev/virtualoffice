@@ -119,6 +119,7 @@ export const api = {
     }),
   stopEmployee: (employeeId: string) =>
     request<{ employee: Employee }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/stop`),
+  deleteEmployee: (employeeId: string) => request<{ deleted: boolean; providerDeleted: boolean }>("DELETE", `/api/employees/${encodeURIComponent(employeeId)}`),
   resumeBoss: (bossId: BossId) =>
     request<{ boss: import("./types").Boss }>("POST", `/api/bosses/${encodeURIComponent(bossId)}/resume`),
   decide: (approvalId: string, decision: Decision, answers?: Record<string, string>) =>

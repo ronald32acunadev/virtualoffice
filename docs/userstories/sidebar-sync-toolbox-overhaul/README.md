@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Remove `"Import from Claude"` button, modal, and manual import routes | — | complete |
 | US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | complete |
 | US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | complete |
-| US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | in progress |
+| US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -98,5 +98,5 @@ As the owner, I want creating or deleting a chat in either Virtual Office or an 
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01`, `US-04 / AC-02` | `apps/server/test/office/two-way-session-sync.test.ts` (pruning externally deleted sessions on sync, no pruning when provider errors, `DELETE /api/employees/:id` removing DB rows + attachments + calling `deleteSession` + broadcasting `employee_removed`, 404 on unknown ID, safe path-containment rejection in catalog `deleteSession`) | Pending |
-| `US-04 / AC-03` | `apps/web/src/state/officeReducer.test.ts` (`employee_removed` event removes employee, messages, approvals, and clears `selectedId`) + `npm run typecheck`, `npm test`, `npm run build` | Pending |
+| `US-04 / AC-01`, `US-04 / AC-02` | `apps/server/test/office/two-way-session-sync.test.ts` (pruning externally deleted sessions on sync, no pruning when provider errors, `DELETE /api/employees/:id` removing DB rows + attachments + calling `deleteSession` + broadcasting `employee_removed`, 404 on unknown ID, safe path-containment rejection in catalog `deleteSession`) | Passed (`6/6` tests in `two-way-session-sync.test.ts`; `apps/server` 37/37 files 258/258 tests) |
+| `US-04 / AC-03` | `apps/web/src/state/officeReducer.test.ts` (`employee_removed` event removes employee, messages, approvals, and clears `selectedId`) + `npm run typecheck`, `npm test`, `npm run build` | Passed (`11/11` tests in `officeReducer.test.ts`; `apps/web` 24/24 files 138/138 tests; `typecheck` & `vite build` clean) |

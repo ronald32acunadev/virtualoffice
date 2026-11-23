@@ -235,6 +235,13 @@ export class SqliteOfficeRepository implements OfficeRepository {
     return this.db.prepare("SELECT * FROM employees ORDER BY seq").all().map(toEmployee);
   }
 
+  deleteEmployee(employeeId: string): boolean {
+    this.db.prepare("DELETE FROM approvals WHERE employee_id = ?").run(employeeId);
+    this.db.prepare("DELETE FROM messages WHERE employee_id = ?").run(employeeId);
+    const result = this.db.prepare("DELETE FROM employees WHERE id = ?").run(employeeId);
+    return Number(result.changes) > 0;
+  }
+
   insertMessage(m: Message): void {
     this.db
       .prepare(

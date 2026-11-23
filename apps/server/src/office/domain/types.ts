@@ -132,6 +132,7 @@ export type Project = {
 export type ProviderSyncStats = {
   projectsAdded: number;
   sessionsImported: number;
+  sessionsRemoved?: number;
   skipped: number;
   error: string | null;
 };
@@ -139,6 +140,7 @@ export type ProviderSyncStats = {
 export type SyncSummary = {
   projectsAdded: number;
   sessionsImported: number;
+  sessionsRemoved?: number;
   skipped: number;
   providers: Partial<Record<BossId, ProviderSyncStats>>;
 };
@@ -164,6 +166,7 @@ export type ApprovalRequest = {
 export type ServerEvent =
   | { type: "boss_updated"; boss: Boss }
   | { type: "employee_updated"; employee: Employee }
+  | { type: "employee_removed"; employeeId: string }
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }

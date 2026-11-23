@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, rmSync, statSync, readdirSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import type { AgentMessage } from "../../office/ports/agent-adapter.ts";
@@ -14,6 +14,7 @@ export class CodexSessionCatalog implements SessionCatalog {
     private readonly config: {
       stateDbPath?: string;
       historyDbPath?: string;
+      sessionsDir?: string;
     } = {},
   ) {}
 
@@ -23,6 +24,10 @@ export class CodexSessionCatalog implements SessionCatalog {
 
   private get historyDbPath(): string {
     return this.config.historyDbPath ?? join(homedir(), ".codex", "thread_history_1.sqlite");
+  }
+
+  private get sessionsDir(): string {
+    return this.config.sessionsDir ?? join(homedir(), ".codex", "sessions");
   }
 
   async listProjects(): Promise<DiscoveredProject[]> {
@@ -209,5 +214,43 @@ export class CodexSessionCatalog implements SessionCatalog {
     } finally {
       db?.close();
     }
+  }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    if (!sessionId || !/^[A-Za-z0-9._-]+$/.test(sessionId)) {
+      return false;
+    }
+    const resolvedSessionsDir = resolve(this.sessionsDir);
+    const expectedPrefix = resolvedSessionsDir + "/";
+    if (!existsSync(resolvedSessionsDir)) {
+      return false;
+    }
+
+    let found = false;
+    const walk = (dir: string) => {
+      if (found) return;
+      try {
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (found) return;
+          const fullPath = resolve(dir, entry.name);
+          if (!fullPath.startsWith(resolvedSessionsDir)) continue;
+          if (entry.isDirectory()) {
+            walk(fullPath);
+          } else if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+            const base = entry.name;
+            if (base === `${sessionId}.jsonl` || base.endsWith(`-${sessionId}.jsonl`)) {
+              if (fullPath.startsWith(resolvedSessionsDir)) {
+                rmSync(fullPath, { force: true });
+                found = true;
+              }
+            }
+          }
+        }
+      } catch {}
+    };
+
+    walk(resolvedSessionsDir);
+    return found;
   }
 }

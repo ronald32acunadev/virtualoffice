@@ -157,4 +157,36 @@ export class OpenCodeSessionCatalog implements SessionCatalog {
       db?.close();
     }
   }
+
+  async deleteSession(sessionId: string): Promise<boolean> {
+    if (!sessionId || !/^[A-Za-z0-9._-]+$/.test(sessionId)) {
+      return false;
+    }
+    if (!existsSync(this.dbPath)) {
+      return false;
+    }
+    let db: DatabaseSync | null = null;
+    try {
+      db = new DatabaseSync(this.dbPath);
+      // Check tables exist or run delete
+      let changes = 0;
+      try {
+        const msgRes = db.prepare("DELETE FROM message WHERE session_id = ?").run(sessionId);
+        changes += Number(msgRes.changes ?? 0);
+      } catch {}
+      try {
+        const sessRes = db.prepare("DELETE FROM session WHERE id = ?").run(sessionId);
+        changes += Number(sessRes.changes ?? 0);
+      } catch {}
+      try {
+        const sessV2Res = db.prepare("DELETE FROM session_v2 WHERE id = ?").run(sessionId);
+        changes += Number(sessV2Res.changes ?? 0);
+      } catch {}
+      return changes > 0;
+    } catch {
+      return false;
+    } finally {
+      db?.close();
+    }
+  }
 }

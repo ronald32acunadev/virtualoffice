@@ -168,4 +168,19 @@ export class AttachmentStore {
     } catch {}
     return null;
   }
+
+  removeEmployeeDir(employeeId: string): void {
+    if (!/^[A-Za-z0-9_-]+$/.test(employeeId)) return;
+    const resolvedRoot = path.resolve(this.rootDir);
+    const dir = path.resolve(resolvedRoot, employeeId);
+    const expectedBase = resolvedRoot + path.sep;
+    if (dir === resolvedRoot || !dir.startsWith(expectedBase)) {
+      return;
+    }
+    try {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    } catch {}
+  }
 }

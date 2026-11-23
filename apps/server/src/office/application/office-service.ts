@@ -315,6 +315,7 @@ export class OfficeService {
     let projectsChanged = false;
     let projectsAdded = 0;
     let sessionsImported = 0;
+    let sessionsRemoved = 0;
     let skipped = 0;
     const providers: Partial<Record<BossId, ProviderSyncStats>> = {};
 
@@ -360,7 +361,7 @@ export class OfficeService {
     };
 
     for (const [bossId, catalog] of Object.entries(this.catalogs) as [BossId, SessionCatalog][]) {
-      const stats: ProviderSyncStats = { projectsAdded: 0, sessionsImported: 0, skipped: 0, error: null };
+      const stats: ProviderSyncStats = { projectsAdded: 0, sessionsImported: 0, sessionsRemoved: 0, skipped: 0, error: null };
       try {
         if (catalog.listProjects) {
           for (const p of await catalog.listProjects()) {
@@ -370,7 +371,9 @@ export class OfficeService {
             }
           }
         }
+        const seenSessionIds = new Set<string>();
         for (const s of await catalog.list()) {
+          seenSessionIds.add(s.sessionId);
           if (!s.cwd || !this.isDirectory(s.cwd)) {
             stats.skipped += 1;
             skipped += 1;
@@ -411,6 +414,19 @@ export class OfficeService {
           stats.sessionsImported += 1;
           sessionsImported += 1;
         }
+
+        // Prune stale employees for this boss (only when stats.error === null)
+        const employeesForBoss = this.repository.listEmployees().filter(
+          (e) => e.bossId === bossId && e.providerSessionId !== null && !seenSessionIds.has(e.providerSessionId) && !this.sessions.get(e.id)?.active
+        );
+        for (const stale of employeesForBoss) {
+          this.expireApprovalsOf(stale.id);
+          this.repository.deleteEmployee(stale.id);
+          this.attachmentStore.removeEmployeeDir(stale.id);
+          this.events.publish({ type: "employee_removed", employeeId: stale.id });
+          stats.sessionsRemoved = (stats.sessionsRemoved ?? 0) + 1;
+          sessionsRemoved += 1;
+        }
       } catch (error) {
         stats.error = errorReason(error);
       }
@@ -421,7 +437,7 @@ export class OfficeService {
       this.events.publish({ type: "projects_updated", projects: this.repository.listProjects() });
     }
 
-    return { projectsAdded, sessionsImported, skipped, providers };
+    return { projectsAdded, sessionsImported, sessionsRemoved, skipped, providers };
   }
 
   /** Commands and agents of a folder: cached, or probed on a miss or when `refresh` is true. */
@@ -733,6 +749,34 @@ export class OfficeService {
       this.sessions.delete(employeeId);
     }
     return this.setStatus(employeeId, "stopped");
+  }
+
+  async deleteEmployee(employeeId: string): Promise<{ deleted: true; providerDeleted: boolean }> {
+    const employee = this.requireEmployee(employeeId);
+    await this.stop(employeeId);
+    if (this.terminals && typeof (this.terminals as unknown as { kill?: (id: string) => void }).kill === "function") {
+      try {
+        (this.terminals as unknown as { kill: (id: string) => void }).kill(employeeId);
+      } catch {}
+    }
+    this.expireApprovalsOf(employeeId);
+
+    let providerDeleted = false;
+    if (employee.providerSessionId) {
+      const catalog = this.catalogs[employee.bossId];
+      if (catalog && typeof catalog.deleteSession === "function") {
+        try {
+          providerDeleted = Boolean(await catalog.deleteSession(employee.providerSessionId));
+        } catch {
+          providerDeleted = false;
+        }
+      }
+    }
+
+    this.repository.deleteEmployee(employeeId);
+    this.attachmentStore.removeEmployeeDir(employeeId);
+    this.events.publish({ type: "employee_removed", employeeId });
+    return { deleted: true, providerDeleted };
   }
 
   decide(approvalId: string, input: { decision: unknown; answers?: unknown }): ApprovalRequest {

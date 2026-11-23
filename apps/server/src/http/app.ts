@@ -79,7 +79,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .code(204)
         .header("access-control-allow-origin", origin)
         .header("access-control-allow-headers", "authorization, content-type")
-        .header("access-control-allow-methods", "GET, POST, PATCH, OPTIONS")
+        .header("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS")
         .send();
     }
     // 3. Token check.
@@ -161,6 +161,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       }),
     };
   });
+
+  app.delete<{ Params: { id: string } }>("/api/employees/:id", async (request) =>
+    office.deleteEmployee(request.params.id),
+  );
 
 
 

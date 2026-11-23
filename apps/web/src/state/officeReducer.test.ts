@@ -210,4 +210,45 @@ describe("office reducer", () => {
     });
     expect(state.activeTerminals).toEqual([]);
   });
+
+  it("US-04 / AC-03: receives employee_removed and cleans up state properly", () => {
+    let state = apply(initialOfficeState, {
+      type: "state_loaded",
+      snapshot: {
+        bosses: [],
+        employees: [employee({ id: "e1", name: "Ada" }), employee({ id: "e2", name: "Bob" })],
+        approvals: [approval({ employeeId: "e1" }), approval({ employeeId: "e2", id: "a2" })],
+      },
+    });
+    state = apply(state, {
+      type: "messages_loaded",
+      employeeId: "e1",
+      messages: [message({ employeeId: "e1" })],
+    });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "message_delta", employeeId: "e1", text: "live" },
+    });
+    state = apply(state, { type: "select", employeeId: "e1" });
+
+    // Remove e1
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "employee_removed", employeeId: "e1" },
+    });
+
+    expect(state.employees.map((e) => e.id)).toEqual(["e2"]);
+    expect(state.approvals.map((a) => a.id)).toEqual(["a2"]);
+    expect(state.messages["e1"]).toBeUndefined();
+    expect(state.liveText["e1"]).toBeUndefined();
+    expect(state.selectedId).toBeNull();
+
+    // Now select e2 and remove a different employee, selectedId should remain e2
+    state = apply(state, { type: "select", employeeId: "e2" });
+    state = apply(state, {
+      type: "server_event",
+      event: { type: "employee_removed", employeeId: "e99" },
+    });
+    expect(state.selectedId).toBe("e2");
+  });
 });
