@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
 import {
   CliJsonlAdapter,
@@ -253,10 +254,24 @@ export class AntigravityAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "Antigravity",
       command,
-      buildArgs: ({ prompt, resume }: StartParams) =>
-        resume
-          ? ["--conversation", resume, "-p", prompt, "--output-format", "stream-json"]
-          : ["-p", prompt, "--output-format", "stream-json"],
+      buildArgs: ({ prompt, resume, attachments }: StartParams) => {
+        const dirs = [...new Set((attachments ?? []).map((a) => path.dirname(a.path)))];
+        const addDirFlags = dirs.flatMap((dir) => ["--add-dir", dir]);
+
+        let finalPrompt = prompt.trim();
+        if (attachments && attachments.length > 0) {
+          const lines = attachments.map((a) => `- ${a.name} (${a.mimeType}): ${a.path}`);
+          const notes = `Attached files:\n${lines.join("\n")}`;
+          finalPrompt = finalPrompt ? `${finalPrompt}\n\n${notes}` : notes;
+        }
+        if (attachments && attachments.length > 0 && !finalPrompt) {
+          finalPrompt = "Please inspect the attached file(s).";
+        }
+
+        return resume
+          ? ["--conversation", resume, ...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"]
+          : [...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"];
+      },
       createParser: createAntigravityParser,
     };
     super(spec, spawnFn, killGraceMs);

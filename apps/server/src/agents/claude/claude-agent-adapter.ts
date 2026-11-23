@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import fs from "node:fs";
 import type {
   CanUseTool,
   Options,
@@ -7,7 +8,8 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentAdapter, AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
-import type { ProviderAgent, ProviderCatalog } from "../../office/domain/types.ts";
+import type { ProviderAgent, ProviderCatalog, StoredAttachment } from "../../office/domain/types.ts";
+import { isSafeInlineImageMime } from "../../office/application/attachments.ts";
 import { toAgents, toCommands, withTimeout } from "./catalog-support.ts";
 import { SETTING_SOURCES, SYSTEM_PROMPT } from "./session-options.ts";
 import { approvalKindFor, summarizeToolInput } from "./approval-mapping.ts";
@@ -71,8 +73,70 @@ function deny(message: string): PermissionResult {
   return { behavior: "deny", message };
 }
 
-function userMessage(text: string): SDKUserMessage {
-  return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+function userMessage(text: string, attachments?: StoredAttachment[]): SDKUserMessage {
+  if (!attachments || attachments.length === 0) {
+    return { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null };
+  }
+
+  const blocks: Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        source: {
+          type: "base64";
+          media_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+          data: string;
+        };
+      }
+  > = [];
+
+  const otherFiles: StoredAttachment[] = [];
+
+  for (const att of attachments) {
+    if (isSafeInlineImageMime(att.mimeType) && fs.existsSync(att.path)) {
+      try {
+        const data = fs.readFileSync(att.path).toString("base64");
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: att.mimeType.toLowerCase() as
+              | "image/png"
+              | "image/jpeg"
+              | "image/gif"
+              | "image/webp",
+            data,
+          },
+        });
+        continue;
+      } catch {
+        // fallback to other files if read fails
+      }
+    }
+    otherFiles.push(att);
+  }
+
+  let finalText = text.trim();
+  if (otherFiles.length > 0) {
+    const lines = otherFiles.map((f) => `- ${f.name} (${f.mimeType}): ${f.path}`);
+    const notes = `Attached files:\n${lines.join("\n")}`;
+    finalText = finalText ? `${finalText}\n\n${notes}` : notes;
+  }
+
+  if (blocks.length > 0 && !finalText) {
+    finalText = "Please inspect the attached image(s).";
+  }
+
+  blocks.push({ type: "text", text: finalText });
+
+  return {
+    type: "user",
+    message: {
+      role: "user",
+      content: blocks as unknown as SDKUserMessage["message"]["content"],
+    },
+    parent_tool_use_id: null,
+  };
 }
 
 export class ClaudeAgentAdapter implements AgentAdapter {
@@ -84,9 +148,9 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     return this.sessions.has(employeeId);
   }
 
-  start({ employee, prompt, resume }: StartParams, sink: AgentSink): void {
+  start({ employee, prompt, resume, attachments }: StartParams, sink: AgentSink): void {
     const session: Session = { queue: new PushQueue(), abort: new AbortController(), stopped: false };
-    session.queue.push(userMessage(prompt));
+    session.queue.push(userMessage(prompt, attachments));
     this.sessions.set(employee.id, session);
 
     const canUseTool: CanUseTool = async (toolName, input, options) => {
@@ -138,10 +202,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     void this.run(employee.id, session, options, sink);
   }
 
-  sendMessage(employeeId: string, text: string): boolean {
+  sendMessage(employeeId: string, text: string, attachments?: StoredAttachment[]): boolean {
     const session = this.sessions.get(employeeId);
     if (!session || session.stopped) return false;
-    session.queue.push(userMessage(text));
+    session.queue.push(userMessage(text, attachments));
     return true;
   }
 

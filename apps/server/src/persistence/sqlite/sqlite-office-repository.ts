@@ -5,6 +5,7 @@ import type {
   Employee,
   EmployeeStatus,
   Message,
+  MessageAttachment,
   BossId,
   MessageKind,
   ApprovalKind,
@@ -43,7 +44,8 @@ CREATE TABLE IF NOT EXISTS messages (
   tool_use_id TEXT,
   parent_tool_use_id TEXT,
   created_at TEXT NOT NULL,
-  source_uuid TEXT
+  source_uuid TEXT,
+  attachments TEXT
 );
 CREATE INDEX IF NOT EXISTS messages_employee ON messages (employee_id, seq);
 CREATE TABLE IF NOT EXISTS approvals (
@@ -77,6 +79,7 @@ const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   { table: "employees", column: "role", type: "TEXT" },
   { table: "employees", column: "job_title", type: "TEXT" },
   { table: "messages", column: "source_uuid", type: "TEXT" },
+  { table: "messages", column: "attachments", type: "TEXT" },
 ];
 
 const str = (value: unknown): string => String(value);
@@ -103,6 +106,16 @@ function toEmployee(row: Row): Employee {
 }
 
 function toMessage(row: Row): Message {
+  const attStr = nullableStr(row.attachments);
+  let attachments: MessageAttachment[] | undefined;
+  if (attStr) {
+    try {
+      const parsed = JSON.parse(attStr) as unknown;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        attachments = parsed as MessageAttachment[];
+      }
+    } catch {}
+  }
   return {
     id: str(row.id),
     employeeId: str(row.employee_id),
@@ -113,6 +126,7 @@ function toMessage(row: Row): Message {
     parentToolUseId: nullableStr(row.parent_tool_use_id),
     createdAt: str(row.created_at),
     sourceUuid: nullableStr(row.source_uuid),
+    ...(attachments ? { attachments } : {}),
   };
 }
 
@@ -146,8 +160,8 @@ function toProject(row: Row): Project {
 export class SqliteOfficeRepository implements OfficeRepository {
   private readonly db: DatabaseSync;
 
-  constructor(path: string) {
-    this.db = new DatabaseSync(path);
+  constructor(dbOrPath: DatabaseSync | string) {
+    this.db = typeof dbOrPath === "string" ? new DatabaseSync(dbOrPath) : dbOrPath;
     this.db.exec("PRAGMA journal_mode = WAL");
     this.db.exec(SCHEMA);
     this.migrate();
@@ -224,10 +238,21 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertMessage(m: Message): void {
     this.db
       .prepare(
-        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at, source_uuid)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, employee_id, kind, content, tool_name, tool_use_id, parent_tool_use_id, created_at, source_uuid, attachments)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(m.id, m.employeeId, m.kind, m.content, m.toolName, m.toolUseId, m.parentToolUseId, m.createdAt, m.sourceUuid);
+      .run(
+        m.id,
+        m.employeeId,
+        m.kind,
+        m.content,
+        m.toolName,
+        m.toolUseId,
+        m.parentToolUseId,
+        m.createdAt,
+        m.sourceUuid,
+        m.attachments && m.attachments.length > 0 ? JSON.stringify(m.attachments) : null,
+      );
   }
 
   listMessages(employeeId: string): Message[] {
@@ -236,6 +261,25 @@ export class SqliteOfficeRepository implements OfficeRepository {
 
   setMessageSourceUuid(messageId: string, sourceUuid: string): void {
     this.db.prepare("UPDATE messages SET source_uuid = ? WHERE id = ?").run(sourceUuid, messageId);
+  }
+
+  findAttachment(id: string): { employeeId: string; attachment: MessageAttachment } | null {
+    const rows = this.db.prepare("SELECT employee_id, attachments FROM messages WHERE attachments IS NOT NULL").all() as Row[];
+    for (const row of rows) {
+      const attStr = nullableStr(row.attachments);
+      if (!attStr) continue;
+      try {
+        const parsed = JSON.parse(attStr) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const att of parsed) {
+            if (typeof att === "object" && att !== null && (att as MessageAttachment).id === id) {
+              return { employeeId: str(row.employee_id), attachment: att as MessageAttachment };
+            }
+          }
+        }
+      } catch {}
+    }
+    return null;
   }
 
   insertApproval(a: ApprovalRequest): void {

@@ -1,4 +1,5 @@
 import type { AgentSink, StartParams } from "../../office/ports/agent-adapter.ts";
+import { isSafeInlineImageMime } from "../../office/application/attachments.ts";
 import {
   CliJsonlAdapter,
   asRecord,
@@ -146,10 +147,34 @@ export class CodexAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "Codex",
       command,
-      buildArgs: ({ employee, prompt, resume }: StartParams) =>
-        resume
-          ? ["exec", "resume", resume, "--json", prompt]
-          : ["exec", "--json", "--cd", employee.workingDirectory, "--skip-git-repo-check", prompt],
+      buildArgs: ({ employee, prompt, resume, attachments }: StartParams) => {
+        const images = (attachments ?? []).filter((a) => isSafeInlineImageMime(a.mimeType));
+        const otherFiles = (attachments ?? []).filter((a) => !isSafeInlineImageMime(a.mimeType));
+
+        let finalPrompt = prompt.trim();
+        if (otherFiles.length > 0) {
+          const lines = otherFiles.map((f) => `- ${f.name} (${f.mimeType}): ${f.path}`);
+          const notes = `Attached files:\n${lines.join("\n")}`;
+          finalPrompt = finalPrompt ? `${finalPrompt}\n\n${notes}` : notes;
+        }
+        if (images.length > 0 && !finalPrompt) {
+          finalPrompt = "Please inspect the attached image(s).";
+        }
+
+        const imageFlags = images.flatMap((img) => ["-i", img.path]);
+
+        return resume
+          ? ["exec", "resume", resume, "--json", ...imageFlags, finalPrompt]
+          : [
+              "exec",
+              "--json",
+              "--cd",
+              employee.workingDirectory,
+              "--skip-git-repo-check",
+              ...imageFlags,
+              finalPrompt,
+            ];
+      },
       createParser: createCodexParser,
     };
     super(spec, spawnFn, killGraceMs);

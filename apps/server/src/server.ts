@@ -50,6 +50,10 @@ export async function startOfficeServer(
   const port = options.port ?? Number(process.env.OFFICE_PORT ?? 4317);
   const dbPath =
     options.dbPath ?? process.env.OFFICE_DB ?? path.join(repoRoot, "data", "office.sqlite");
+  const attachmentsDir = path.join(
+    path.dirname(dbPath === ":memory:" ? path.join(repoRoot, "data", "x") : dbPath),
+    "attachments"
+  );
   const devOrigin = options.devOrigin ?? (process.env.OFFICE_DEV_ORIGIN || undefined);
   const webDist = options.staticRoot ?? path.join(repoRoot, "apps", "web", "dist");
   const token = options.token ?? createToken();
@@ -84,6 +88,7 @@ export async function startOfficeServer(
     sessions: new ClaudeSessionCatalog(),
     catalogProvider: new ClaudeCatalogProvider(),
     terminals,
+    attachmentsDir,
     sessionCatalogs: {
       claude: new ClaudeSessionCatalog(),
       codex: new CodexSessionCatalog(),

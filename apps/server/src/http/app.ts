@@ -12,6 +12,7 @@ import { TerminalError, type TerminalSession, type TerminalSessionManager } from
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
 import { DesktopError } from "../desktop/process-utils.ts";
 import { DESKTOP_APPS, type DesktopAppHost, type DesktopAppId } from "../desktop/desktop-app-host.ts";
+import { isSafeInlineImageMime, sanitizeAttachmentName } from "../office/application/attachments.ts";
 
 export type BuildAppOptions = {
   token: string;
@@ -68,7 +69,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const { token, port, office, staticRoot, devOrigin, terminals, desktopApps } = options;
   const launcher = options.launcher ?? new ExternalLauncherService();
 
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: 80 * 1024 * 1024 });
 
   const resolvePort = (): number => {
     if (port > 0) return port;
@@ -103,12 +104,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .send();
     }
     // 3. Token check.
-    const provided =
-      url.pathname === "/ws" || url.pathname.startsWith("/ws/")
-        ? (url.searchParams.get("token") ?? undefined)
-        : request.headers.authorization?.startsWith("Bearer ")
-          ? request.headers.authorization.slice("Bearer ".length)
-          : undefined;
+    const isAttachmentGet = request.method === "GET" && (url.pathname === "/api/attachments" || url.pathname.startsWith("/api/attachments/"));
+    const allowQueryToken = url.pathname === "/ws" || url.pathname.startsWith("/ws/") || isAttachmentGet;
+    const provided = allowQueryToken
+      ? (url.searchParams.get("token") ?? (request.headers.authorization?.startsWith("Bearer ") ? request.headers.authorization.slice("Bearer ".length) : undefined))
+      : request.headers.authorization?.startsWith("Bearer ")
+        ? request.headers.authorization.slice("Bearer ".length)
+        : undefined;
     if (!tokensMatch(token, provided)) {
       return sendError(reply, 401, "unauthorized", "Missing or invalid token");
     }
@@ -189,8 +191,24 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.post("/api/imports/claude", async (request) => office.importClaudeSessions(asRecord(request.body).sessionIds));
 
   app.post<{ Params: { id: string } }>("/api/employees/:id/messages", async (request, reply) => {
-    const message = await office.sendMessage(request.params.id, asRecord(request.body).text);
+    const body = asRecord(request.body);
+    const message = await office.sendMessage(request.params.id, body.text, body.attachments);
     return reply.code(202).send({ message });
+  });
+
+  app.get<{ Params: { id: string } }>("/api/attachments/:id", async (request, reply) => {
+    const resolved = office.resolveAttachment(request.params.id);
+    if (!resolved) {
+      return sendError(reply, 404, "not_found", "Attachment not found");
+    }
+    const disposition = isSafeInlineImageMime(resolved.mimeType) ? "inline" : "attachment";
+    const safeName = sanitizeAttachmentName(resolved.name).replace(/"/g, "");
+    return reply
+      .code(200)
+      .header("content-type", resolved.mimeType)
+      .header("x-content-type-options", "nosniff")
+      .header("content-disposition", `${disposition}; filename="${safeName}"`)
+      .send(fs.createReadStream(resolved.path));
   });
 
   app.post<{ Params: { id: string } }>("/api/employees/:id/stop", async (request) => ({

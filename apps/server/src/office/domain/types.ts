@@ -1,3 +1,14 @@
+export type MessageAttachment = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+export type StoredAttachment = MessageAttachment & {
+  path: string;
+};
+
 export type BossId = "claude" | "codex" | "opencode" | "gemini";
 
 export type BossUsage = {
@@ -81,6 +92,7 @@ export type Message = {
   createdAt: string;
   /** Provider message uuid (imports and catch-up dedupe); null for entries the provider never numbered. */
   sourceUuid: string | null;
+  attachments?: MessageAttachment[];
 };
 
 export type SlashCommand = {

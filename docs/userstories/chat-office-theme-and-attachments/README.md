@@ -11,8 +11,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Shared 3D Office Day/Evening mood sync and workspace toggle | — | complete |
 | US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | complete |
-| US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | in progress |
-| US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | pending |
+| US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | complete |
+| US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | in progress |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -103,10 +103,10 @@ As the owner, I want the backend to store files and images attached to chat mess
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01` | `apps/server/test/office/chat-attachments.test.ts` (SQLite migration & attachment metadata round-trip) | Pending |
-| `US-03 / AC-02`, `US-03 / AC-03` | `apps/server/test/office/chat-attachments.test.ts` (HTTP upload validation, attachment-only send, file persistence, `GET /api/attachments/:id` auth, `nosniff`, inline vs download disposition for raster vs SVG/HTML, 401/404 rejection) | Pending |
-| `US-03 / AC-04` | `apps/server/test/agents/adapter-attachments.test.ts` (Claude image blocks + non-image paths, Codex `-i` on exec & resume, OpenCode `--file`, Antigravity `--add-dir` + prompt paths, Gemini prompt paths) | Pending |
-| Regression: existing text-only `POST /api/employees/:id/messages`, security middleware, and provider adapters | `npm run test -w apps/server` full suite | Pending |
+| `US-03 / AC-01` | `apps/server/test/office/chat-attachments.test.ts` (SQLite migration & attachment metadata round-trip) | Passed (`10/10` tests in `chat-attachments.test.ts`, `4/4` in `migration.test.ts`) |
+| `US-03 / AC-02`, `US-03 / AC-03` | `apps/server/test/office/chat-attachments.test.ts` (HTTP upload validation, attachment-only send, file persistence, `GET /api/attachments/:id` auth, `nosniff`, inline vs download disposition for raster vs SVG/HTML, 401/404 rejection) | Passed (`10/10` tests in `chat-attachments.test.ts`) |
+| `US-03 / AC-04` | `apps/server/test/agents/adapter-attachments.test.ts` (Claude image blocks + non-image paths, Codex `-i` on exec & resume, OpenCode `--file`, Antigravity `--add-dir` + prompt paths, Gemini prompt paths) | Passed (`5/5` tests in `adapter-attachments.test.ts`) |
+| Regression: existing text-only `POST /api/employees/:id/messages`, security middleware, and provider adapters | `npm run test -w apps/server` full suite | Passed (`40/40` test files, `287/287` tests; `npm run typecheck -w apps/server` clean) |
 
 ---
 

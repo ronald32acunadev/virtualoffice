@@ -1,4 +1,4 @@
-import type { ApprovalKind, Decision, Employee, MessageKind, ProviderCatalog } from "../domain/types.ts";
+import type { ApprovalKind, Decision, Employee, MessageKind, ProviderCatalog, StoredAttachment } from "../domain/types.ts";
 
 export type AgentMessage = {
   kind: MessageKind;
@@ -59,6 +59,7 @@ export type StartParams = {
   prompt: string;
   /** Provider session id to resume, when reopening a stored session. */
   resume?: string;
+  attachments?: StoredAttachment[];
 };
 
 export interface AgentAdapter {
@@ -66,7 +67,7 @@ export interface AgentAdapter {
   start(params: StartParams, sink: AgentSink): void;
   hasSession(employeeId: string): boolean;
   /** Delivers a follow-up message to a live session. Returns false when there is none. */
-  sendMessage(employeeId: string, text: string): boolean;
+  sendMessage(employeeId: string, text: string, attachments?: StoredAttachment[]): boolean;
   /** Current lists straight from a live session; null when there is none or it cannot answer. */
   fetchCatalog(employeeId: string): Promise<ProviderCatalog | null>;
   /** Interrupts and closes the session. Safe to call when there is none. */

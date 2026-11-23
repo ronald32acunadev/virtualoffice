@@ -137,10 +137,21 @@ export class GeminiAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "Gemini CLI",
       command,
-      buildArgs: ({ prompt, resume }: StartParams) =>
-        resume
-          ? ["--resume", resume, "-p", prompt, "--output-format", "stream-json"]
-          : ["-p", prompt, "--output-format", "stream-json"],
+      buildArgs: ({ prompt, resume, attachments }: StartParams) => {
+        let finalPrompt = prompt.trim();
+        if (attachments && attachments.length > 0) {
+          const lines = attachments.map((a) => `- ${a.name} (${a.mimeType}): ${a.path}`);
+          const notes = `Attached files:\n${lines.join("\n")}`;
+          finalPrompt = finalPrompt ? `${finalPrompt}\n\n${notes}` : notes;
+        }
+        if (attachments && attachments.length > 0 && !finalPrompt) {
+          finalPrompt = "Please inspect the attached file(s).";
+        }
+
+        return resume
+          ? ["--resume", resume, "-p", finalPrompt, "--output-format", "stream-json"]
+          : ["-p", finalPrompt, "--output-format", "stream-json"];
+      },
       createParser: createGeminiParser,
     };
     super(spec, spawnFn, killGraceMs);

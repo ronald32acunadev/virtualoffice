@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type {
   AgentAdapter,
@@ -17,6 +18,7 @@ import type { TerminalGuard } from "../ports/terminal-guard.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
+import { AttachmentStore, validateAndDecodeAttachments, type DecodedAttachment } from "./attachments.ts";
 import {
   BOSSES,
   MAX_JOB_TITLE_LENGTH,
@@ -36,10 +38,12 @@ import {
   type EmployeeUsage,
   type ImportSkipReason,
   type Message,
+  type MessageAttachment,
   type Project,
   type ProviderCatalog,
   type ProviderSyncStats,
   type Species,
+  type StoredAttachment,
   type SyncSummary,
 } from "../domain/types.ts";
 
@@ -66,6 +70,7 @@ export type OfficeDeps = {
   bossNames?: Partial<Record<BossId, string>>;
   /** Read-only view of the embedded terminals; chat is refused while one is active. */
   terminals?: TerminalGuard;
+  attachmentsDir?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -110,6 +115,7 @@ export class OfficeService {
   private readonly catalogProvider: CatalogProvider | undefined;
   private readonly bossNames: Partial<Record<BossId, string>>;
   private readonly terminals: TerminalGuard | undefined;
+  private readonly attachmentStore: AttachmentStore;
   /** Catalogs per absolute folder; only successful reads are stored. */
   private readonly catalogCache = new Map<string, Catalog>();
   /** In-flight probes per folder, so concurrent requests share one. */
@@ -137,6 +143,7 @@ export class OfficeService {
     this.catalogProvider = deps.catalogProvider;
     this.bossNames = deps.bossNames ?? {};
     this.terminals = deps.terminals;
+    this.attachmentStore = new AttachmentStore(deps.attachmentsDir ?? path.join(os.tmpdir(), "virtualoffice-attachments"));
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -644,7 +651,7 @@ export class OfficeService {
     return updated;
   }
 
-  async sendMessage(employeeId: string, text: unknown): Promise<Message> {
+  async sendMessage(employeeId: string, rawText: unknown, rawAttachments?: unknown): Promise<Message> {
     const employee = this.requireEmployee(employeeId);
     if (this.terminals?.isActive(employeeId)) {
       throw new OfficeError("terminal_active", "The embedded terminal holds this session. End it before chatting.");
@@ -654,11 +661,29 @@ export class OfficeService {
       const bossName = this.buildBoss(employee.bossId).name;
       throw new OfficeError("provider_on_break", `${bossName} is on break: ${activeBreak.reason}`);
     }
-    if (typeof text !== "string" || text.trim() === "") {
-      throw new OfficeError("validation_error", "Message text must not be empty", "text");
+    if (rawText !== undefined && rawText !== null && typeof rawText !== "string") {
+      throw new OfficeError("validation_error", "Message text must be a string", "text");
     }
+    const text = typeof rawText === "string" ? rawText.trim() : "";
+    const decoded = validateAndDecodeAttachments(rawAttachments);
+    if (text === "" && decoded.length === 0) {
+      throw new OfficeError("validation_error", "Message cannot be empty", "text");
+    }
+    const adapter = this.adapterFor(employee.bossId);
+    if (!adapter) {
+      throw new OfficeError("boss_unavailable", `Boss ${employee.bossId} is not available`);
+    }
+    const isLive = Boolean(this.sessions.get(employeeId)?.active && adapter.hasSession(employeeId));
+    if (!isLive && !this.isDirectory(employee.workingDirectory)) {
+      throw new OfficeError(
+        "working_directory_missing",
+        `Project folder not found: ${employee.workingDirectory}`,
+      );
+    }
+    const stored = this.attachmentStore.saveAll(employeeId, decoded, () => this.newId());
+
     const previous = this.deliveries.get(employeeId) ?? Promise.resolve();
-    const run = previous.then(() => this.deliver(employeeId, text));
+    const run = previous.then(() => this.deliver(employeeId, text, stored));
     const tail = run.then(
       () => undefined,
       () => undefined,
@@ -670,30 +695,29 @@ export class OfficeService {
     return run;
   }
 
-  private async deliver(employeeId: string, text: string): Promise<Message> {
+  private async deliver(employeeId: string, text: string, stored: StoredAttachment[]): Promise<Message> {
     const employee = this.requireEmployee(employeeId);
-    const adapter = this.adapterFor(employee.bossId);
-    if (!adapter) {
-      throw new OfficeError("boss_unavailable", `Boss ${employee.bossId} is not available`);
-    }
-    if (this.sessions.get(employeeId)?.active && adapter.sendMessage(employeeId, text)) {
-      const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
+    const adapter = this.adapterFor(employee.bossId)!;
+    const publicAttachments: MessageAttachment[] = stored.map(({ id, name, mimeType, size, url }) => ({
+      id,
+      name,
+      mimeType,
+      size,
+      url,
+    }));
+
+    if (this.sessions.get(employeeId)?.active && adapter.sendMessage(employeeId, text, stored)) {
+      const message = this.appendMessage(employeeId, { kind: "user_text", content: text }, publicAttachments);
       if (employee.status === "idle") this.setStatus(employeeId, "working");
       return message;
     }
     const stale = this.sessions.get(employeeId);
     if (stale) stale.active = false;
-    if (!this.isDirectory(employee.workingDirectory)) {
-      throw new OfficeError(
-        "working_directory_missing",
-        `Project folder not found: ${employee.workingDirectory}`,
-      );
-    }
     // No live session: reopen the stored one (or start fresh if none was ever recorded).
     this.setStatus(employeeId, "working", { failureReason: null });
     await this.catchUp(this.requireEmployee(employeeId));
-    const message = this.appendMessage(employeeId, { kind: "user_text", content: text });
-    this.openSession(this.requireEmployee(employeeId), text, employee.providerSessionId ?? undefined);
+    const message = this.appendMessage(employeeId, { kind: "user_text", content: text }, publicAttachments);
+    this.openSession(this.requireEmployee(employeeId), text, employee.providerSessionId ?? undefined, stored);
     return message;
   }
 
@@ -833,7 +857,7 @@ export class OfficeService {
 
   // ---- session plumbing ----
 
-  private openSession(employee: Employee, prompt: string, resume?: string): void {
+  private openSession(employee: Employee, prompt: string, resume?: string, attachments?: StoredAttachment[]): void {
     const session: LiveSession = { active: true };
     this.sessions.set(employee.id, session);
     const sink = this.createSink(employee.id, session);
@@ -843,7 +867,15 @@ export class OfficeService {
       return;
     }
     try {
-      adapter.start({ employee, prompt, ...(resume ? { resume } : {}) }, sink);
+      adapter.start(
+        {
+          employee,
+          prompt,
+          ...(resume ? { resume } : {}),
+          ...(attachments && attachments.length > 0 ? { attachments } : {}),
+        },
+        sink,
+      );
     } catch (error) {
       sink.onFailed(errorReason(error));
     }
@@ -1104,7 +1136,21 @@ export class OfficeService {
     return this.patchEmployee(id, { status, ...patch });
   }
 
-  private buildMessage(employeeId: string, input: AgentMessage): Message {
+  resolveAttachment(id: string): { path: string; name: string; mimeType: string; size: number } | null {
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return null;
+    const found = this.repository.findAttachment?.(id);
+    if (!found) return null;
+    const filePath = this.attachmentStore.resolvePath(found.employeeId, found.attachment.id, found.attachment.name);
+    if (!filePath) return null;
+    return {
+      path: filePath,
+      name: found.attachment.name,
+      mimeType: found.attachment.mimeType,
+      size: found.attachment.size,
+    };
+  }
+
+  private buildMessage(employeeId: string, input: AgentMessage, attachments?: MessageAttachment[]): Message {
     return {
       id: this.newId(),
       employeeId,
@@ -1115,11 +1161,12 @@ export class OfficeService {
       parentToolUseId: input.parentToolUseId ?? null,
       createdAt: this.timestamp(),
       sourceUuid: input.sourceUuid ?? null,
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     };
   }
 
-  private appendMessage(employeeId: string, input: AgentMessage): Message {
-    const message = this.buildMessage(employeeId, input);
+  private appendMessage(employeeId: string, input: AgentMessage, attachments?: MessageAttachment[]): Message {
+    const message = this.buildMessage(employeeId, input, attachments);
     this.repository.insertMessage(message);
     this.events.publish({ type: "message_added", message });
     return message;
