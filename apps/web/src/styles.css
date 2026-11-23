@@ -473,50 +473,7 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   height: 100%;
 }
 
-/* Embedded desktop app (App tab) */
-.app-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  background: var(--panel);
-}
 
-.app-toolbar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.app-label {
-  font-weight: 600;
-}
-
-.app-status {
-  flex: 1;
-  color: var(--muted);
-}
-
-.app-toolbar button {
-  padding: 3px 10px;
-  font-size: 12px;
-}
-
-.app-host {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  position: relative;
-}
-
-.app-message {
-  padding: 16px;
-  color: var(--muted);
-}
 
 /* Department accents */
 [data-boss="claude"] { --boss-accent: var(--boss-claude); }

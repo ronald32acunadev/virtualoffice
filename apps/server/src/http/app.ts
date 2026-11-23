@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import net from "node:net";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
@@ -10,8 +9,6 @@ import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
 import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
-import { DesktopError } from "../desktop/process-utils.ts";
-import { DESKTOP_APPS, type DesktopAppHost, type DesktopAppId } from "../desktop/desktop-app-host.ts";
 import { isSafeInlineImageMime, sanitizeAttachmentName } from "../office/application/attachments.ts";
 
 export type BuildAppOptions = {
@@ -23,7 +20,6 @@ export type BuildAppOptions = {
   staticRoot?: string;
   devOrigin?: string;
   terminals?: TerminalSessionManager;
-  desktopApps?: DesktopAppHost;
 };
 
 const STATUS_BY_CODE: Record<OfficeError["code"], number> = {
@@ -49,24 +45,10 @@ function asRecord(body: unknown): Record<string, unknown> {
   return typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
 }
 
-/** The desktop app embedded for a boss. */
-function desktopAppFor(bossId: string): DesktopAppId | undefined {
-  switch (bossId) {
-    case "claude":
-      return "claude_desktop";
-    case "codex":
-      return "chatgpt";
-    case "gemini":
-      return "antigravity";
-    case "opencode":
-      return "opencode_desktop";
-    default:
-      return undefined;
-  }
-}
+
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
-  const { token, port, office, staticRoot, devOrigin, terminals, desktopApps } = options;
+  const { token, port, office, staticRoot, devOrigin, terminals } = options;
   const launcher = options.launcher ?? new ExternalLauncherService();
 
   const app = Fastify({ logger: false, bodyLimit: 80 * 1024 * 1024 });
@@ -312,119 +294,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     },
   );
 
-  app.get<{ Params: { appId: string } }>("/ws/desktop/:appId", { websocket: true }, (socket, request) => {
-    const host = options.desktopApps;
-    const appId = request.params.appId;
-    const send = (message: { type: string; code: string; message: string }) => {
-      if (socket.readyState === 1) socket.send(JSON.stringify(message));
-    };
-    if (host === undefined) {
-      send({ type: "error", code: "desktop_unavailable", message: "Embedded desktop apps are not enabled" });
-      socket.close(1011, "desktop_unavailable");
-      return;
-    }
-    if (!Object.prototype.hasOwnProperty.call(DESKTOP_APPS, appId)) {
-      send({ type: "error", code: "unknown_app", message: "Unknown desktop app" });
-      socket.close(1008, "unknown_app");
-      return;
-    }
-    const instance = host.get(appId as DesktopAppId);
-    if (instance === undefined) {
-      send({ type: "error", code: "app_not_running", message: "The desktop app is not running" });
-      socket.close(1008, "app_not_running");
-      return;
-    }
-    const tcp = net.connect({ host: "127.0.0.1", port: instance.rfbPort });
-    let connected = false;
-    const browserMessages: Array<Buffer> = [];
-    const writeBrowserMessage = (buf: Buffer) => {
-      if (connected) tcp.write(buf);
-      else browserMessages.push(buf);
-    };
-    const sendTcpChunk = (chunk: Buffer) => {
-      if (socket.readyState === 1) socket.send(chunk);
-    };
-    tcp.on("connect", () => {
-      connected = true;
-      for (const buf of browserMessages) tcp.write(buf);
-      browserMessages.length = 0;
-    });
-    tcp.on("data", (chunk) => sendTcpChunk(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    tcp.on("close", () => {
-      if (socket.readyState === 1) socket.close(1000, "display_closed");
-    });
-    tcp.on("error", () => {
-      if (socket.readyState === 1) socket.close(1000, "display_closed");
-    });
-    socket.on("close", () => tcp.destroy());
-    socket.on("error", () => tcp.destroy());
-    socket.on("message", (raw) => {
-      writeBrowserMessage(Array.isArray(raw) ? Buffer.concat(raw) : Buffer.isBuffer(raw) ? raw : Buffer.from(raw));
-    });
-  });
+
 
   if (staticRoot && fs.existsSync(staticRoot)) {
     await app.register(fastifyStatic, { root: staticRoot, prefix: "/" });
   }
 
-  app.get<{ Params: { id: string } }>("/api/employees/:id/app", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    const appId = desktopAppFor(employee.bossId);
-    if (appId === undefined) {
-      return sendError(reply, 409, "app_not_available", "Embedded app is not available for this boss yet");
-    }
-    return { app: { kind: "vnc", appId, running: desktopApps?.get(appId) !== undefined } };
-  });
 
-  app.post<{ Params: { id: string } }>("/api/employees/:id/app/start", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    const appId = desktopAppFor(employee.bossId);
-    if (appId === undefined) {
-      return sendError(reply, 409, "app_not_available", "Embedded app is not available for this boss yet");
-    }
-    if (desktopApps === undefined) {
-      return sendError(reply, 409, "app_not_available", "Embedded app is not enabled");
-    }
-    try {
-      await desktopApps.start(appId);
-      return reply.code(200).send({ app: { kind: "vnc", appId, running: true } });
-    } catch (err) {
-      if (err instanceof DesktopError) {
-        return sendError(reply, err.status, err.code, err.message);
-      }
-      throw err;
-    }
-  });
-
-  app.post<{ Params: { id: string } }>("/api/employees/:id/app/stop", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    const appId = desktopAppFor(employee.bossId);
-    if (appId === undefined) {
-      return { stopped: false };
-    }
-    return { stopped: desktopApps?.stop(appId) ?? false };
-  });
-
-  app.post<{ Params: { id: string } }>("/api/employees/:id/app/relaunch", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    const appId = desktopAppFor(employee.bossId);
-    if (appId === undefined) {
-      return { relaunched: false };
-    }
-    return { relaunched: desktopApps?.relaunch(appId) ?? false };
-  });
 
   return app;
 }

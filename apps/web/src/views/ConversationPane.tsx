@@ -27,7 +27,6 @@ import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
-import { AppPanel } from "./AppPanel";
 
 const STOPPABLE = new Set(["starting", "working", "waiting_approval"]);
 const FOLDER_MISSING_TEXT =
@@ -37,12 +36,10 @@ function Header({
   employeeId,
   onInsertSkill,
   onOpenTerminal,
-  onOpenApp,
 }: {
   employeeId: string;
   onInsertSkill: (name: string) => void;
   onOpenTerminal: () => void;
-  onOpenApp: () => void;
 }) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -170,7 +167,6 @@ function Header({
           employeeId={employee.id}
           onError={setError}
           onOpenEmbeddedTerminal={onOpenTerminal}
-          onOpenEmbeddedApp={onOpenApp}
         />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
@@ -605,7 +601,7 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
   const busy = STOPPABLE.has(employee?.status ?? "");
   const endRef = useRef<HTMLDivElement>(null);
   const [pendingInsert, setPendingInsert] = useState<PendingInsert | null>(null);
-  const [view, setView] = useState<"chat" | "terminal" | "app">("chat");
+  const [view, setView] = useState<"chat" | "terminal">("chat");
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "end" });
@@ -617,7 +613,6 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
         employeeId={employeeId}
         onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })}
         onOpenTerminal={() => setView("terminal")}
-        onOpenApp={() => setView("app")}
       />
       <div className="conv-tabs" role="tablist" aria-label="Conversation view">
         <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "conv-tab active" : "conv-tab"} onClick={() => setView("chat")}>
@@ -625,9 +620,6 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
         </button>
         <button type="button" role="tab" aria-selected={view === "terminal"} className={view === "terminal" ? "conv-tab active" : "conv-tab"} onClick={() => setView("terminal")}>
           Terminal
-        </button>
-        <button type="button" role="tab" aria-selected={view === "app"} className={view === "app" ? "conv-tab active" : "conv-tab"} onClick={() => setView("app")}>
-          App
         </button>
       </div>
       <div className="conv-scroll" hidden={view !== "chat"}>
@@ -663,7 +655,6 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
       {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} /> : null}
-      {view === "app" && employee ? <AppPanel key={employeeId} employeeId={employeeId} bossId={employee.bossId} /> : null}
     </section>
   );
 }

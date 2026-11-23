@@ -10,11 +10,10 @@ type Props = {
   employeeId: string;
   onError: (message: string | null) => void;
   onOpenEmbeddedTerminal: () => void;
-  onOpenEmbeddedApp: () => void;
 };
 
 /** Dropdown menu for opening the active employee workspace in an external app, CLI, or folder. */
-export function OpenExternalMenu({ employeeId, onError, onOpenEmbeddedTerminal, onOpenEmbeddedApp }: Props) {
+export function OpenExternalMenu({ employeeId, onError, onOpenEmbeddedTerminal }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [targets, setTargets] = useState<LaunchTarget[]>([]);
@@ -173,20 +172,7 @@ export function OpenExternalMenu({ employeeId, onError, onOpenEmbeddedTerminal, 
               <span className="launch-menu-kind">Built-in</span>
             </span>
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="launch-menu-item"
-            onClick={() => {
-              setOpen(false);
-              onOpenEmbeddedApp();
-            }}
-          >
-            <span className="launch-menu-item-row">
-              <span className="launch-menu-label">Embedded app</span>
-              <span className="launch-menu-kind">Built-in</span>
-            </span>
-          </button>
+
           {loading ? (
             <p className="menu-note menu-loading">Loading...</p>
           ) : targets.length === 0 ? (

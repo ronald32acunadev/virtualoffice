@@ -21,7 +21,7 @@ import { OfficeService } from "./office/application/office-service.ts";
 import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
-import { DesktopAppHost } from "./desktop/desktop-app-host.ts";
+
 
 export type StartOfficeServerOptions = {
   port?: number;
@@ -113,15 +113,7 @@ export async function startOfficeServer(
     }
   }
 
-  const desktopProfilesRoot = path.join(
-    path.dirname(dbPath === ":memory:" ? path.join(repoRoot, "data", "x") : dbPath),
-    "desktop-profiles"
-  );
-  if (dbPath !== ":memory:") {
-    // The app processes run with this folder as their working directory, so it must exist.
-    fs.mkdirSync(desktopProfilesRoot, { recursive: true });
-  }
-  const desktopApps = new DesktopAppHost({ profilesRoot: desktopProfilesRoot });
+
 
   const app = await buildApp({
     token,
@@ -131,7 +123,6 @@ export async function startOfficeServer(
     ...(fs.existsSync(webDist) ? { staticRoot: webDist } : {}),
     ...(devOrigin ? { devOrigin } : {}),
     terminals,
-    desktopApps,
   });
 
   await app.listen({ host: "127.0.0.1", port });
@@ -156,7 +147,6 @@ export async function startOfficeServer(
         await office.shutdown();
         await app.close();
         terminals.killAll();
-        desktopApps.stopAll();
         repository.close();
       } finally {
       }

@@ -9,8 +9,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Remove embedded desktop app streaming (`App` tab, noVNC, and Xvnc host) | — | pending |
-| US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | pending |
+| US-01 | Remove embedded desktop app streaming (`App` tab, noVNC, and Xvnc host) | — | complete |
+| US-02 | Surface agent thinking/reasoning blocks as collapsible Thought cards | — | in progress |
 | US-03 | Antigravity-style grouped activity steps, file pills, and inline edit diffs | US-02 | pending |
 | US-04 | Live turn status bar, smart auto-scroll, and agent reply ergonomics | US-03 | pending |
 
@@ -46,8 +46,8 @@ As the owner, I want the embedded desktop app streaming (`App` tab, noVNC, and X
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-02` | `npm run typecheck`, `npm run build`, and search confirming zero references to `AppPanel`, `DesktopAppHost`, `@novnc/novnc`, or `/ws/desktop` | Pending |
-| `US-01 / AC-03` + regression on `Terminal`, `OpenExternalMenu`, and chat routes | `npm test` (`apps/server` + `apps/web` full suites) | Pending |
+| `US-01 / AC-01`, `US-01 / AC-02` | `npm run typecheck`, `npm run build`, and search confirming zero references to `AppPanel`, `DesktopAppHost`, `@novnc/novnc`, or `/ws/desktop` | Passed (`ZERO REFERENCES`, `npm run typecheck` clean, `vite build` clean — bundle reduced ~194 kB) |
+| `US-01 / AC-03` + regression on `Terminal`, `OpenExternalMenu`, and chat routes | `npm test` (`apps/server` + `apps/web` full suites) | Passed (`apps/server` 37/37 files 264/264 tests, `apps/web` 22/22 files 119/119 tests) |
 
 ---
 
