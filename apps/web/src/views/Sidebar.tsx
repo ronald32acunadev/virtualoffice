@@ -1,15 +1,22 @@
 import { useMemo, useState } from "react";
 import type { Employee } from "../api/types";
+import type { LightingMood } from "../scene/officeTheme";
 import { useOffice } from "../state/OfficeProvider";
 import { filterEmployees, formatSyncErrors, groupEmployeesByBoss, groupEmployeesByProject } from "../state/sidebar";
 import { SPECIES_EMOJI } from "../state/species";
 import { RoleBadge } from "../ui/RoleBadge";
 import { UsageRing } from "../ui/UsageRing";
 
-type Props = { onNewTask: (projectPath?: string) => void; onImport: () => void; onOpenOffice: () => void };
+type Props = {
+  mood: LightingMood;
+  onToggleMood: () => void;
+  onNewTask: (projectPath?: string) => void;
+  onImport: () => void;
+  onOpenOffice: () => void;
+};
 type GroupMode = "project" | "boss";
 
-export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
+export function Sidebar({ mood, onToggleMood, onNewTask, onImport, onOpenOffice }: Props) {
   const { state, actions } = useOffice();
   const [search, setSearch] = useState("");
   const [groupMode, setGroupMode] = useState<GroupMode>("project");
@@ -99,6 +106,15 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
           </button>
           <button type="button" className="sidebar-nav-btn" onClick={onOpenOffice}>
             3D Office
+          </button>
+          <button
+            type="button"
+            className="sidebar-nav-btn"
+            aria-pressed={mood === "evening"}
+            onClick={onToggleMood}
+            title={mood === "day" ? "Switch to cozy evening theme" : "Switch to warm daylight theme"}
+          >
+            {mood === "day" ? "☀ Day" : "🌙 Evening"}
           </button>
           <button
             type="button"

@@ -9,8 +9,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Shared 3D Office Day/Evening mood sync and workspace toggle | — | pending |
-| US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | pending |
+| US-01 | Shared 3D Office Day/Evening mood sync and workspace toggle | — | complete |
+| US-02 | 3D Office Day/Evening color palette and department accents for the chat UI | US-01 | in progress |
 | US-03 | Server-side chat attachment storage, secure serving, and multi-provider delivery | — | pending |
 | US-04 | Chat composer file/photo attachment UI, paste/drop, and message previews | US-02, US-03 | pending |
 
@@ -60,9 +60,9 @@ As the owner, I want the Chat Workspace and 3D Office to share the same Day/Even
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-04` | `apps/web/src/state/officeMood.test.ts` (initial read, invalid/throwing storage fallback, root `data-office-mood` application) | Pending |
-| `US-01 / AC-02`, `US-01 / AC-03` | `apps/web/src/state/windowChannel.test.ts` (`mood_changed` parsing & broadcast) + `apps/web/src/state/officeMood.test.ts` (cross-window channel & storage sync) | Pending |
-| Regression: existing office-to-workspace `focus_employee` & `ping`/`pong` window channel behavior | `apps/web/src/state/windowChannel.test.ts` and `apps/web/src/scene/camera.test.ts` | Pending |
+| `US-01 / AC-01`, `US-01 / AC-04` | `apps/web/src/state/officeMood.test.ts` (initial read, invalid/throwing storage fallback, root `data-office-mood` application) | Passed (`6/6` tests in `officeMood.test.ts`; `npm run test -w apps/web` 115/115, `npm run typecheck -w apps/web` clean) |
+| `US-01 / AC-02`, `US-01 / AC-03` | `apps/web/src/state/windowChannel.test.ts` (`mood_changed` parsing & broadcast) + `apps/web/src/state/officeMood.test.ts` (cross-window channel & storage sync) | Passed (`4/4` tests in `windowChannel.test.ts`, `6/6` tests in `officeMood.test.ts`) |
+| Regression: existing office-to-workspace `focus_employee` & `ping`/`pong` window channel behavior | `apps/web/src/state/windowChannel.test.ts` and `apps/web/src/scene/camera.test.ts` | Passed (`4/4` and `2/2` tests) |
 
 ---
 

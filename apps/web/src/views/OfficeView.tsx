@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getToken } from "../api/client";
-import { readSavedMood, saveMood } from "../scene/camera";
 import { readSavedChatter, saveChatter } from "../scene/officeQuotes";
 import { OfficeScene } from "../scene/OfficeScene";
 import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
+import { useOfficeMood } from "../state/officeMood";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
@@ -15,7 +15,7 @@ export function OfficeView() {
   const { state, actions } = useOffice();
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
-  const [mood, setMood] = useState<LightingMood>(() => readSavedMood());
+  const { mood, toggleMood } = useOfficeMood();
   const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
 
@@ -47,14 +47,6 @@ export function OfficeView() {
     actions.select(null);
     setCardId(null);
   }, [actions]);
-
-  const toggleMood = useCallback(() => {
-    setMood((prev) => {
-      const next: LightingMood = prev === "day" ? "evening" : "day";
-      saveMood(next);
-      return next;
-    });
-  }, []);
 
   const toggleChatter = useCallback(() => {
     setChatterEnabled((prev) => {

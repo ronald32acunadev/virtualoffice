@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getToken } from "../api/client";
 import { useOffice } from "../state/OfficeProvider";
+import { useOfficeMood } from "../state/officeMood";
 import { buildViewUrl } from "../state/routing";
 import { createWorkspaceLink, openWindowChannel } from "../state/windowChannel";
 import { ConversationPane } from "./ConversationPane";
@@ -10,6 +11,7 @@ import { Sidebar } from "./Sidebar";
 
 export function WorkspaceView() {
   const { state, actions } = useOffice();
+  const { mood, toggleMood } = useOfficeMood();
   const [modal, setModal] = useState<"new" | "import" | null>(null);
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null);
 
@@ -32,6 +34,8 @@ export function WorkspaceView() {
   return (
     <div className="workspace">
       <Sidebar
+        mood={mood}
+        onToggleMood={toggleMood}
         onNewTask={(projectPath) => {
           setNewTaskDir(projectPath ?? null);
           setModal("new");
