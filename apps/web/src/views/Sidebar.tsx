@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Employee } from "../api/types";
+import type { Employee, BossId } from "../api/types";
 import type { LightingMood } from "../scene/officeTheme";
 import { useOffice } from "../state/OfficeProvider";
 import { filterEmployees, formatSyncErrors, groupEmployeesByBoss, groupEmployeesByProject } from "../state/sidebar";
@@ -49,6 +49,16 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) 
     setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const bossLabel = (bossId: BossId): string => {
+    const found = state.bosses.find((b) => b.id === bossId);
+    if (found?.name) return found.name;
+    if (bossId === "claude") return "Claude";
+    if (bossId === "codex") return "Codex";
+    if (bossId === "opencode") return "OpenCode";
+    if (bossId === "gemini") return "Gemini";
+    return "Antigravity";
+  };
+
   const renderEmployeeRow = (employee: Employee) => (
     <li key={employee.id}>
       <button
@@ -56,6 +66,7 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) 
         className={`employee-row${employee.status === "on_break" ? " employee-row-break" : ""}`}
         aria-pressed={state.selectedId === employee.id}
         onClick={() => actions.select(employee.id)}
+        data-boss={employee.bossId}
       >
         <span className="avatar" title={employee.species}>
           {SPECIES_EMOJI[employee.species]}
@@ -63,6 +74,14 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) 
         <span className="employee-text">
           <span className="employee-name">
             <span className="employee-name-text">{employee.name}</span>
+            <span
+              className="employee-agent-tag"
+              data-boss={employee.bossId}
+              title={bossLabel(employee.bossId)}
+            >
+              <span className="boss-accent-dot" aria-hidden="true" />
+              {bossLabel(employee.bossId)}
+            </span>
             {employee.jobTitle ? <span className="job-title-badge">{employee.jobTitle}</span> : null}
             <RoleBadge role={employee.role} />
           </span>
@@ -185,18 +204,29 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) 
                     title={group.projectKey}
                     onClick={() => toggleGroup(group.projectKey)}
                   >
-                    <span>{group.projectName}</span>
+                    <span className="project-group-title">
+                      <span className="project-group-name">{group.projectName}</span>
+                      {group.providers.length > 0 ? (
+                        <span className="project-provider-dots" aria-hidden="true">
+                          {group.providers.map((pid) => (
+                            <span key={pid} className="project-provider-dot" data-boss={pid} title={bossLabel(pid)} />
+                          ))}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="group-chevron" aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
                   </button>
-                  <button
-                    type="button"
-                    className="sidebar-group-new"
-                    title="New chat in this project"
-                    aria-label={`New chat in ${group.projectName}`}
-                    onClick={() => onNewTask(group.projectKey)}
-                  >
-                    +
-                  </button>
+                  {!group.isGeneral ? (
+                    <button
+                      type="button"
+                      className="sidebar-group-new"
+                      title="New chat in this project"
+                      aria-label={`New chat in ${group.projectName}`}
+                      onClick={() => onNewTask(group.projectKey)}
+                    >
+                      +
+                    </button>
+                  ) : null}
                 </div>
                 {!isCollapsed ? (
                   group.employees.length === 0 ? (

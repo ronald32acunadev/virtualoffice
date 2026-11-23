@@ -10,9 +10,9 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Remove `"Import from Claude"` button, modal, and manual import routes | — | complete |
-| US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | in progress |
-| US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | pending |
-| US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | pending |
+| US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | complete |
+| US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | in progress |
+| US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | in progress |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -65,8 +65,8 @@ As the owner, I want duplicate project entries with the same project name (inclu
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01` | `apps/web/src/state/sidebar.test.ts` (merging multiple `ardi` paths + worktrees into one group, non-worktree primary `projectKey` preference, combined newest-first ordering, deduplicated `providers`) | Pending |
-| `US-02 / AC-02` + Day/Evening contrast | `npm run typecheck`, `npm run test -w apps/web`, `npm run build`, and live UI check in Day & Evening moods | Pending |
+| `US-02 / AC-01` | `apps/web/src/state/sidebar.test.ts` (merging multiple `ardi` paths + worktrees into one group, non-worktree primary `projectKey` preference, combined newest-first ordering, deduplicated `providers`, General non-project grouping) | Passed (`6/6` tests in `sidebar.test.ts`, `4/4` in `autoSync.test.ts`) |
+| `US-02 / AC-02` + Day/Evening contrast | `npm run typecheck`, `npm run test -w apps/web`, `npm run build`, and live UI check in Day & Evening moods | Automated: passed (`24/24` web files `133/133` tests, `typecheck` & `vite build` clean); live UI check after server restart |
 
 ---
 

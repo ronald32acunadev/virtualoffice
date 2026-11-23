@@ -32,8 +32,8 @@ describe("autoSync", () => {
     ];
 
     expect(groupEmployeesByProject([e1], projects)).toEqual([
-      { projectKey: "/work/beta", projectName: "Beta App", employees: [] },
-      { projectKey: "/work/alpha", projectName: "alpha", employees: [e1] },
+      { projectKey: "/work/beta", projectName: "Beta App", employees: [], providers: [] },
+      { projectKey: "/work/alpha", projectName: "alpha", employees: [e1], providers: ["claude"] },
     ]);
   });
 
