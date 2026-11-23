@@ -11,6 +11,7 @@ import type {
   ApprovalStatus,
   Decision,
   Species,
+  Project,
 } from "../../office/domain/types.ts";
 
 type Row = Record<string, unknown>;
@@ -59,6 +60,12 @@ CREATE TABLE IF NOT EXISTS approvals (
   can_approve_for_session INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   decided_at TEXT
+);
+CREATE TABLE IF NOT EXISTS projects (
+  path TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  providers TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
 );
 `;
 
@@ -124,6 +131,15 @@ function toApproval(row: Row): ApprovalRequest {
     canApproveForSession: Number(row.can_approve_for_session) === 1,
     createdAt: str(row.created_at),
     decidedAt: nullableStr(row.decided_at),
+  };
+}
+
+function toProject(row: Row): Project {
+  return {
+    path: str(row.path),
+    name: str(row.name),
+    providers: JSON.parse(str(row.providers)) as BossId[],
+    lastSeenAt: str(row.last_seen_at),
   };
 }
 
@@ -264,6 +280,19 @@ export class SqliteOfficeRepository implements OfficeRepository {
       .prepare("UPDATE approvals SET status = 'expired', decided_at = ? WHERE status = 'pending'")
       .run(decidedAt);
     return Number(result.changes);
+  }
+
+  upsertProject(p: Project): void {
+    this.db
+      .prepare(
+        "INSERT INTO projects (path, name, providers, last_seen_at) VALUES (?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET name = excluded.name, providers = excluded.providers, last_seen_at = excluded.last_seen_at",
+      )
+      .run(p.path, p.name, JSON.stringify(p.providers), p.lastSeenAt);
+  }
+
+  listProjects(): Project[] {
+    const rows = this.db.prepare("SELECT * FROM projects ORDER BY last_seen_at DESC, path ASC").all() as Row[];
+    return rows.map((row) => toProject(row));
   }
 
   close(): void {

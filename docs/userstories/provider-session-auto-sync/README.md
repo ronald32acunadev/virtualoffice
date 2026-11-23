@@ -10,7 +10,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Multi-provider read-only session and project catalogs | — | complete |
-| US-02 | Automatic project & chat sync and multi-provider history catch-up | US-01 | pending |
+| US-02 | Automatic project & chat sync and multi-provider history catch-up | US-01 | complete |
 | US-03 | Auto-synced projects sidebar, sync trigger, and project-picker chat creation | US-02 | pending |
 | US-04 | Native 1-to-1 provider session creation and deduplication verification | US-02, US-03 | pending |
 
@@ -79,11 +79,11 @@ As the owner, I want Virtual Office to automatically sync discovered projects an
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01` | `apps/server/test/sqlite-office-repository.test.ts` (projects table migration, upsert, idempotent reload) | Pending |
-| `US-02 / AC-02`, `US-02 / AC-03` | `apps/server/test/provider-auto-sync.test.ts` (startup sync, `POST /api/sync`, existing cwd filter, deduplication by `(bossId, providerSessionId)`, preserves custom `name`/`jobTitle`) | Pending |
-| `US-02 / AC-04` | `apps/server/test/provider-auto-sync.test.ts` (on-open and pre-send `catchUp()` across all 4 providers with `sourceUuid` deduplication) | Pending |
-| `US-02 / AC-05` | `apps/server/test/http-sync.test.ts` (`POST /api/sync` auth, response summary, WS broadcast) | Pending |
-| Regression: existing Claude manual import endpoint & message delivery | `apps/server/test/` full suite | Pending |
+| `US-02 / AC-01` | `apps/server/test/office/provider-auto-sync.test.ts` (projects table migration, upsert, idempotent reload) | Passed (`tsc --noEmit` 0 errors, test passed) |
+| `US-02 / AC-02`, `US-02 / AC-03` | `apps/server/test/office/provider-auto-sync.test.ts` (startup sync, `POST /api/sync`, existing cwd filter, deduplication by `(bossId, providerSessionId)`, preserves custom `name`/`jobTitle`) | Passed |
+| `US-02 / AC-04` | `apps/server/test/office/provider-auto-sync.test.ts` (on-open and pre-send `catchUp()` across all 4 providers with `sourceUuid` deduplication) | Passed |
+| `US-02 / AC-05` | `apps/server/test/office/provider-auto-sync.test.ts` (`POST /api/sync` auth, response summary, WS broadcast) | Passed |
+| Regression: existing Claude manual import endpoint & message delivery | `apps/server/test/` full suite (`npm run test -w apps/server`) | Passed (37/37 files, 271/271 tests) |
 
 ---
 

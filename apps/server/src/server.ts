@@ -7,6 +7,9 @@ import { isBinaryAvailable } from "./agents/binary-availability.ts";
 import { ClaudeAgentAdapter } from "./agents/claude/claude-agent-adapter.ts";
 import { ClaudeCatalogProvider } from "./agents/claude/claude-catalog-provider.ts";
 import { ClaudeSessionCatalog } from "./agents/claude/claude-session-catalog.ts";
+import { AntigravitySessionCatalog } from "./agents/antigravity/antigravity-session-catalog.ts";
+import { CodexSessionCatalog } from "./agents/codex/codex-session-catalog.ts";
+import { OpenCodeSessionCatalog } from "./agents/opencode/opencode-session-catalog.ts";
 import { CodexAgentAdapter } from "./agents/codex/codex-agent-adapter.ts";
 import { GeminiAgentAdapter } from "./agents/gemini/gemini-agent-adapter.ts";
 import { OpenCodeAgentAdapter } from "./agents/opencode/opencode-agent-adapter.ts";
@@ -26,6 +29,8 @@ export type StartOfficeServerOptions = {
   staticRoot?: string;
   devOrigin?: string;
   token?: string;
+  autoSync?: boolean;
+  syncIntervalMs?: number;
 };
 
 export type RunningOfficeServer = {
@@ -79,10 +84,29 @@ export async function startOfficeServer(
     sessions: new ClaudeSessionCatalog(),
     catalogProvider: new ClaudeCatalogProvider(),
     terminals,
+    sessionCatalogs: {
+      claude: new ClaudeSessionCatalog(),
+      codex: new CodexSessionCatalog(),
+      opencode: new OpenCodeSessionCatalog(),
+      ...(hasAgy ? { gemini: new AntigravitySessionCatalog() } : {}),
+    },
     ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
   });
   office.recoverOnStartup();
   office.backfillProfiles();
+
+  const autoSync = options.autoSync ?? dbPath !== ":memory:";
+  let syncTimer: NodeJS.Timeout | undefined;
+  if (autoSync) {
+    await office.syncProviders();
+    const syncIntervalMs = options.syncIntervalMs ?? 30_000;
+    if (syncIntervalMs > 0) {
+      syncTimer = setInterval(() => {
+        void office.syncProviders();
+      }, syncIntervalMs);
+      syncTimer.unref?.();
+    }
+  }
 
   const desktopProfilesRoot = path.join(
     path.dirname(dbPath === ":memory:" ? path.join(repoRoot, "data", "x") : dbPath),
@@ -122,6 +146,7 @@ export async function startOfficeServer(
 
     closePromise = (async () => {
       try {
+        if (syncTimer) clearInterval(syncTimer);
         office.beginShutdown();
         await office.shutdown();
         await app.close();

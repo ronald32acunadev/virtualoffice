@@ -141,9 +141,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(websocket);
 
   app.get("/api/state", async () => office.getState());
+  app.post("/api/sync", async () => office.syncProviders());
 
   app.get<{ Params: { id: string } }>("/api/employees/:id/messages", async (request) => ({
-    messages: office.listMessages(request.params.id),
+    messages: await office.listMessagesWithCatchUp(request.params.id),
   }));
 
   app.post("/api/employees", async (request, reply) => {

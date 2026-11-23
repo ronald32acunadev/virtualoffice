@@ -1,4 +1,4 @@
-import type { ApprovalRequest, Employee, Message } from "../domain/types.ts";
+import type { ApprovalRequest, Employee, Message, Project } from "../domain/types.ts";
 
 export interface OfficeRepository {
   insertEmployee(employee: Employee): void;
@@ -17,6 +17,9 @@ export interface OfficeRepository {
   listPendingApprovals(): ApprovalRequest[];
   /** Marks every pending approval as expired. Returns how many changed. */
   expirePendingApprovals(decidedAt: string): number;
+
+  upsertProject(project: Project): void;
+  listProjects(): Project[];
 
   close(): void;
 }

@@ -36,8 +36,11 @@ import {
   type EmployeeUsage,
   type ImportSkipReason,
   type Message,
+  type Project,
   type ProviderCatalog,
+  type ProviderSyncStats,
   type Species,
+  type SyncSummary,
 } from "../domain/types.ts";
 
 export type OfficeDeps = {
@@ -53,6 +56,8 @@ export type OfficeDeps = {
   isDirectory?: (path: string) => boolean;
   /** Existing provider sessions (import and catch-up). Without it, listing is empty and catch-up is skipped. */
   sessions?: SessionCatalog;
+  /** Per-boss session catalogs for multi-provider sync. */
+  sessionCatalogs?: Partial<Record<BossId, SessionCatalog>>;
   /** Source of randomness for generated names and species; injectable for deterministic tests. */
   random?: RandomFn;
   /** Reads a folder's commands and agents without an employee. Without it, catalogs come only from live sessions. */
@@ -99,6 +104,7 @@ export class OfficeService {
   private readonly now: () => Date;
   private readonly newId: () => string;
   private readonly isDirectory: (path: string) => boolean;
+  private readonly catalogs: Partial<Record<BossId, SessionCatalog>>;
   private readonly catalog: SessionCatalog | undefined;
   private readonly random: RandomFn;
   private readonly catalogProvider: CatalogProvider | undefined;
@@ -125,7 +131,8 @@ export class OfficeService {
     this.now = deps.now ?? (() => new Date());
     this.newId = deps.newId ?? randomUUID;
     this.isDirectory = deps.isDirectory ?? defaultIsDirectory;
-    this.catalog = deps.sessions;
+    this.catalogs = { ...(deps.sessions ? { claude: deps.sessions } : {}), ...(deps.sessionCatalogs ?? {}) };
+    this.catalog = this.catalogs.claude;
     this.random = deps.random ?? Math.random;
     this.catalogProvider = deps.catalogProvider;
     this.bossNames = deps.bossNames ?? {};
@@ -264,18 +271,150 @@ export class OfficeService {
     employees: Employee[];
     approvals: ApprovalRequest[];
     activeTerminals: string[];
+    projects: Project[];
   } {
     return {
       bosses: this.listBosses(),
       employees: this.repository.listEmployees().map((e) => this.decorateEmployee(e)),
       approvals: this.repository.listPendingApprovals(),
       activeTerminals: this.terminals?.listActive() ?? [],
+      projects: this.repository.listProjects(),
     };
   }
 
   listMessages(employeeId: string): Message[] {
     this.requireEmployee(employeeId);
     return this.repository.listMessages(employeeId);
+  }
+
+  async listMessagesWithCatchUp(employeeId: string): Promise<Message[]> {
+    const employee = this.requireEmployee(employeeId);
+    if (!this.sessions.get(employeeId)?.active) {
+      await this.catchUp(employee);
+    }
+    return this.repository.listMessages(employeeId);
+  }
+
+  async syncProviders(): Promise<SyncSummary> {
+    const existingProjects = new Map<string, Project>(
+      this.repository.listProjects().map((p) => [p.path, p]),
+    );
+    const existingSessions = new Set<string>(
+      this.repository
+        .listEmployees()
+        .filter((e) => e.providerSessionId !== null)
+        .map((e) => `${e.bossId}:${e.providerSessionId}`),
+    );
+    let projectsChanged = false;
+    let projectsAdded = 0;
+    let sessionsImported = 0;
+    let skipped = 0;
+    const providers: Partial<Record<BossId, ProviderSyncStats>> = {};
+
+    const upsertDiscoveredProject = (
+      rawPath: string,
+      fallbackName: string,
+      bossId: BossId,
+      lastModifiedMs: number,
+    ): boolean => {
+      const resolved = path.resolve(rawPath);
+      if (!this.isDirectory(resolved)) return false;
+      const seenIso = lastModifiedMs > 0 ? new Date(lastModifiedMs).toISOString() : this.timestamp();
+      const existing = existingProjects.get(resolved);
+      if (!existing) {
+        const next: Project = {
+          path: resolved,
+          name: fallbackName || path.basename(resolved) || resolved,
+          providers: [bossId],
+          lastSeenAt: seenIso,
+        };
+        this.repository.upsertProject(next);
+        existingProjects.set(resolved, next);
+        projectsChanged = true;
+        return true;
+      }
+      const nextProviders = existing.providers.includes(bossId)
+        ? existing.providers
+        : [...existing.providers, bossId];
+      const existingSeen = Date.parse(existing.lastSeenAt);
+      const seen = Date.parse(seenIso);
+      const lastSeenAt =
+        Number.isNaN(existingSeen) || (!Number.isNaN(seen) && seen > existingSeen)
+          ? seenIso
+          : existing.lastSeenAt;
+      const changed = nextProviders !== existing.providers || lastSeenAt !== existing.lastSeenAt;
+      if (changed) {
+        const next: Project = { ...existing, providers: nextProviders, lastSeenAt };
+        this.repository.upsertProject(next);
+        existingProjects.set(resolved, next);
+        projectsChanged = true;
+      }
+      return false;
+    };
+
+    for (const [bossId, catalog] of Object.entries(this.catalogs) as [BossId, SessionCatalog][]) {
+      const stats: ProviderSyncStats = { projectsAdded: 0, sessionsImported: 0, skipped: 0, error: null };
+      try {
+        if (catalog.listProjects) {
+          for (const p of await catalog.listProjects()) {
+            if (upsertDiscoveredProject(p.path, p.name, bossId, p.lastModified)) {
+              stats.projectsAdded += 1;
+              projectsAdded += 1;
+            }
+          }
+        }
+        for (const s of await catalog.list()) {
+          if (!s.cwd || !this.isDirectory(s.cwd)) {
+            stats.skipped += 1;
+            skipped += 1;
+            continue;
+          }
+          const resolvedCwd = path.resolve(s.cwd);
+          if (upsertDiscoveredProject(resolvedCwd, path.basename(resolvedCwd) || resolvedCwd, bossId, s.lastModified)) {
+            stats.projectsAdded += 1;
+            projectsAdded += 1;
+          }
+          const key = `${bossId}:${s.sessionId}`;
+          if (existingSessions.has(key)) {
+            stats.skipped += 1;
+            skipped += 1;
+            continue;
+          }
+          const nowIso = this.timestamp();
+          const employee: Employee = {
+            id: this.newId(),
+            bossId,
+            hiredBy: null,
+            task: s.title,
+            workingDirectory: resolvedCwd,
+            name: this.nextName(),
+            species: generateSpecies(this.random),
+            importedAt: nowIso,
+            role: null,
+            jobTitle: null,
+            providerSessionId: s.sessionId,
+            status: "idle",
+            failureReason: null,
+            createdAt: s.createdAt && s.createdAt > 0 ? new Date(s.createdAt).toISOString() : nowIso,
+            updatedAt: s.lastModified > 0 ? new Date(s.lastModified).toISOString() : nowIso,
+          };
+          this.repository.insertEmployee(employee);
+          existingSessions.add(key);
+          this.events.publish({ type: "employee_updated", employee: this.decorateEmployee(employee) });
+          stats.sessionsImported += 1;
+          sessionsImported += 1;
+        }
+      } catch (error) {
+        stats.error = errorReason(error);
+      }
+      providers[bossId] = stats;
+    }
+
+    if (projectsChanged) {
+      this.events.publish({ type: "projects_updated", projects: this.repository.listProjects() });
+    }
+
+    return { projectsAdded, sessionsImported, skipped, providers };
   }
 
   /** Commands and agents of a folder: cached, or probed on a miss or when `refresh` is true. */
@@ -647,16 +786,16 @@ export class OfficeService {
    * in order. A failure to read adds a system note and the resume continues.
    */
   private async catchUp(employee: Employee): Promise<void> {
-    if (employee.bossId !== "claude") return;
+    const catalog = this.catalogs[employee.bossId];
     const sessionId = employee.providerSessionId;
-    if (!sessionId || !this.catalog) return;
+    if (!sessionId || !catalog) return;
     const stored = this.repository.listMessages(employee.id);
     const storedUuids = new Set(stored.flatMap((m) => (m.sourceUuid ? [m.sourceUuid] : [])));
     // Without any provider uuid on record (a pre-import employee), a diff would re-add everything.
     if (!employee.importedAt && storedUuids.size === 0) return;
     let history;
     try {
-      history = await this.catalog.history(sessionId);
+      history = await catalog.history(sessionId);
     } catch {
       this.appendMessage(employee.id, { kind: "system", content: CATCH_UP_FAILED });
       return;

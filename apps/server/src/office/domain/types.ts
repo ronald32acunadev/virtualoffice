@@ -110,6 +110,27 @@ export type ClaudeSessionSummary = {
 
 export type ImportSkipReason = "already_imported" | "missing_cwd" | "not_found" | "read_failed";
 
+export type Project = {
+  path: string;
+  name: string;
+  providers: BossId[];
+  lastSeenAt: string;
+};
+
+export type ProviderSyncStats = {
+  projectsAdded: number;
+  sessionsImported: number;
+  skipped: number;
+  error: string | null;
+};
+
+export type SyncSummary = {
+  projectsAdded: number;
+  sessionsImported: number;
+  skipped: number;
+  providers: Partial<Record<BossId, ProviderSyncStats>>;
+};
+
 export type ApprovalKind = "permission" | "question" | "plan";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 export type Decision = "approve" | "approve_for_session" | "reject";
@@ -135,7 +156,8 @@ export type ServerEvent =
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_updated"; approval: ApprovalRequest }
-  | { type: "terminal_updated"; employeeId: string; active: boolean };
+  | { type: "terminal_updated"; employeeId: string; active: boolean }
+  | { type: "projects_updated"; projects: Project[] };
 
 export const BOSSES: readonly Boss[] = [
   { id: "claude", name: "Claude", available: true },
