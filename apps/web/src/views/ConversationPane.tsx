@@ -22,7 +22,6 @@ import { RoleBadge } from "../ui/RoleBadge";
 import { UsageRing } from "../ui/UsageRing";
 import { ApprovalCard } from "../ui/ApprovalCard";
 import { toFormError } from "../ui/errors";
-import { OpenExternalMenu } from "./OpenExternalMenu";
 import { optionId, SlashMenu } from "./SlashMenu";
 import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { groupTimelineBlocks } from "../state/activityGroups";
@@ -38,11 +37,9 @@ const FOLDER_MISSING_TEXT =
 function Header({
   employeeId,
   onInsertSkill,
-  onOpenTerminal,
 }: {
   employeeId: string;
   onInsertSkill: (name: string) => void;
-  onOpenTerminal: () => void;
 }) {
   const { state, actions } = useOffice();
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -166,11 +163,6 @@ function Header({
           ))}
         </select>
         <Toolbox employeeId={employee.id} onInsertSkill={onInsertSkill} />
-        <OpenExternalMenu
-          employeeId={employee.id}
-          onError={setError}
-          onOpenEmbeddedTerminal={onOpenTerminal}
-        />
         {STOPPABLE.has(employee.status) ? (
           <button type="button" className="danger" onClick={() => void run(() => actions.stopEmployee(employee.id))}>
             Stop
@@ -635,7 +627,6 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
       <Header
         employeeId={employeeId}
         onInsertSkill={(name) => setPendingInsert({ name, nonce: Date.now() + Math.random() })}
-        onOpenTerminal={() => setView("terminal")}
       />
       <div className="conv-tabs" role="tablist" aria-label="Conversation view">
         <button type="button" role="tab" aria-selected={view === "chat"} className={view === "chat" ? "conv-tab active" : "conv-tab"} onClick={() => setView("chat")}>

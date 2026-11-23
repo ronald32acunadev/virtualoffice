@@ -9,8 +9,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Remove the `"Open in..."` launcher button, menu, and backend launch routes | — | pending |
-| US-02 | Organize `Toolbox` with live search, alphabetical sorting, and grouped sections | — | pending |
+| US-01 | Remove the `"Open in..."` launcher button, menu, and backend launch routes | — | complete |
+| US-02 | Organize `Toolbox` with live search, alphabetical sorting, and grouped sections | — | in progress |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -40,8 +40,8 @@ As the owner, I want the `"Open in..."` button and menu removed from the convers
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-02` | Search confirming zero references to `OpenExternalMenu`, `ExternalLauncherService`, `launchMenu`, or `/launch-targets`, plus `npm run typecheck` and `npm run build` | Pending |
-| `US-01 / AC-03` + regression on `Chat` and `Terminal` tabs | `npm test` (`apps/server` + `apps/web` full suites) | Pending |
+| `US-01 / AC-01`, `US-01 / AC-02` | Search confirming zero references to `OpenExternalMenu`, `ExternalLauncherService`, `launchMenu`, or `/launch-targets`, plus `npm run typecheck` and `npm run build` | Passed (`ZERO REFERENCES`, `npm run typecheck` & `vite build` clean) |
+| `US-01 / AC-03` + regression on `Chat` and `Terminal` tabs | `npm test` (`apps/server` + `apps/web` full suites) | Passed (`apps/server` 36/36 files 256/256 tests, `apps/web` 24/24 files 129/129 tests) |
 
 ---
 

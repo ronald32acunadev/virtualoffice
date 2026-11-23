@@ -172,11 +172,4 @@ export type StateSnapshot = {
 
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };
 
-export type LaunchTargetKind = "desktop_app" | "terminal_cli" | "folder";
-export type LaunchTarget = {
-  id: string;
-  label: string;
-  kind: LaunchTargetKind;
-  available: boolean;
-  unavailableReason?: string;
-};
+

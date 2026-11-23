@@ -3,7 +3,6 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import websocket from "@fastify/websocket";
 import fastifyStatic from "@fastify/static";
 import type { OfficeService } from "../office/application/office-service.ts";
-import { ExternalLauncherService, LaunchError } from "../office/application/external-launcher.ts";
 import type { OfficeRepository } from "../office/ports/office-repository.ts";
 import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
@@ -16,7 +15,6 @@ export type BuildAppOptions = {
   port: number;
   repository: OfficeRepository;
   office: OfficeService;
-  launcher?: ExternalLauncherService;
   staticRoot?: string;
   devOrigin?: string;
   terminals?: TerminalSessionManager;
@@ -49,7 +47,6 @@ function asRecord(body: unknown): Record<string, unknown> {
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const { token, port, office, staticRoot, devOrigin, terminals } = options;
-  const launcher = options.launcher ?? new ExternalLauncherService();
 
   const app = Fastify({ logger: false, bodyLimit: 80 * 1024 * 1024 });
 
@@ -197,32 +194,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     employee: await office.stop(request.params.id),
   }));
 
-  app.get<{ Params: { id: string } }>("/api/employees/:id/launch-targets", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    return { targets: launcher.listTargets(employee) };
-  });
 
-  app.post<{ Params: { id: string } }>("/api/employees/:id/launch", async (request, reply) => {
-    const employee = options.repository.getEmployee(request.params.id);
-    if (!employee) {
-      return sendError(reply, 404, "not_found", "Employee not found");
-    }
-    const targetId = asRecord(request.body).targetId;
-    if (typeof targetId !== "string" || targetId.trim() === "") {
-      return sendError(reply, 400, "validation_error", "targetId is required", "targetId");
-    }
-    try {
-      return launcher.launch(employee, targetId.trim());
-    } catch (err) {
-      if (err instanceof LaunchError) {
-        return sendError(reply, err.status, err.code, err.message);
-      }
-      throw err;
-    }
-  });
 
   app.post<{ Params: { id: string } }>("/api/bosses/:id/resume", async (request) => ({
     boss: office.resumeBoss(request.params.id),
