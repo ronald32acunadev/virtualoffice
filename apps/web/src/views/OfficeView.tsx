@@ -10,6 +10,8 @@ import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
 import { RoleBadge } from "../ui/RoleBadge";
+import { truncateMediaTitle } from "../state/media";
+import { MediaDrawer } from "./MediaDrawer";
 
 export function OfficeView() {
   const { state, actions } = useOffice();
@@ -18,6 +20,8 @@ export function OfficeView() {
   const { mood, toggleMood } = useOfficeMood();
   const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
+  const [mediaOpen, setMediaOpen] = useState(false);
+  const [focusTvToken, setFocusTvToken] = useState(0);
 
   useEffect(() => {
     const channel = openWindowChannel();
@@ -59,6 +63,18 @@ export function OfficeView() {
   const resetView = useCallback(() => {
     setResetToken((n) => n + 1);
   }, []);
+  const focusTv = useCallback(() => {
+    setFocusTvToken((n) => n + 1);
+  }, []);
+  const openMediaDrawer = useCallback(() => {
+    setMediaOpen(true);
+  }, []);
+  const toggleMediaDrawer = useCallback(() => {
+    setMediaOpen((v) => !v);
+  }, []);
+  const turnOffMedia = useCallback(() => {
+    void actions.clearMediaPlayback().catch(() => {});
+  }, [actions]);
 
   const oldestApproval = useMemo(
     () =>
@@ -81,6 +97,10 @@ export function OfficeView() {
           mood={mood}
           resetToken={resetToken}
           chatterEnabled={chatterEnabled}
+          focusTvToken={focusTvToken}
+          onOpenMediaDrawer={openMediaDrawer}
+          onFocusTv={focusTv}
+          onTurnOffMedia={turnOffMedia}
         />
       </SceneErrorBoundary>
       <div className="office-hud" role="toolbar" aria-label="Office view controls">
@@ -110,6 +130,26 @@ export function OfficeView() {
         >
           {chatterEnabled ? "💬 Quotes" : "🔇 Muted"}
         </button>
+        <button
+          type="button"
+          className="hud-btn hud-btn-media"
+          aria-pressed={mediaOpen}
+          onClick={toggleMediaDrawer}
+          title="Open Office TV & Music selector"
+        >
+          <span className={state.media ? "hud-media-dot is-live" : "hud-media-dot"} aria-hidden="true" />
+          {state.media ? `TV: ${truncateMediaTitle(state.media.title, 22)}` : "TV / Music"}
+        </button>
+        {state.media ? (
+          <button
+            type="button"
+            className="hud-btn"
+            onClick={focusTv}
+            title="Focus camera on the Office TV"
+          >
+            Focus TV
+          </button>
+        ) : null}
       </div>
       <div className={`connection connection-${state.connection}`}>
         {state.connection === "online"
@@ -157,6 +197,17 @@ export function OfficeView() {
           </div>
         </div>
       ) : null}
+      <MediaDrawer
+        open={mediaOpen}
+        media={state.media}
+        presets={state.mediaPresets}
+        onClose={() => setMediaOpen(false)}
+        onFocusTv={focusTv}
+        onPlay={actions.setMediaPlayback}
+        onTurnOff={actions.clearMediaPlayback}
+        onSavePreset={actions.addMediaPreset}
+        onDeletePreset={actions.deleteMediaPreset}
+      />
     </div>
   );
 }

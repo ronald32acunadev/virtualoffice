@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Parse and validate Spotify, YouTube / YouTube Music, and Apple Music URLs into canonical embed descriptors | — | complete |
 | US-02 | Persist office TV playback state and saved stations in SQLite with REST API and WebSocket sync | US-01 | complete |
 | US-03 | Mount an interactive 3D Media TV on the office back wall with live in-TV playback and camera focus | US-01, US-02 | complete |
-| US-04 | Add Android-style provider chooser drawer and saved stations controls to the Office HUD | US-02, US-03 | pending |
+| US-04 | Add Android-style provider chooser drawer and saved stations controls to the Office HUD | US-02, US-03 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -118,5 +118,5 @@ As the owner, I want an app-chooser panel in `/office` where I pick Spotify, You
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-02`, `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/media.test.ts` (client-side provider auto-detection from pasted URLs for Spotify, YouTube/YouTube Music, Apple Music; input validation messages; station display label/truncation helpers; provider playback hint helper) | Pending |
-| `US-04 / AC-01`, `US-04 / AC-05` + full-stack regression | `npm run typecheck`, `npm test`, `npm run build`, plus manual verification in `/office` across Day and Evening moods (open drawer from HUD and 3D TV, choose provider, play YouTube video inside TV, save/play/delete station, Focus TV, Turn off TV, reload persistence) | Pending |
+| `US-04 / AC-02`, `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/media.test.ts` (client-side provider auto-detection from pasted URLs for Spotify, YouTube/YouTube Music, Apple Music; input validation messages; station display label/truncation helpers; provider playback hint helper) | Passed (`14/14` tests in `media.test.ts`) |
+| `US-04 / AC-01`, `US-04 / AC-05` + full-stack regression | `npm run typecheck`, `npm test`, `npm run build`, plus manual verification in `/office` across Day and Evening moods (open drawer from HUD and 3D TV, choose provider, play YouTube video inside TV, save/play/delete station, Focus TV, Turn off TV, reload persistence) | Automated: passed (`apps/server` 40/40 files 311/311 tests, `apps/web` 26/26 files 166/166 tests, `tsc --noEmit` & `vite build` clean); manual browser check ready for owner in `/office` |
