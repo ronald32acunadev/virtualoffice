@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, AttachmentUpload, ImportResult, Species, SyncSummary } from "../api/types";
+import type { BossId, Decision, AttachmentUpload, Species, SyncSummary } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -24,7 +24,6 @@ export type OfficeActions = {
     jobTitle?: string;
   }) => Promise<void>;
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
-  importSessions: (sessionIds: string[]) => Promise<ImportResult>;
   syncProviders: () => Promise<SyncSummary>;
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
@@ -108,13 +107,6 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
       updateEmployee: async (employeeId, patch) => {
         const { employee } = await api.updateEmployee(employeeId, patch);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
-      },
-      importSessions: async (sessionIds) => {
-        const result = await api.importClaudeSessions(sessionIds);
-        for (const employee of result.imported) {
-          dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
-        }
-        return result;
       },
       syncProviders: async () => {
         const summary = await api.syncProviders();

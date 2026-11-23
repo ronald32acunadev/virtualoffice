@@ -97,21 +97,7 @@ export type SlashCommand = {
 export type AgentInfo = { name: string; description: string; model?: string; builtin: boolean };
 export type Catalog = { commands: SlashCommand[]; agents: AgentInfo[] };
 
-export type ClaudeSessionSummary = {
-  sessionId: string;
-  title: string;
-  cwd: string | null;
-  gitBranch: string | null;
-  lastModified: string;
-  createdAt: string | null;
-  alreadyImported: boolean;
-};
 
-export type ImportSkipReason = "already_imported" | "missing_cwd" | "not_found" | "read_failed";
-export type ImportResult = {
-  imported: Employee[];
-  skipped: { sessionId: string; reason: ImportSkipReason }[];
-};
 
 export type Project = {
   path: string;

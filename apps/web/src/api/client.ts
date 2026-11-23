@@ -3,9 +3,7 @@ import type {
   AttachmentUpload,
   Catalog,
   BossId,
-  ClaudeSessionSummary,
   Decision,
-  ImportResult,
   Employee,
   Message,
   ServerEvent,
@@ -114,19 +112,6 @@ export const api = {
     ),
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) =>
     request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
-  listClaudeSessions: (params: { q: string; limit: number; offset: number }) => {
-    const query = new URLSearchParams({
-      limit: String(params.limit),
-      offset: String(params.offset),
-    });
-    if (params.q.trim()) query.set("q", params.q.trim());
-    return request<{ sessions: ClaudeSessionSummary[]; total: number }>(
-      "GET",
-      `/api/imports/claude/sessions?${query.toString()}`,
-    );
-  },
-  importClaudeSessions: (sessionIds: string[]) =>
-    request<ImportResult>("POST", "/api/imports/claude", { sessionIds }),
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
       text,

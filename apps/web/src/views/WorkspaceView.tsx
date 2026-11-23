@@ -5,14 +5,13 @@ import { useOfficeMood } from "../state/officeMood";
 import { buildViewUrl } from "../state/routing";
 import { createWorkspaceLink, openWindowChannel } from "../state/windowChannel";
 import { ConversationPane } from "./ConversationPane";
-import { ImportModal } from "./ImportModal";
 import { NewTaskModal } from "./NewTaskModal";
 import { Sidebar } from "./Sidebar";
 
 export function WorkspaceView() {
   const { state, actions } = useOffice();
   const { mood, toggleMood } = useOfficeMood();
-  const [modal, setModal] = useState<"new" | "import" | null>(null);
+  const [modal, setModal] = useState<"new" | null>(null);
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export function WorkspaceView() {
           setNewTaskDir(projectPath ?? null);
           setModal("new");
         }}
-        onImport={() => setModal("import")}
         onOpenOffice={openOffice}
       />
       <main className="workspace-main">
@@ -51,7 +49,7 @@ export function WorkspaceView() {
             <h1>Virtual Office</h1>
             <p className="muted">
               {state.loaded && state.employees.length === 0
-                ? "Start a new task or import a Claude session to hire your first employee."
+                ? "Start a new task or sync providers to hire your first employee."
                 : "Select an employee to see their conversation."}
             </p>
           </div>
@@ -66,7 +64,6 @@ export function WorkspaceView() {
           }}
         />
       ) : null}
-      {modal === "import" ? <ImportModal onClose={() => setModal(null)} /> : null}
     </div>
   );
 }

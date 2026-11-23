@@ -9,8 +9,8 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Remove `"Import from Claude"` button, modal, and manual import routes | — | pending |
-| US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | pending |
+| US-01 | Remove `"Import from Claude"` button, modal, and manual import routes | — | complete |
+| US-02 | Merge duplicate project folders/worktrees and add agent color indicators in sidebar | US-01 | in progress |
 | US-03 | Upgrade `Toolbox` into an actionable Agent Workspace Inspector | — | pending |
 | US-04 | Two-way chat create/delete sync between Virtual Office and external providers | US-01 | pending |
 
@@ -46,8 +46,8 @@ As the owner, I want `"Import from Claude"` removed since auto-sync already disc
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-02` | Search confirming zero references to `ImportModal`, `importSummary`, or `/api/imports/claude`, plus `npm run typecheck` and `npm run build` | Pending |
-| `US-01 / AC-03` + auto-sync regression | `npm test` (`provider-auto-sync.test.ts`, `provider-create-sync-dedupe.test.ts`, and full suites) | Pending |
+| `US-01 / AC-01`, `US-01 / AC-02` | Search confirming zero references to `ImportModal`, `importSummary`, or `/api/imports/claude`, plus `npm run typecheck` and `npm run build` | Passed (`ZERO REFERENCES`, `npm run typecheck` & `vite build` clean) |
+| `US-01 / AC-03` + auto-sync regression | `npm test` (`provider-auto-sync.test.ts`, `provider-create-sync-dedupe.test.ts`, and full suites) | Passed (`apps/server` 36/36 files 252/252 tests, `apps/web` 24/24 files 131/131 tests) |
 
 ---
 

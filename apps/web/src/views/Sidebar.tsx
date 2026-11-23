@@ -11,12 +11,11 @@ type Props = {
   mood: LightingMood;
   onToggleMood: () => void;
   onNewTask: (projectPath?: string) => void;
-  onImport: () => void;
   onOpenOffice: () => void;
 };
 type GroupMode = "project" | "boss";
 
-export function Sidebar({ mood, onToggleMood, onNewTask, onImport, onOpenOffice }: Props) {
+export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) {
   const { state, actions } = useOffice();
   const [search, setSearch] = useState("");
   const [groupMode, setGroupMode] = useState<GroupMode>("project");
@@ -101,9 +100,6 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onImport, onOpenOffice 
           />
         </div>
         <div className="sidebar-quick-links">
-          <button type="button" className="sidebar-nav-btn" onClick={onImport}>
-            Import from Claude
-          </button>
           <button type="button" className="sidebar-nav-btn" onClick={onOpenOffice}>
             3D Office
           </button>

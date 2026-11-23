@@ -162,12 +162,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     };
   });
 
-  app.get("/api/imports/claude/sessions", async (request) => {
-    const query = asRecord(request.query);
-    return office.listClaudeSessions({ q: query.q, limit: query.limit, offset: query.offset });
-  });
 
-  app.post("/api/imports/claude", async (request) => office.importClaudeSessions(asRecord(request.body).sessionIds));
 
   app.post<{ Params: { id: string } }>("/api/employees/:id/messages", async (request, reply) => {
     const body = asRecord(request.body);
