@@ -99,6 +99,27 @@ export type ImportResult = {
   skipped: { sessionId: string; reason: ImportSkipReason }[];
 };
 
+export type Project = {
+  path: string;
+  name: string;
+  providers: BossId[];
+  lastSeenAt: string;
+};
+
+export type ProviderSyncStats = {
+  projectsAdded: number;
+  sessionsImported: number;
+  skipped: number;
+  error: string | null;
+};
+
+export type SyncSummary = {
+  projectsAdded: number;
+  sessionsImported: number;
+  skipped: number;
+  providers: Partial<Record<BossId, ProviderSyncStats>>;
+};
+
 export type ApprovalKind = "permission" | "question" | "plan";
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 export type Decision = "approve" | "approve_for_session" | "reject";
@@ -124,13 +145,15 @@ export type ServerEvent =
   | { type: "message_delta"; employeeId: string; text: string }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_updated"; approval: ApprovalRequest }
-  | { type: "terminal_updated"; employeeId: string; active: boolean };
+  | { type: "terminal_updated"; employeeId: string; active: boolean }
+  | { type: "projects_updated"; projects: Project[] };
 
 export type StateSnapshot = {
   bosses: Boss[];
   employees: Employee[];
   approvals: ApprovalRequest[];
   activeTerminals?: string[];
+  projects?: Project[];
 };
 
 export type ApiErrorBody = { error: { code: string; message: string; field?: string } };

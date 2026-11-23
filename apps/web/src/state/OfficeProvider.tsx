@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, ImportResult, Species } from "../api/types";
+import type { BossId, Decision, ImportResult, Species, SyncSummary } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -25,6 +25,7 @@ export type OfficeActions = {
   }) => Promise<void>;
   updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
   importSessions: (sessionIds: string[]) => Promise<ImportResult>;
+  syncProviders: () => Promise<SyncSummary>;
   sendMessage: (employeeId: string, text: string) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
   resumeBoss: (bossId: BossId) => Promise<void>;
@@ -114,6 +115,11 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "server_event", event: { type: "employee_updated", employee } });
         }
         return result;
+      },
+      syncProviders: async () => {
+        const summary = await api.syncProviders();
+        await refresh();
+        return summary;
       },
       stopEmployee: async (employeeId) => {
         const { employee } = await api.stopEmployee(employeeId);

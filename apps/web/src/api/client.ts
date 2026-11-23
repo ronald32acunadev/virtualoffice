@@ -11,6 +11,7 @@ import type {
   ServerEvent,
   Species,
   StateSnapshot,
+  SyncSummary,
 } from "./types";
 import type { EmbeddedAppStatus } from "../state/desktopApp";
 
@@ -90,6 +91,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   getState: () => request<StateSnapshot>("GET", "/api/state"),
+  syncProviders: () => request<SyncSummary>("POST", "/api/sync"),
   getMessages: (employeeId: string) =>
     request<{ messages: Message[] }>("GET", `/api/employees/${encodeURIComponent(employeeId)}/messages`),
   createEmployee: (input: {

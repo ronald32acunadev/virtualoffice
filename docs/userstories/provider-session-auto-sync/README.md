@@ -11,7 +11,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Multi-provider read-only session and project catalogs | — | complete |
 | US-02 | Automatic project & chat sync and multi-provider history catch-up | US-01 | complete |
-| US-03 | Auto-synced projects sidebar, sync trigger, and project-picker chat creation | US-02 | pending |
+| US-03 | Auto-synced projects sidebar, sync trigger, and project-picker chat creation | US-02 | complete |
 | US-04 | Native 1-to-1 provider session creation and deduplication verification | US-02, US-03 | pending |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -100,11 +100,11 @@ As the owner, I want to see all auto-discovered projects and chats in the sideba
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01` | `apps/web/test/sidebar.test.ts` (merging `state.projects` with employees, empty projects included, deterministic ordering) | Pending |
-| `US-03 / AC-02` | `apps/web/test/sync-ui.test.ts` (Sync button triggers `POST /api/sync`, loading state, error banner) | Pending |
-| `US-03 / AC-03` | `apps/web/test/new-task-modal.test.ts` (discovered project picker, pre-selected project, custom path fallback, provider selector) | Pending |
-| `US-03 / AC-04` | `apps/server/test/provider-auto-sync.test.ts` + `apps/web/test/` suite | Pending |
-| Regression: existing sidebar Projects/Agents toggle & workspace view | `npm test` + `npm run typecheck` + `npm run build` | Pending |
+| `US-03 / AC-01` | `apps/web/src/state/autoSync.test.ts` (merging `state.projects` with employees, empty projects included, reducer `state_loaded`/`projects_updated`) | Passed |
+| `US-03 / AC-02` | `apps/web/src/state/autoSync.test.ts` + `Sidebar.tsx` Sync button (`formatSyncErrors`, loading/error state) | Passed |
+| `US-03 / AC-03` | `apps/web/src/state/autoSync.test.ts` + `NewTaskModal.tsx` (`buildProjectOptions`, pre-selected project, custom path fallback, provider selector) | Passed |
+| `US-03 / AC-04` | `apps/server/test/office/provider-auto-sync.test.ts` (`GET /api/employees/:id/messages` catch-up) + `apps/web/src/state/OfficeProvider.tsx` | Passed |
+| Regression: existing sidebar Projects/Agents toggle & workspace view | `npm run typecheck`, `npm run test -w apps/web` (21/21 files, 109/109 tests), `npm run build` | Passed |
 
 ---
 

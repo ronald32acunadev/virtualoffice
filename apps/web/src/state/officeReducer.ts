@@ -3,6 +3,7 @@ import type {
   Boss,
   Employee,
   Message,
+  Project,
   ServerEvent,
   StateSnapshot,
 } from "../api/types";
@@ -12,6 +13,7 @@ export type ConnectionState = "connecting" | "online" | "offline";
 export type OfficeState = {
   bosses: Boss[];
   employees: Employee[];
+  projects: Project[];
   /** Pending approvals only. */
   approvals: ApprovalRequest[];
   messages: Record<string, Message[]>;
@@ -34,6 +36,7 @@ export type OfficeAction =
 export const initialOfficeState: OfficeState = {
   bosses: [],
   employees: [],
+  projects: [],
   approvals: [],
   messages: {},
   liveText: {},
@@ -112,6 +115,8 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
       if (state.activeTerminals.includes(employeeId)) return state;
       return { ...state, activeTerminals: [...state.activeTerminals, employeeId] };
     }
+    case "projects_updated":
+      return { ...state, projects: event.projects };
   }
 }
 
@@ -125,6 +130,7 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
         ...state,
         bosses: snapshot.bosses,
         employees: snapshot.employees,
+        projects: snapshot.projects ?? [],
         approvals: snapshot.approvals.filter((approval) => approval.status === "pending"),
         // Partial streaming text is lost across a reconnect; stored messages replace it.
         liveText: {},

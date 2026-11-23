@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import type { Employee } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
-import { filterEmployees, groupEmployeesByBoss, groupEmployeesByProject } from "../state/sidebar";
+import { filterEmployees, formatSyncErrors, groupEmployeesByBoss, groupEmployeesByProject } from "../state/sidebar";
 import { SPECIES_EMOJI } from "../state/species";
 import { RoleBadge } from "../ui/RoleBadge";
 import { UsageRing } from "../ui/UsageRing";
 
-type Props = { onNewTask: () => void; onImport: () => void; onOpenOffice: () => void };
+type Props = { onNewTask: (projectPath?: string) => void; onImport: () => void; onOpenOffice: () => void };
 type GroupMode = "project" | "boss";
 
 export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
@@ -15,10 +15,28 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
   const [groupMode, setGroupMode] = useState<GroupMode>("project");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [resumingBoss, setResumingBoss] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const filtered = useMemo(() => filterEmployees(state.employees, search), [state.employees, search]);
   const bossGroups = useMemo(() => groupEmployeesByBoss(filtered, state.bosses), [filtered, state.bosses]);
-  const projectGroups = useMemo(() => groupEmployeesByProject(filtered), [filtered]);
+  const projectGroups = useMemo(
+    () => groupEmployeesByProject(filtered, search.trim() ? [] : state.projects),
+    [filtered, search, state.projects],
+  );
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const summary = await actions.syncProviders();
+      setSyncError(formatSyncErrors(summary));
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
   const employeeName = (id: string) => state.employees.find((e) => e.id === id)?.name ?? id;
 
   const toggleGroup = (key: string) => {
@@ -61,7 +79,7 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <button type="button" className="sidebar-nav-btn sidebar-nav-primary" onClick={onNewTask}>
+        <button type="button" className="sidebar-nav-btn sidebar-nav-primary" onClick={() => onNewTask()}>
           <span className="nav-icon" aria-hidden="true">+</span>
           New
         </button>
@@ -82,7 +100,20 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
           <button type="button" className="sidebar-nav-btn" onClick={onOpenOffice}>
             3D Office
           </button>
+          <button
+            type="button"
+            className="sidebar-nav-btn"
+            disabled={syncing}
+            onClick={() => void handleSync()}
+          >
+            {syncing ? "Syncing..." : "Sync"}
+          </button>
         </div>
+        {syncError ? (
+          <p className="field-error" role="alert">
+            {syncError}
+          </p>
+        ) : null}
       </div>
 
       {state.approvals.length > 0 ? (
@@ -125,26 +156,43 @@ export function Sidebar({ onNewTask, onImport, onOpenOffice }: Props) {
       </div>
 
       <nav className="sidebar-list" aria-label="Employees">
-        {filtered.length === 0 ? (
+        {(groupMode === "project" ? projectGroups.length === 0 : filtered.length === 0) ? (
           <p className="muted sidebar-empty">
-            {search.trim() ? "No matching conversations." : "No employees yet. Start a new task or import a session."}
+            {search.trim() ? "No matching conversations." : "No employees yet. Start a new task or sync providers."}
           </p>
         ) : groupMode === "project" ? (
           projectGroups.map((group) => {
             const isCollapsed = Boolean(collapsed[group.projectKey]);
             return (
               <section key={group.projectKey} className="sidebar-section">
-                <button
-                  type="button"
-                  className="sidebar-group-head"
-                  aria-expanded={!isCollapsed}
-                  title={group.projectKey}
-                  onClick={() => toggleGroup(group.projectKey)}
-                >
-                  <span>{group.projectName}</span>
-                  <span className="group-chevron" aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
-                </button>
-                {!isCollapsed ? <ul className="employee-list">{group.employees.map(renderEmployeeRow)}</ul> : null}
+                <div className="sidebar-group-head-row">
+                  <button
+                    type="button"
+                    className="sidebar-group-head"
+                    aria-expanded={!isCollapsed}
+                    title={group.projectKey}
+                    onClick={() => toggleGroup(group.projectKey)}
+                  >
+                    <span>{group.projectName}</span>
+                    <span className="group-chevron" aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar-group-new"
+                    title="New chat in this project"
+                    aria-label={`New chat in ${group.projectName}`}
+                    onClick={() => onNewTask(group.projectKey)}
+                  >
+                    +
+                  </button>
+                </div>
+                {!isCollapsed ? (
+                  group.employees.length === 0 ? (
+                    <p className="muted sidebar-empty">No chats yet.</p>
+                  ) : (
+                    <ul className="employee-list">{group.employees.map(renderEmployeeRow)}</ul>
+                  )
+                ) : null}
               </section>
             );
           })
