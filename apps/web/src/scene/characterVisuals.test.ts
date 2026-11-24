@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EmployeeStatus } from "../api/types";
 import { CHARACTER_POSES, hasSpecialistAccessory } from "./characterVisuals";
+import { WORLD_THEME_IDS } from "./themes/registry";
+import { getThemeStationVisual } from "./themes/themeVisuals";
 
 const ALL_STATUSES: EmployeeStatus[] = [
   "starting",
@@ -57,5 +59,26 @@ describe("characterVisuals", () => {
     expect(hasSpecialistAccessory(undefined)).toBe(false);
     expect(hasSpecialistAccessory("")).toBe(false);
     expect(hasSpecialistAccessory("   \t\n ")).toBe(false);
+  });
+
+  it("US-04 / AC-01, AC-02: every theme defines distinct station and accessory visuals without forbidden colors", () => {
+    const hexRe = /^#[0-9a-fA-F]{6}$/;
+    const forbidden = ["#212121", "#171717"];
+    for (const id of WORLD_THEME_IDS) {
+      const visual = getThemeStationVisual(id);
+      for (const value of [visual.desktopColor, visual.bossDesktopColor, visual.trimColor, visual.legColor, visual.panelColor]) {
+        expect(value).toMatch(hexRe);
+        expect(forbidden).not.toContain(value.toLowerCase());
+      }
+    }
+    expect(getThemeStationVisual("office").accessoryKind).toBe("none");
+    const nonOffice = ["western", "horror", "metal"] as const;
+    const accessoryKinds = nonOffice.map((id) => getThemeStationVisual(id).accessoryKind);
+    const accentKinds = nonOffice.map((id) => getThemeStationVisual(id).stationAccentKind);
+    expect(new Set(accessoryKinds).size).toBe(3);
+    expect(new Set(accentKinds).size).toBe(3);
+    for (const kind of accessoryKinds) {
+      expect(kind).not.toBe("none");
+    }
   });
 });

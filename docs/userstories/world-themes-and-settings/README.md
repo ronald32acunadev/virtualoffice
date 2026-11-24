@@ -13,7 +13,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-01 | Theme registry, persistence, cross-window sync, and 2D UI / terminal palettes | — | complete |
 | US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | complete |
 | US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | complete |
-| US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | pending |
+| US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | complete |
 | US-05 | Theme-specific chatter quotes, full scene wiring, and end-to-end verification | US-01, US-02, US-03, US-04 | pending |
 
 ## Confirmed facts, decisions & scope boundaries
@@ -111,8 +111,8 @@ As the owner, I want boss and employee workstations and character accessories to
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01`, `US-04 / AC-02`, `US-04 / AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (expanded with pure theme station/accessory descriptor tests verifying all 4 themes define station & accessory configs and preserve all 7 `CHARACTER_POSES` and `MONITOR_VISUALS`) | Pending |
-| Build & scene integration regression | `npm run typecheck`, `npm test`, `npm run build` + manual visual inspection of bosses and employees (active, idle, on break, waiting approval) across all 4 themes | Pending |
+| `US-04 / AC-01`, `US-04 / AC-02`, `US-04 / AC-03` | `apps/web/src/scene/characterVisuals.test.ts` (expanded with pure theme station/accessory descriptor tests verifying all 4 themes define station & accessory configs and preserve all 7 `CHARACTER_POSES` and `MONITOR_VISUALS`) | Passed (`3/3` tests in `characterVisuals.test.ts`) |
+| Build & scene integration regression | `npm run typecheck`, `npm test`, `npm run build` + manual visual inspection of bosses and employees (active, idle, on break, waiting approval) across all 4 themes | Automated: passed (`28/28` test files, `197/197` tests, `tsc --noEmit` clean); manual visual check pending final pass |
 
 ---
 

@@ -5,6 +5,9 @@ import type { Group, Mesh } from "three";
 import type { Boss, EmployeeStatus } from "../api/types";
 import { AREA_CENTERS, AREA_COLORS, AREA_SIZE, bossDeskPosition } from "./layout";
 import { MONITOR_VISUALS, type LightingMood } from "./officeTheme";
+import type { WorldThemeId } from "./themes/registry";
+import { getThemeStationVisual } from "./themes/themeVisuals";
+import { CharacterThemeAccessory, StationThemeAccent } from "./themes/ThemeAccessories";
 import { createRugTexture, createScreenTexture } from "./textures";
 import { formatResetCountdown } from "../state/usage";
 
@@ -17,6 +20,7 @@ export type DeskProps = {
   isBoss?: boolean;
   dim?: boolean;
   accentColor?: string;
+  theme?: WorldThemeId;
 };
 
 export function Desk({
@@ -28,7 +32,10 @@ export function Desk({
   isBoss = false,
   dim = false,
   accentColor,
+  theme = "office",
 }: DeskProps) {
+  const stationVisual = getThemeStationVisual(theme);
+  const deskColor = dim ? "#7d7974" : theme === "office" ? color : isBoss ? stationVisual.bossDesktopColor : stationVisual.desktopColor;
   const screenTexture = useMemo(() => {
     if (dim) return createScreenTexture("stopped");
     return createScreenTexture(status ?? "working");
@@ -59,12 +66,12 @@ export function Desk({
       {/* Wood-grain desktop */}
       <mesh position={[0, 0.76, 0]} castShadow receiveShadow>
         <boxGeometry args={[width, 0.08, 0.92]} />
-        <meshStandardMaterial color={dim ? "#7d7974" : color} roughness={0.62} />
+        <meshStandardMaterial color={deskColor} roughness={0.62} />
       </mesh>
       {/* Subtle front edge trim */}
       <mesh position={[0, 0.72, 0]} receiveShadow>
         <boxGeometry args={[width - 0.04, 0.03, 0.86]} />
-        <meshStandardMaterial color="#3c3733" roughness={0.7} />
+        <meshStandardMaterial color={stationVisual.trimColor} roughness={0.7} />
       </mesh>
 
       {/* Four metal desk legs + side frame */}
@@ -73,20 +80,21 @@ export function Desk({
           {([-0.36, 0.36] as const).map((legZ) => (
             <mesh key={legZ} position={[0, 0.36, legZ]} castShadow receiveShadow>
               <boxGeometry args={[0.07, 0.72, 0.07]} />
-              <meshStandardMaterial color="#3a3f47" metalness={0.4} roughness={0.5} />
+              <meshStandardMaterial color={stationVisual.legColor} metalness={0.4} roughness={0.5} />
             </mesh>
           ))}
           <mesh position={[0, 0.14, 0]} castShadow>
             <boxGeometry args={[0.05, 0.05, 0.72]} />
-            <meshStandardMaterial color="#3a3f47" metalness={0.4} roughness={0.5} />
+            <meshStandardMaterial color={stationVisual.legColor} metalness={0.4} roughness={0.5} />
           </mesh>
         </group>
       ))}
       {/* Modesty panel */}
       <mesh position={[0, 0.48, -0.34]} castShadow receiveShadow>
         <boxGeometry args={[width - 0.32, 0.42, 0.04]} />
-        <meshStandardMaterial color={dim ? "#656468" : "#7c5e42"} roughness={0.78} />
+        <meshStandardMaterial color={dim ? "#656468" : stationVisual.panelColor} roughness={0.78} />
       </mesh>
+      <StationThemeAccent theme={theme} width={width} statusColor={monitorVisual.emissive} lampOn={lampOn} />
 
       {/* Monitor stand + bezel + status-lit screen */}
       <group position={[0, 0.8, -0.24]}>
@@ -229,9 +237,11 @@ export function Desk({
 function BossCharacter({
   position,
   color,
+  theme = "office",
 }: {
   position: [number, number, number];
   color: string;
+  theme?: WorldThemeId;
 }) {
   const groupRef = useRef<Group>(null);
   const armLRef = useRef<Mesh>(null);
@@ -273,6 +283,9 @@ function BossCharacter({
           <sphereGeometry args={[0.22, 16, 16]} />
           <meshStandardMaterial color="#f0cdb0" roughness={0.7} />
         </mesh>
+        <group position={[0, 1.44, -0.02]}>
+          <CharacterThemeAccessory theme={theme} />
+        </group>
         {/* Styled executive hair cap */}
         <mesh position={[0, 1.54, 0.01]} castShadow>
           <sphereGeometry args={[0.215, 14, 14, 0, Math.PI * 2, 0, Math.PI * 0.56]} />
@@ -314,10 +327,12 @@ export function BossArea({
   boss,
   mood = "day",
   speechText = null,
+  theme = "office",
 }: {
   boss: Boss;
   mood?: LightingMood;
   speechText?: string | null;
+  theme?: WorldThemeId;
 }) {
   const [cx, cz] = AREA_CENTERS[boss.id];
   const color = AREA_COLORS[boss.id];
@@ -378,10 +393,11 @@ export function BossArea({
         dim={dim}
         accentColor={color}
         lampOn={mood === "evening" && !dim}
+        theme={theme}
       />
 
       {/* Seated stylized boss character for active departments; tidy empty suite for reserved ones */}
-      {!dim ? <BossCharacter position={[desk[0], 0, desk[2] + 0.9]} color={color} /> : null}
+      {!dim ? <BossCharacter position={[desk[0], 0, desk[2] + 0.9]} color={color} theme={theme} /> : null}
 
       {/* Readable department nameplate */}
       <Html position={[desk[0], 2.55, desk[2]]} center distanceFactor={14} zIndexRange={[10, 0]}>

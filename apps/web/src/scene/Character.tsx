@@ -8,6 +8,8 @@ import { Desk } from "./BossArea";
 import { CHARACTER_POSES, hasSpecialistAccessory } from "./characterVisuals";
 import { STATUS_COLORS, type Vec3 } from "./layout";
 import { SPECIES_COLORS, SpecialistHeadset, SpeciesParts, SpeciesTail } from "./SpeciesParts";
+import type { WorldThemeId } from "./themes/registry";
+import { CharacterThemeAccessory } from "./themes/ThemeAccessories";
 
 type Props = {
   employee: Employee;
@@ -16,6 +18,7 @@ type Props = {
   onSelect: (id: string) => void;
   lampOn?: boolean;
   speechText?: string | null;
+  theme?: WorldThemeId;
 };
 
 const MUTED_SHIRT = "#6e7480";
@@ -29,6 +32,7 @@ export function Character({
   onSelect,
   lampOn = false,
   speechText = null,
+  theme = "office",
 }: Props) {
   const rootRef = useRef<Group>(null);
   const torsoRef = useRef<Group>(null);
@@ -150,7 +154,7 @@ export function Character({
 
   return (
     <group position={position}>
-      <Desk position={[0, 0, 0]} color="#c49a6c" status={status} lampOn={lampOn} />
+      <Desk position={[0, 0, 0]} color="#c49a6c" status={status} lampOn={lampOn} theme={theme} />
 
       <group
         ref={rootRef}
@@ -276,6 +280,7 @@ export function Character({
                 tint={pose.muted ? MUTED_HEAD : undefined}
               />
               {specialist ? <SpecialistHeadset muted={pose.muted} /> : null}
+              <CharacterThemeAccessory theme={theme} muted={pose.muted} />
             </group>
           </group>
         </group>
