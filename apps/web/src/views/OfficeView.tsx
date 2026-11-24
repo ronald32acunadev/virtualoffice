@@ -5,9 +5,11 @@ import { OfficeScene } from "../scene/OfficeScene";
 import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
+import { aggregateAgentActivity, aggregateAgentStatus } from "../state/agentView";
 import { useOfficeMood } from "../state/officeMood";
 import { useWorldTheme } from "../state/worldTheme";
 import { SettingsModal } from "./SettingsModal";
+import { TeamModal } from "./TeamModal";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
@@ -19,10 +21,11 @@ export function OfficeView() {
   const { state, actions } = useOffice();
   const officeViewRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<OfficeLink | null>(null);
-  const [cardId, setCardId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const { mood, setMood, toggleMood } = useOfficeMood();
   const { theme, setTheme } = useWorldTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -40,21 +43,23 @@ export function OfficeView() {
     };
   }, []);
 
-  /** Focuses the employee in an open workspace, or shows the local card when none answers. */
-  const focusEmployee = useCallback(
+  /** Focuses a specific chat in an open workspace, or opens it in a new workspace tab. */
+  const focusChat = useCallback(
     async (employeeId: string) => {
       actions.select(employeeId);
-      setCardId(null);
       const link = linkRef.current;
       const opened = link ? await link.focusEmployee(employeeId) : false;
-      if (!opened) setCardId(employeeId);
+      if (!opened) {
+        window.open(buildViewUrl("/workspace", getToken(), { employee: employeeId }), "_blank");
+      }
+      setSelectedAgentId(null);
     },
     [actions],
   );
 
   const clear = useCallback(() => {
     actions.select(null);
-    setCardId(null);
+    setSelectedAgentId(null);
   }, [actions]);
 
   const toggleChatter = useCallback(() => {
@@ -86,18 +91,31 @@ export function OfficeView() {
       [...state.approvals].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0))[0],
     [state.approvals],
   );
-  const card = cardId ? state.employees.find((e) => e.id === cardId) : undefined;
+  const selectedAgent = selectedAgentId ? state.agents.find((a) => a.id === selectedAgentId) : undefined;
+  const selectedAgentChats = useMemo(
+    () =>
+      selectedAgent
+        ? state.employees
+            .filter((e) => e.agentId === selectedAgent.id)
+            .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+        : [],
+    [selectedAgent, state.employees],
+  );
+  const selectedAgentBoss = selectedAgent ? state.bosses.find((b) => b.id === selectedAgent.bossId) : undefined;
+  const selectedAgentStatus = selectedAgent ? aggregateAgentStatus(selectedAgentChats, selectedAgentBoss) : null;
+  const selectedAgentActivity = selectedAgent ? aggregateAgentActivity(selectedAgentChats) : null;
 
-  const openWorkspace = (employeeId: string) => {
-    window.open(buildViewUrl("/workspace", getToken(), { employee: employeeId }), "_blank");
-    setCardId(null);
+  const openWorkspace = () => {
+    window.open(buildViewUrl("/workspace", getToken()), "_blank");
+    setSelectedAgentId(null);
   };
 
   return (
     <div className="office-view" ref={officeViewRef}>
       <SceneErrorBoundary>
         <OfficeScene
-          onSelectEmployee={(id) => void focusEmployee(id)}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={(id) => setSelectedAgentId(id)}
           onClear={clear}
           mood={mood}
           theme={theme}
@@ -111,6 +129,15 @@ export function OfficeView() {
         />
       </SceneErrorBoundary>
       <div className="office-hud" role="toolbar" aria-label="Office view controls">
+        <button
+          type="button"
+          className="hud-btn"
+          aria-pressed={teamOpen}
+          onClick={() => setTeamOpen(true)}
+          title="Create and manage your agent team"
+        >
+          👥 Team ({state.agents.length})
+        </button>
         <button
           type="button"
           className="hud-btn"
@@ -178,41 +205,65 @@ export function OfficeView() {
         <button
           type="button"
           className="approvals-badge"
-          onClick={() => void focusEmployee(oldestApproval.employeeId)}
+          onClick={() => void focusChat(oldestApproval.employeeId)}
           title="Open the oldest pending approval in the workspace"
         >
           {state.approvals.length} pending {state.approvals.length === 1 ? "approval" : "approvals"}
         </button>
       ) : null}
-      {card ? (
-        <div className="employee-card" role="dialog" aria-label={`${card.name} details`}>
+      {selectedAgent && selectedAgentStatus ? (
+        <div className="employee-card" role="dialog" aria-label={`${selectedAgent.name} details`}>
           <div className="employee-card-head">
             <strong>
-              {SPECIES_EMOJI[card.species]} {card.name}
+              {SPECIES_EMOJI[selectedAgent.species]} {selectedAgent.name}
             </strong>
-            <button type="button" className="link" onClick={() => setCardId(null)}>
+            <button type="button" className="link" onClick={() => setSelectedAgentId(null)}>
               Close
             </button>
           </div>
-          <span className={`status status-${card.status}`}>{card.status.replace("_", " ")}</span>
-          {card.jobTitle ? <span className="job-title-badge">{card.jobTitle}</span> : null}
-          <RoleBadge role={card.role} />
-          {card.status === "on_break" && card.failureReason ? (
-            <p className="muted">☕ {card.failureReason}</p>
+          <span className={`status status-${selectedAgentStatus}`}>{selectedAgentStatus.replace("_", " ")}</span>
+          {selectedAgent.jobTitle ? <span className="job-title-badge">{selectedAgent.jobTitle}</span> : null}
+          <RoleBadge role={selectedAgent.role} />
+          {selectedAgentActivity ? (
+            <p className="muted">
+              {selectedAgentActivity.category === "mcp_request"
+                ? `📡 MCP: ${selectedAgentActivity.label}`
+                : selectedAgentActivity.category === "searching_files"
+                  ? `🔍 ${selectedAgentActivity.label}`
+                  : `⚙ ${selectedAgentActivity.label}`}
+            </p>
           ) : null}
-          <p className="muted">{card.task}</p>
+          {selectedAgentChats.length > 0 ? (
+            <ul className="agent-card-chats">
+              {selectedAgentChats.slice(0, 6).map((chat) => (
+                <li key={chat.id}>
+                  <button type="button" className="agent-card-chat-btn" onClick={() => void focusChat(chat.id)}>
+                    <span className="agent-card-chat-title">{chat.task}</span>
+                    <span className={`dot dot-${chat.status}`} aria-label={chat.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">No chats assigned to this agent yet.</p>
+          )}
           <div className="actions">
-            <button type="button" onClick={() => openWorkspace(card.id)}>
-              Open in workspace
+            <button type="button" onClick={openWorkspace}>
+              Open workspace
             </button>
-            {card.status === "on_break" ? (
-              <button type="button" className="break-resume-btn" onClick={() => void actions.resumeBoss(card.bossId)}>
+            {selectedAgentStatus === "on_break" ? (
+              <button
+                type="button"
+                className="break-resume-btn"
+                onClick={() => void actions.resumeBoss(selectedAgent.bossId)}
+              >
                 Resume break
               </button>
             ) : null}
           </div>
         </div>
       ) : null}
+      <TeamModal open={teamOpen} onClose={() => setTeamOpen(false)} />
       <MediaDrawer
         open={mediaOpen}
         media={state.media}

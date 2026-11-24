@@ -3,6 +3,7 @@ import type { BossId, EmployeeStatus } from "../api/types";
 export type Vec3 = [number, number, number];
 
 export const AREA_SIZE = 12;
+export const MCP_HUB_POSITION: Vec3 = [0, 0, 0];
 export const AREA_CENTERS: Record<BossId, [number, number]> = {
   claude: [-7, -7],
   codex: [7, -7],

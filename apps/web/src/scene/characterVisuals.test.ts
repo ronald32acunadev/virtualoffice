@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EmployeeStatus } from "../api/types";
-import { CHARACTER_POSES, hasSpecialistAccessory } from "./characterVisuals";
+import { CHARACTER_POSES, getEffectiveCharacterPose, hasSpecialistAccessory } from "./characterVisuals";
 import { WORLD_THEME_IDS } from "./themes/registry";
 import { getThemeStationVisual } from "./themes/themeVisuals";
 
@@ -80,5 +80,38 @@ describe("characterVisuals", () => {
     for (const kind of accessoryKinds) {
       expect(kind).not.toBe("none");
     }
+  });
+
+  it("derives distinct tool-activity poses while working and preserves urgent status precedence", () => {
+    const filePose = getEffectiveCharacterPose("working", {
+      category: "searching_files",
+      toolName: "Grep",
+      serverName: null,
+      label: "Grep",
+      startedAt: "2026-11-24T00:00:00Z",
+    });
+    expect(filePose.typing).toBe(false);
+    expect(filePose.accentGlow).toBe("#38bdf8");
+
+    const mcpPose = getEffectiveCharacterPose("working", {
+      category: "mcp_request",
+      toolName: "mcp__engram__mem_search",
+      serverName: "engram",
+      label: "engram · mem_search",
+      startedAt: "2026-11-24T00:00:00Z",
+    });
+    expect(mcpPose.typing).toBe(false);
+    expect(mcpPose.accentGlow).toBe("#c084fc");
+
+    // Urgent waiting_approval takes precedence over tool activity
+    const urgentPose = getEffectiveCharacterPose("waiting_approval", {
+      category: "mcp_request",
+      toolName: "mcp__engram__mem_search",
+      serverName: "engram",
+      label: "engram · mem_search",
+      startedAt: "2026-11-24T00:00:00Z",
+    });
+    expect(urgentPose.waving).toBe(true);
+    expect(urgentPose.accentGlow).toBe("#ffb02e");
   });
 });

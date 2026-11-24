@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BossId, EmployeeStatus } from "../api/types";
-import { bossDeskPosition, employeeDeskPosition } from "./layout";
+import { MCP_HUB_POSITION, bossDeskPosition, employeeDeskPosition } from "./layout";
 import {
   MONITOR_VISUALS,
   MOOD_PALETTES,
@@ -92,6 +92,7 @@ describe("officeTheme", () => {
         expect(overlapsAnyDesk(ex, ez + 0.95, 0.3)).toBe(true);
       }
     }
+    expect(overlapsAnyDesk(MCP_HUB_POSITION[0], MCP_HUB_POSITION[2], 1.15)).toBe(false);
   });
 
   it("US-03 / AC-02: theme props are non-empty, unique, in-bounds, and clear of desks", () => {

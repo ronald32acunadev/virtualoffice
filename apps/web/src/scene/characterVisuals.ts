@@ -1,4 +1,4 @@
-import type { EmployeeStatus } from "../api/types";
+import type { AgentActivity, EmployeeStatus } from "../api/types";
 
 export type CharacterPoseSpec = {
   leanX: number;
@@ -80,4 +80,57 @@ export const CHARACTER_POSES: Record<EmployeeStatus, CharacterPoseSpec> = {
 /** Returns true when the employee has a non-empty specialist role assigned. */
 export function hasSpecialistAccessory(role: string | null | undefined): boolean {
   return typeof role === "string" && role.trim().length > 0;
+}
+
+/**
+ * Derives the effective 3D pose from status and live tool activity.
+ * Urgent/non-working statuses always take precedence over tool activity.
+ */
+export function getEffectiveCharacterPose(
+  status: EmployeeStatus,
+  activity?: AgentActivity | null,
+): CharacterPoseSpec {
+  const base = CHARACTER_POSES[status];
+  if (status !== "working" || !activity) return base;
+  switch (activity.category) {
+    case "searching_files":
+      return {
+        ...base,
+        leanX: -0.05,
+        headTiltX: -0.04,
+        typing: false,
+        breathingSpeed: 2.2,
+        accentGlow: "#38bdf8",
+      };
+    case "searching_web":
+      return {
+        ...base,
+        leanX: -0.08,
+        headTiltX: -0.02,
+        typing: true,
+        breathingSpeed: 2.6,
+        accentGlow: "#34d399",
+      };
+    case "mcp_request":
+      return {
+        ...base,
+        leanX: -0.06,
+        headTiltX: -0.08,
+        typing: false,
+        breathingSpeed: 3.1,
+        accentGlow: "#c084fc",
+      };
+    case "delegating":
+      return {
+        ...base,
+        leanX: -0.04,
+        headTiltX: -0.06,
+        typing: false,
+        breathingSpeed: 2.7,
+        accentGlow: "#fbbf24",
+      };
+    case "coding":
+    default:
+      return base;
+  }
 }
