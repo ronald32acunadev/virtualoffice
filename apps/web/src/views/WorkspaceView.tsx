@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { getToken } from "../api/client";
 import { useOffice } from "../state/OfficeProvider";
 import { useOfficeMood } from "../state/officeMood";
+import { useWorldTheme } from "../state/worldTheme";
+import { SettingsModal } from "./SettingsModal";
 import { buildViewUrl } from "../state/routing";
 import { createWorkspaceLink, openWindowChannel } from "../state/windowChannel";
 import { ConversationPane } from "./ConversationPane";
@@ -10,7 +12,9 @@ import { Sidebar } from "./Sidebar";
 
 export function WorkspaceView() {
   const { state, actions } = useOffice();
-  const { mood, toggleMood } = useOfficeMood();
+  const { mood, setMood, toggleMood } = useOfficeMood();
+  const { theme, setTheme } = useWorldTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [modal, setModal] = useState<"new" | null>(null);
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null);
 
@@ -40,10 +44,11 @@ export function WorkspaceView() {
           setModal("new");
         }}
         onOpenOffice={openOffice}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="workspace-main">
         {selected ? (
-          <ConversationPane key={selected} employeeId={selected} mood={mood} />
+          <ConversationPane key={selected} employeeId={selected} mood={mood} theme={theme} />
         ) : (
           <div className="workspace-empty">
             <h1>Virtual Office</h1>
@@ -64,6 +69,14 @@ export function WorkspaceView() {
           }}
         />
       ) : null}
+      <SettingsModal
+        open={settingsOpen}
+        theme={theme}
+        mood={mood}
+        onSelectTheme={setTheme}
+        onSelectMood={setMood}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }

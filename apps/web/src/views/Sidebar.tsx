@@ -12,10 +12,11 @@ type Props = {
   onToggleMood: () => void;
   onNewTask: (projectPath?: string) => void;
   onOpenOffice: () => void;
+  onOpenSettings?: () => void;
 };
 type GroupMode = "project" | "boss";
 
-export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) {
+export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSettings }: Props) {
   const { state, actions } = useOffice();
   const [search, setSearch] = useState("");
   const [groupMode, setGroupMode] = useState<GroupMode>("project");
@@ -131,6 +132,16 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice }: Props) 
           >
             {mood === "day" ? "☀ Day" : "🌙 Evening"}
           </button>
+          {onOpenSettings ? (
+            <button
+              type="button"
+              className="sidebar-nav-btn"
+              onClick={onOpenSettings}
+              title="Open theme and view settings"
+            >
+              ⚙ Settings
+            </button>
+          ) : null}
           <button
             type="button"
             className="sidebar-nav-btn"

@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Drag
 import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
 import type { LightingMood } from "../scene/officeTheme";
+import type { WorldThemeId } from "../scene/themes/registry";
 import { useOffice } from "../state/OfficeProvider";
 import {
   canSendComposer,
@@ -609,7 +610,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   );
 }
 
-export function ConversationPane({ employeeId, mood }: { employeeId: string; mood: LightingMood }) {
+export function ConversationPane({ employeeId, mood, theme = "office" }: { employeeId: string; mood: LightingMood; theme?: WorldThemeId }) {
   const { state, actions } = useOffice();
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -732,7 +733,7 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
         ) : null}
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
-      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} /> : null}
+      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} theme={theme} /> : null}
     </section>
   );
 }

@@ -6,6 +6,8 @@ import type { LightingMood } from "../scene/officeTheme";
 import { SceneErrorBoundary } from "../scene/SceneErrorBoundary";
 import { useOffice } from "../state/OfficeProvider";
 import { useOfficeMood } from "../state/officeMood";
+import { useWorldTheme } from "../state/worldTheme";
+import { SettingsModal } from "./SettingsModal";
 import { buildViewUrl } from "../state/routing";
 import { SPECIES_EMOJI } from "../state/species";
 import { createOfficeLink, openWindowChannel, type OfficeLink } from "../state/windowChannel";
@@ -18,7 +20,9 @@ export function OfficeView() {
   const officeViewRef = useRef<HTMLDivElement>(null);
   const linkRef = useRef<OfficeLink | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
-  const { mood, toggleMood } = useOfficeMood();
+  const { mood, setMood, toggleMood } = useOfficeMood();
+  const { theme, setTheme } = useWorldTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatterEnabled, setChatterEnabled] = useState<boolean>(() => readSavedChatter());
   const [resetToken, setResetToken] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
@@ -152,6 +156,15 @@ export function OfficeView() {
             Focus TV
           </button>
         ) : null}
+        <button
+          type="button"
+          className="hud-btn"
+          aria-pressed={settingsOpen}
+          onClick={() => setSettingsOpen(true)}
+          title="Open theme and view settings"
+        >
+          ⚙ Settings
+        </button>
       </div>
       <div className={`connection connection-${state.connection}`}>
         {state.connection === "online"
@@ -209,6 +222,16 @@ export function OfficeView() {
         onTurnOff={actions.clearMediaPlayback}
         onSavePreset={actions.addMediaPreset}
         onDeletePreset={actions.deleteMediaPreset}
+      />
+      <SettingsModal
+        open={settingsOpen}
+        theme={theme}
+        mood={mood}
+        chatterEnabled={chatterEnabled}
+        onSelectTheme={setTheme}
+        onSelectMood={setMood}
+        onToggleChatter={toggleChatter}
+        onClose={() => setSettingsOpen(false)}
       />
     </div>
   );

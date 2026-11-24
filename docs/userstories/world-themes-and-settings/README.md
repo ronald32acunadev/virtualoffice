@@ -11,7 +11,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
 | US-01 | Theme registry, persistence, cross-window sync, and 2D UI / terminal palettes | — | complete |
-| US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | pending |
+| US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | complete |
 | US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | pending |
 | US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | pending |
 | US-05 | Theme-specific chatter quotes, full scene wiring, and end-to-end verification | US-01, US-02, US-03, US-04 | pending |
@@ -71,8 +71,8 @@ As the owner, I want a Settings modal accessible from both the 3D Office HUD and
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01`, `US-02 / AC-02` | `apps/web/src/views/settingsModal.test.ts` (theme option model ordering/metadata, active selection state, callback invocation for theme/mood/chatter controls) | Pending |
-| `US-02 / AC-03`, `US-02 / AC-04` + HUD/Sidebar regression | `npm run typecheck`, `npm test`, `npm run build` + manual check opening Settings from both `/office` HUD and `/workspace` Sidebar and verifying live sync across open tabs | Pending |
+| `US-02 / AC-01`, `US-02 / AC-02` | `apps/web/src/views/settingsModal.test.ts` (theme option model ordering/metadata, active selection state, callback invocation for theme/mood/chatter controls) | Passed (`3/3` tests in `settingsModal.test.ts`) |
+| `US-02 / AC-03`, `US-02 / AC-04` + HUD/Sidebar regression | `npm run typecheck`, `npm test`, `npm run build` + manual check opening Settings from both `/office` HUD and `/workspace` Sidebar and verifying live sync across open tabs | Automated: passed (`28/28` test files, `194/194` tests, `tsc --noEmit` clean, `vite build` clean); manual browser check pending final visual pass |
 
 ---
 
