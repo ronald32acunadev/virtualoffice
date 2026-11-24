@@ -10,7 +10,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 
 | Story | Title | Depends on | Status |
 | --- | --- | --- | --- |
-| US-01 | Theme registry, persistence, cross-window sync, and 2D UI / terminal palettes | — | pending |
+| US-01 | Theme registry, persistence, cross-window sync, and 2D UI / terminal palettes | — | complete |
 | US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | pending |
 | US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | pending |
 | US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | pending |
@@ -52,9 +52,9 @@ As the owner, I want a modular world-theme registry with persistent storage, cro
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01`, `US-01 / AC-02`, `US-01 / AC-03` | `apps/web/src/state/worldTheme.test.ts` (all 4×2 registry entries complete, `"office"` matches baseline palettes, `parseWorldTheme` fallback on invalid/throwing storage, `createWorldThemeSync` persists/applies `dataset.officeTheme`/broadcasts and receives `theme_changed` & `storage` events) | Pending |
-| `US-01 / AC-03` + `windowChannel` regression | `apps/web/src/state/windowChannel.test.ts` (`parseWindowMessage` parses valid `theme_changed`, rejects unknown theme IDs, preserves existing `focus_employee`/`ping`/`pong`/`mood_changed` behavior) | Pending |
-| `US-01 / AC-04` + `officeMood` / terminal regression | `apps/web/src/state/officeMood.test.ts` (`getTerminalTheme(mood)` backwards-compatible default for `"office"`, distinct readable palettes for all 4×2 combinations) + `npm run build` CSS validation | Pending |
+| `US-01 / AC-01`, `US-01 / AC-02`, `US-01 / AC-03` | `apps/web/src/state/worldTheme.test.ts` (all 4×2 registry entries complete, `"office"` matches baseline palettes, `parseWorldTheme` fallback on invalid/throwing storage, `createWorldThemeSync` persists/applies `dataset.officeTheme`/broadcasts and receives `theme_changed` & `storage` events) | Passed (`25/25` tests in `worldTheme.test.ts`) |
+| `US-01 / AC-03` + `windowChannel` regression | `apps/web/src/state/worldTheme.test.ts` + `apps/web/src/state/windowChannel.test.ts` (`parseWindowMessage` parses valid `theme_changed`, rejects unknown theme IDs, preserves existing `focus_employee`/`ping`/`pong`/`mood_changed` behavior) | Passed (`4/4` in `windowChannel.test.ts`, `25/25` in `worldTheme.test.ts`) |
+| `US-01 / AC-04` + `officeMood` / terminal regression | `apps/web/src/state/worldTheme.test.ts` + `apps/web/src/state/officeMood.test.ts` (`getTerminalTheme(mood, theme)` backwards-compatible default for `"office"`, distinct readable palettes for all 4×2 combinations, all 6 CSS selectors present, no `#212121`/`#171717`) | Passed (`7/7` in `officeMood.test.ts`; `npm run typecheck -w apps/web` clean) |
 
 ---
 

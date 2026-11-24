@@ -1,4 +1,5 @@
 import type { LightingMood } from "../scene/officeTheme";
+import { WORLD_THEME_IDS, type WorldThemeId } from "../scene/themes/registry";
 
 export const CHANNEL_NAME = "virtual-office";
 
@@ -6,7 +7,8 @@ export type WindowMessage =
   | { type: "focus_employee"; employeeId: string }
   | { type: "workspace_ping" }
   | { type: "workspace_pong" }
-  | { type: "mood_changed"; mood: LightingMood };
+  | { type: "mood_changed"; mood: LightingMood }
+  | { type: "theme_changed"; theme: WorldThemeId };
 
 /** The subset of BroadcastChannel used here, so tests can inject a fake. */
 export type ChannelLike = {
@@ -32,6 +34,13 @@ export function parseWindowMessage(data: unknown): WindowMessage | null {
     (record["mood"] === "day" || record["mood"] === "evening")
   ) {
     return { type: "mood_changed", mood: record["mood"] };
+  }
+  if (
+    record["type"] === "theme_changed" &&
+    typeof record["theme"] === "string" &&
+    (WORLD_THEME_IDS as readonly string[]).includes(record["theme"])
+  ) {
+    return { type: "theme_changed", theme: record["theme"] as WorldThemeId };
   }
   return null;
 }

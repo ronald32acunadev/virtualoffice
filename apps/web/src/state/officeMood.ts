@@ -1,4 +1,5 @@
 import { MOOD_STORAGE_KEY, readSavedMood, saveMood } from "../scene/camera";
+import { WORLD_THEMES, type WorldThemeId } from "../scene/themes/registry";
 import type { LightingMood } from "../scene/officeTheme";
 import { AREA_COLORS } from "../scene/layout";
 import type { BossId } from "../api/types";
@@ -52,7 +53,10 @@ export type TerminalThemePalette = {
   selectionBackground: string;
 };
 
-export function getTerminalTheme(mood: LightingMood): TerminalThemePalette {
+export function getTerminalTheme(mood: LightingMood, theme: WorldThemeId = "office"): TerminalThemePalette {
+  if (theme !== "office" && WORLD_THEMES[theme]) {
+    return WORLD_THEMES[theme].terminalThemes[mood];
+  }
   if (mood === "day") {
     return {
       background: "#f2ece1",
