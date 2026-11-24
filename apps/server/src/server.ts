@@ -99,6 +99,7 @@ export async function startOfficeServer(
   });
   office.recoverOnStartup();
   office.backfillProfiles();
+  office.backfillAgents();
 
   const autoSync = options.autoSync ?? dbPath !== ":memory:";
   let syncTimer: NodeJS.Timeout | undefined;

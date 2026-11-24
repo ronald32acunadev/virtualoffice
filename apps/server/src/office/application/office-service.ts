@@ -17,6 +17,7 @@ import type { SessionCatalog } from "../ports/session-catalog.ts";
 import type { TerminalGuard } from "../ports/terminal-guard.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
+import { classifyToolActivity } from "../domain/tool-activity.ts";
 import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
 import { isMediaProvider, parseMediaUrl, resolveMediaMetadata, type FetchLike, type MediaKind, type MediaPlaybackState, type MediaPreset, type MediaProvider } from "../domain/media.ts";
 import { AttachmentStore, validateAndDecodeAttachments, type DecodedAttachment } from "./attachments.ts";
@@ -28,6 +29,8 @@ import {
   isActiveStatus,
   isDecision,
   isSpecies,
+  type Agent,
+  type AgentActivity,
   type ApprovalRequest,
   type Boss,
   type BossId,
@@ -161,6 +164,7 @@ export class OfficeService {
 
   private readonly bossUsage = new Map<BossId, BossUsage>();
   private readonly employeeUsage = new Map<string, EmployeeUsage>();
+  private readonly employeeActivities = new Map<string, Array<{ id: string; activity: AgentActivity }>>();
   private readonly bossBreaks = new Map<
     BossId,
     { reason: string; until: string | null; timer?: ReturnType<typeof setTimeout> }
@@ -250,9 +254,50 @@ export class OfficeService {
     return initial;
   }
 
+  private currentActivity(employeeId: string): AgentActivity | null {
+    const stack = this.employeeActivities.get(employeeId);
+    if (!stack || stack.length === 0) return null;
+    return stack[stack.length - 1]!.activity;
+  }
+
+  private pushActivity(employeeId: string, toolUseId: string | null | undefined, activity: AgentActivity): void {
+    const stack = this.employeeActivities.get(employeeId) ?? [];
+    const id = toolUseId ?? this.newId();
+    stack.push({ id, activity });
+    this.employeeActivities.set(employeeId, stack);
+    this.events.publish({ type: "employee_activity", employeeId, activity });
+  }
+
+  private popActivity(employeeId: string, toolUseId: string | null | undefined): void {
+    const stack = this.employeeActivities.get(employeeId);
+    if (!stack || stack.length === 0) return;
+    if (toolUseId) {
+      const idx = stack.findIndex((entry) => entry.id === toolUseId);
+      if (idx >= 0) stack.splice(idx, 1);
+      else stack.pop();
+    } else {
+      stack.pop();
+    }
+    if (stack.length === 0) {
+      this.employeeActivities.delete(employeeId);
+    }
+    this.events.publish({ type: "employee_activity", employeeId, activity: this.currentActivity(employeeId) });
+  }
+
+  private clearActivity(employeeId: string): void {
+    if (!this.employeeActivities.has(employeeId)) return;
+    this.employeeActivities.delete(employeeId);
+    this.events.publish({ type: "employee_activity", employeeId, activity: null });
+  }
+
   private decorateEmployee(employee: Employee): Employee {
     const usage = this.employeeUsage.get(employee.id);
-    return usage ? { ...employee, usage } : employee;
+    const activity = this.currentActivity(employee.id);
+    return {
+      ...employee,
+      ...(usage ? { usage } : {}),
+      ...(activity ? { activity } : {}),
+    };
   }
 
   private buildBoss(bossId: BossId): Boss {
@@ -273,12 +318,196 @@ export class OfficeService {
     return BOSSES.map((boss) => this.buildBoss(boss.id));
   }
 
+  listAgents(): Agent[] {
+    return this.repository.listAgents();
+  }
+
+  createAgent(input: {
+    bossId: unknown;
+    name?: unknown;
+    species?: unknown;
+    role?: unknown;
+    jobTitle?: unknown;
+  }): Agent {
+    const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
+    if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
+    const role = parseRole(input.role);
+    if (role !== null && boss.id !== "claude") {
+      throw new OfficeError("validation_error", "Roles are only supported for Claude agents", "role");
+    }
+    const name =
+      input.name === undefined || input.name === null || input.name === ""
+        ? this.nextAgentName()
+        : parseName(input.name);
+    const species =
+      input.species === undefined || input.species === null || input.species === ""
+        ? generateSpecies(this.random)
+        : parseSpecies(input.species);
+    const jobTitle = parseJobTitle(input.jobTitle);
+    const now = this.timestamp();
+    const agent: Agent = {
+      id: this.newId(),
+      bossId: boss.id,
+      name,
+      species,
+      role,
+      jobTitle,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.repository.insertAgent(agent);
+    this.events.publish({ type: "agent_updated", agent });
+    return agent;
+  }
+
+  updateAgent(
+    agentId: string,
+    input: { name?: unknown; species?: unknown; role?: unknown; jobTitle?: unknown },
+  ): Agent {
+    const existing = this.repository.getAgent(agentId);
+    if (!existing) throw new OfficeError("not_found", "Agent not found");
+    if (
+      input.name === undefined &&
+      input.species === undefined &&
+      input.role === undefined &&
+      input.jobTitle === undefined
+    ) {
+      throw new OfficeError("validation_error", "Provide a name, species, role, or job title", "name");
+    }
+    const nextRole = input.role === undefined ? existing.role : parseRole(input.role);
+    if (nextRole !== null && existing.bossId !== "claude") {
+      throw new OfficeError("validation_error", "Roles are only supported for Claude agents", "role");
+    }
+    const updated: Agent = {
+      ...existing,
+      name: input.name === undefined ? existing.name : parseName(input.name),
+      species: input.species === undefined ? existing.species : parseSpecies(input.species),
+      role: nextRole,
+      jobTitle: input.jobTitle === undefined ? existing.jobTitle : parseJobTitle(input.jobTitle),
+      updatedAt: this.timestamp(),
+    };
+    this.repository.updateAgent(updated);
+    this.events.publish({ type: "agent_updated", agent: updated });
+
+    // Cascade identity fields to all chats owned by this agent
+    for (const employee of this.repository.listEmployees()) {
+      if (employee.agentId !== agentId) continue;
+      if (
+        employee.name === updated.name &&
+        employee.species === updated.species &&
+        employee.jobTitle === updated.jobTitle
+      ) {
+        continue;
+      }
+      this.patchEmployee(employee.id, {
+        name: updated.name,
+        species: updated.species,
+        jobTitle: updated.jobTitle,
+      });
+    }
+    return updated;
+  }
+
+  deleteAgent(agentId: string): { deleted: true } {
+    const existing = this.repository.getAgent(agentId);
+    if (!existing) throw new OfficeError("not_found", "Agent not found");
+    const linked = this.repository.listEmployees().filter((e) => e.agentId === agentId);
+    if (linked.some((e) => isActiveStatus(e.status))) {
+      throw new OfficeError("validation_error", "Stop active chats for this agent before deleting it");
+    }
+    const fallback = this.repository
+      .listAgents()
+      .find((candidate) => candidate.id !== agentId && candidate.bossId === existing.bossId && candidate.role === null);
+    const nextAgentId = fallback?.id ?? null;
+    if (linked.length > 0) {
+      this.repository.reassignEmployeesAgent(agentId, nextAgentId);
+      for (const emp of linked) {
+        const refreshed = this.repository.getEmployee(emp.id);
+        if (refreshed) {
+          this.events.publish({ type: "employee_updated", employee: this.decorateEmployee(refreshed) });
+        }
+      }
+    }
+    this.repository.deleteAgent(agentId);
+    this.events.publish({ type: "agent_removed", agentId });
+    return { deleted: true };
+  }
+
+  /** Startup migration: creates team agents for legacy employees without agentId, grouped by (bossId, role). */
+  backfillAgents(): number {
+    const orphans = this.repository.listEmployees().filter((e) => !e.agentId);
+    if (orphans.length === 0) return 0;
+    const existingAgents = this.repository.listAgents();
+    const byKey = new Map<string, Agent>();
+    for (const agent of existingAgents) {
+      const key = `${agent.bossId}::${agent.role ?? ""}`;
+      if (!byKey.has(key)) byKey.set(key, agent);
+    }
+    let created = 0;
+    for (const emp of orphans) {
+      const key = `${emp.bossId}::${emp.role ?? ""}`;
+      let agent = byKey.get(key);
+      if (!agent) {
+        const now = this.timestamp();
+        agent = {
+          id: this.newId(),
+          bossId: emp.bossId,
+          name: emp.name.trim() !== "" ? emp.name : this.nextAgentName(),
+          species: emp.species ?? generateSpecies(this.random),
+          role: emp.role,
+          jobTitle: emp.jobTitle,
+          createdAt: emp.createdAt || now,
+          updatedAt: now,
+        };
+        this.repository.insertAgent(agent);
+        byKey.set(key, agent);
+        created += 1;
+      }
+      this.repository.updateEmployee({
+        ...emp,
+        agentId: agent.id,
+        name: agent.name,
+        species: agent.species,
+        jobTitle: agent.jobTitle,
+      });
+    }
+    return created;
+  }
+
+  private resolveOrCreateAgentForChat(
+    bossId: BossId,
+    role: string | null,
+    explicitIdentity?: { name?: string; species?: Species; jobTitle?: string | null; forceNew?: boolean },
+  ): Agent {
+    if (!explicitIdentity?.forceNew) {
+      const match = this.repository
+        .listAgents()
+        .find((candidate) => candidate.bossId === bossId && candidate.role === role);
+      if (match) return match;
+    }
+    const now = this.timestamp();
+    const agent: Agent = {
+      id: this.newId(),
+      bossId,
+      name: explicitIdentity?.name ?? this.nextAgentName(),
+      species: explicitIdentity?.species ?? generateSpecies(this.random),
+      role,
+      jobTitle: explicitIdentity?.jobTitle ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.repository.insertAgent(agent);
+    this.events.publish({ type: "agent_updated", agent });
+    return agent;
+  }
+
   private adapterFor(bossId: BossId): AgentAdapter | undefined {
     return this.adapters[bossId];
   }
 
   getState(): {
     bosses: Boss[];
+    agents: Agent[];
     employees: Employee[];
     approvals: ApprovalRequest[];
     activeTerminals: string[];
@@ -288,6 +517,7 @@ export class OfficeService {
   } {
     return {
       bosses: this.listBosses(),
+      agents: this.repository.listAgents(),
       employees: this.repository.listEmployees().map((e) => this.decorateEmployee(e)),
       approvals: this.repository.listPendingApprovals(),
       activeTerminals: this.terminals?.listActive() ?? [],
@@ -504,17 +734,19 @@ export class OfficeService {
             continue;
           }
           const nowIso = this.timestamp();
+          const syncedAgent = this.resolveOrCreateAgentForChat(bossId, null);
           const employee: Employee = {
             id: this.newId(),
             bossId,
+            agentId: syncedAgent.id,
             hiredBy: null,
             task: s.title,
             workingDirectory: resolvedCwd,
-            name: this.nextName(),
-            species: generateSpecies(this.random),
+            name: syncedAgent.name,
+            species: syncedAgent.species,
             importedAt: nowIso,
-            role: null,
-            jobTitle: null,
+            role: syncedAgent.role,
+            jobTitle: syncedAgent.jobTitle,
             providerSessionId: s.sessionId,
             status: "idle",
             failureReason: null,
@@ -554,7 +786,12 @@ export class OfficeService {
   }
 
   /** Commands and agents of a folder: cached, or probed on a miss or when `refresh` is true. */
-  async getCatalog(query: { workingDirectory?: unknown; refresh?: unknown }): Promise<Catalog> {
+  async getCatalog(query: { workingDirectory?: unknown; scope?: unknown; refresh?: unknown }): Promise<Catalog> {
+    if (query.scope === "global" && (query.workingDirectory === undefined || query.workingDirectory === "")) {
+      const firstProject = this.repository.listProjects().find((p) => this.isDirectory(p.path));
+      const fallbackDir = firstProject?.path ?? os.homedir();
+      return this.folderCatalog(path.resolve(fallbackDir), parseRefresh(query.refresh));
+    }
     const folder = this.requireFolder(query.workingDirectory);
     return this.folderCatalog(folder, parseRefresh(query.refresh));
   }
@@ -655,17 +892,19 @@ export class OfficeService {
       }
       const timestamp = this.timestamp();
       const folderExists = this.isDirectory(info.cwd);
+      const importedAgent = this.resolveOrCreateAgentForChat("claude", null);
       const employee: Employee = {
         id: this.newId(),
         bossId: "claude",
+        agentId: importedAgent.id,
         hiredBy: null,
         task: info.title,
         workingDirectory: info.cwd,
-        name: this.nextName(),
-        species: generateSpecies(this.random),
+        name: importedAgent.name,
+        species: importedAgent.species,
         importedAt: timestamp,
-        role: null,
-        jobTitle: null,
+        role: importedAgent.role,
+        jobTitle: importedAgent.jobTitle,
         providerSessionId: sessionId,
         status: folderExists ? "idle" : "failed",
         failureReason: folderExists ? null : `Project folder not found: ${info.cwd}`,
@@ -688,38 +927,76 @@ export class OfficeService {
    * the catalog is not cached) before anyone is created; every other rule is checked first.
    */
   async hireFromRequest(input: HireInput): Promise<Employee> {
-    this.validateHire(input);
-    const role = parseRole(input.role);
-    if (role !== null && input.bossId !== "claude") {
+    const resolvedInput = this.resolveAgentIntoHireInput(input);
+    this.validateHire(resolvedInput);
+    const role = parseRole(resolvedInput.role);
+    if (role !== null && resolvedInput.bossId !== "claude") {
       throw new OfficeError("validation_error", "Roles are only supported for Claude employees", "role");
     }
     if (role !== null) {
-      const catalog = await this.folderCatalog(path.resolve(input.workingDirectory as string), false);
+      const catalog = await this.folderCatalog(path.resolve(resolvedInput.workingDirectory as string), false);
       if (!catalog.agents.some((agent) => agent.name === role)) {
         throw new OfficeError("validation_error", `Unknown role: ${role}`, "role");
       }
     }
-    return this.hire(input);
+    return this.hire(resolvedInput);
+  }
+
+  private resolveAgentIntoHireInput(input: HireInput): HireInput {
+    if (input.agentId === undefined || input.agentId === null || input.agentId === "") {
+      return input;
+    }
+    if (typeof input.agentId !== "string") {
+      throw new OfficeError("validation_error", "Agent id must be a string", "agentId");
+    }
+    const agent = this.repository.getAgent(input.agentId);
+    if (!agent) {
+      throw new OfficeError("not_found", "Agent not found");
+    }
+    return {
+      ...input,
+      bossId: agent.bossId,
+      name: agent.name,
+      species: agent.species,
+      role: agent.role,
+      jobTitle: agent.jobTitle,
+    };
   }
 
   hire(input: HireInput): Employee {
-    const { boss, task, workingDirectory } = this.validateHire(input);
-    const role = parseRole(input.role);
-    const jobTitle = parseJobTitle(input.jobTitle);
-    const name = input.name === undefined ? this.nextName() : parseName(input.name);
-    const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
+    const resolvedInput = this.resolveAgentIntoHireInput(input);
+    const { boss, task, workingDirectory } = this.validateHire(resolvedInput);
+    const role = parseRole(resolvedInput.role);
+    const jobTitle = parseJobTitle(resolvedInput.jobTitle);
+    const hasExplicitAgentId = typeof input.agentId === "string" && input.agentId !== "";
+    let agent: Agent;
+    if (hasExplicitAgentId) {
+      agent = this.repository.getAgent(input.agentId as string)!;
+    } else {
+      const hasCustomIdentity =
+        input.name !== undefined || input.species !== undefined || input.jobTitle !== undefined;
+      const name = input.name === undefined ? this.nextName() : parseName(input.name);
+      const species = input.species === undefined ? generateSpecies(this.random) : parseSpecies(input.species);
+      agent = this.resolveOrCreateAgentForChat(boss.id, role, {
+        name,
+        species,
+        jobTitle,
+        forceNew: hasCustomIdentity,
+      });
+    }
     const timestamp = this.timestamp();
     const employee: Employee = {
       id: this.newId(),
       bossId: boss.id,
+      agentId: agent.id,
       hiredBy: null,
       task,
       workingDirectory,
-      name,
-      species,
+      name: agent.name,
+      species: agent.species,
       importedAt: null,
-      role,
-      jobTitle,
+      role: agent.role,
+      jobTitle: agent.jobTitle,
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -748,14 +1025,18 @@ export class OfficeService {
     return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
-  /** Renames an employee, changes its species, and/or updates its job title. Nothing changes when any value is invalid. */
+  /** Renames an employee (or its linked agent), changes species, and/or updates job title. */
   updateProfile(
     employeeId: string,
     input: { name?: unknown; species?: unknown; jobTitle?: unknown },
   ): Employee {
-    this.requireEmployee(employeeId);
+    const existing = this.requireEmployee(employeeId);
     if (input.name === undefined && input.species === undefined && input.jobTitle === undefined) {
       throw new OfficeError("validation_error", "Provide a name, species, or job title", "name");
+    }
+    if (existing.agentId && this.repository.getAgent(existing.agentId)) {
+      this.updateAgent(existing.agentId, input);
+      return this.decorateEmployee(this.requireEmployee(employeeId));
     }
     const patch: Partial<Employee> = {};
     if (input.name !== undefined) patch.name = parseName(input.name);
@@ -860,6 +1141,7 @@ export class OfficeService {
       await this.adapterFor(employee.bossId)?.stop(employeeId);
     } finally {
       this.sessions.delete(employeeId);
+      this.clearActivity(employeeId);
     }
     return this.setStatus(employeeId, "stopped");
   }
@@ -1009,7 +1291,19 @@ export class OfficeService {
   }
 
   private nextName(): string {
-    return generateName(this.repository.listEmployees().map((e) => e.name), this.random);
+    const used = [
+      ...this.repository.listEmployees().map((e) => e.name),
+      ...this.repository.listAgents().map((a) => a.name),
+    ];
+    return generateName(used, this.random);
+  }
+
+  private nextAgentName(): string {
+    const used = [
+      ...this.repository.listAgents().map((a) => a.name),
+      ...this.repository.listEmployees().map((e) => e.name),
+    ];
+    return generateName(used, this.random);
   }
 
   // ---- session plumbing ----
@@ -1049,6 +1343,12 @@ export class OfficeService {
       onMessage: (message) => {
         if (!session.active) return;
         this.appendMessage(employeeId, message);
+        if (message.kind === "tool_call") {
+          const activity = classifyToolActivity(message.toolName, message.content, this.timestamp());
+          this.pushActivity(employeeId, message.toolUseId, activity);
+        } else if (message.kind === "tool_result") {
+          this.popActivity(employeeId, message.toolUseId);
+        }
       },
       onDelta: (text) => {
         if (!session.active) return;
@@ -1056,6 +1356,7 @@ export class OfficeService {
       },
       onTurnFinished: () => {
         if (!session.active) return;
+        this.clearActivity(employeeId);
         const current = this.repository.getEmployee(employeeId);
         if (current && (current.status === "working" || current.status === "starting")) {
           this.setStatus(employeeId, "idle");
@@ -1065,6 +1366,7 @@ export class OfficeService {
         if (!session.active) return;
         session.active = false;
         this.sessions.delete(employeeId);
+        this.clearActivity(employeeId);
         this.expireApprovalsOf(employeeId);
         if (this.shuttingDown) {
           this.setStatus(employeeId, "stopped");
@@ -1336,6 +1638,7 @@ export class OfficeService {
 
 type HireInput = {
   bossId: unknown;
+  agentId?: unknown;
   task: unknown;
   workingDirectory: unknown;
   name?: unknown;

@@ -100,16 +100,17 @@ describe("US-05 import existing Claude sessions", () => {
       ["agent_text", "from subagent", null, "tu-1", "a2"],
     ]);
     expect(messages[2]).toMatchObject({ toolName: "Read" });
-    expect(h.emitted.slice(before).map((e) => e.type)).toEqual(["employee_updated"]);
+    expect(h.emitted.slice(before).map((e) => e.type)).toEqual(["agent_updated", "employee_updated"]);
     expect(h.sdk.sessions).toHaveLength(0);
   });
 
-  it("US-05 / AC-03: each imported employee gets its own generated name", async () => {
+  it("US-05 / AC-03: imported sessions share the provider's General agent identity", async () => {
     const h = createHarness(undefined, { random: () => 0 });
     h.store.addSession({ sessionId: "a" });
     h.store.addSession({ sessionId: "b" });
     const { imported } = await h.office.importClaudeSessions(["a", "b"]);
-    expect(imported.map((e) => e.name)).toEqual(["Milo", "Luna"]);
+    expect(imported.map((e) => e.name)).toEqual(["Milo", "Milo"]);
+    expect(imported[0]!.agentId).toBe(imported[1]!.agentId);
   });
 
   it("US-05 / AC-04: reports already_imported, not_found, missing_cwd and read_failed while the others import", async () => {

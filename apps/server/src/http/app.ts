@@ -124,6 +124,33 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.get("/api/state", async () => office.getState());
   app.post("/api/sync", async () => office.syncProviders());
 
+  app.get("/api/agents", async () => ({ agents: office.listAgents() }));
+  app.post("/api/agents", async (request, reply) => {
+    const body = asRecord(request.body);
+    const agent = office.createAgent({
+      bossId: body.bossId,
+      name: body.name,
+      species: body.species,
+      role: body.role,
+      jobTitle: body.jobTitle,
+    });
+    return reply.code(201).send({ agent });
+  });
+  app.patch<{ Params: { id: string } }>("/api/agents/:id", async (request) => {
+    const body = asRecord(request.body);
+    return {
+      agent: office.updateAgent(request.params.id, {
+        name: body.name,
+        species: body.species,
+        role: body.role,
+        jobTitle: body.jobTitle,
+      }),
+    };
+  });
+  app.delete<{ Params: { id: string } }>("/api/agents/:id", async (request) =>
+    office.deleteAgent(request.params.id),
+  );
+
   app.get("/api/media", async () => office.getMedia());
   app.put("/api/media/playback", async (request) => {
     const body = asRecord(request.body);
@@ -145,6 +172,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     const body = asRecord(request.body);
     const employee = await office.hireFromRequest({
       bossId: body.bossId,
+      agentId: body.agentId,
       task: body.task,
       workingDirectory: body.workingDirectory,
       name: body.name,
@@ -157,7 +185,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.get("/api/catalog", async (request) => {
     const query = asRecord(request.query);
-    return { catalog: await office.getCatalog({ workingDirectory: query.workingDirectory, refresh: query.refresh }) };
+    return {
+      catalog: await office.getCatalog({
+        workingDirectory: query.workingDirectory,
+        scope: query.scope,
+        refresh: query.refresh,
+      }),
+    };
   });
 
   app.get<{ Params: { id: string } }>("/api/employees/:id/catalog", async (request) => ({

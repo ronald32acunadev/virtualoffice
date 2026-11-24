@@ -23,13 +23,19 @@ describe("US-04 named characters", () => {
     expect(new Set(SPECIES)).toEqual(new Set(["wolf", "dog", "fox", "cat", "bear", "human"]));
   });
 
-  it("US-04 / AC-01: hiring without a name or species generates distinct names and a species", async () => {
+  it("US-04 / AC-01: creating agents generates distinct names while default chats share the agent", async () => {
     const h = createHarness(undefined, { random: () => 0 });
+    const agentA = h.office.createAgent({ bossId: "claude" });
+    const agentB = h.office.createAgent({ bossId: "claude" });
+    expect([agentA.name, agentB.name]).toEqual(["Milo", "Luna"]);
+    expect(agentA.species).toBe("wolf");
+
     const a = h.office.hire({ bossId: "claude", task: "a", workingDirectory: h.dir });
     const b = h.office.hire({ bossId: "claude", task: "b", workingDirectory: h.dir });
     await waitFor(() => h.sdk.sessions.length === 2);
-    expect([a.name, b.name]).toEqual(["Milo", "Luna"]);
-    expect(a.species).toBe("wolf");
+    expect([a.name, b.name]).toEqual(["Milo", "Milo"]);
+    expect(a.agentId).toBe(agentA.id);
+    expect(b.agentId).toBe(agentA.id);
     expect(a.importedAt).toBeNull();
   });
 
