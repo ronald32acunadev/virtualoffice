@@ -100,6 +100,7 @@ export function OfficeView() {
           onSelectEmployee={(id) => void focusEmployee(id)}
           onClear={clear}
           mood={mood}
+          theme={theme}
           resetToken={resetToken}
           chatterEnabled={chatterEnabled}
           focusTvToken={focusTvToken}

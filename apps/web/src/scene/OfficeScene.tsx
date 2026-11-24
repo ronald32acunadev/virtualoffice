@@ -17,7 +17,8 @@ import { OfficeMediaTv } from "./OfficeMediaTv";
 import { employeeDeskPosition } from "./layout";
 import { pickOfficeQuote, pickSpeaker } from "./officeQuotes";
 import { OfficeRoom } from "./OfficeRoom";
-import { MOOD_PALETTES, type LightingMood } from "./officeTheme";
+import type { LightingMood } from "./officeTheme";
+import { getThemePalette, type WorldThemeId } from "./themes/registry";
 
 const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
   { id: "claude", name: "Claude", available: true },
@@ -115,6 +116,7 @@ export function OfficeScene({
   onFocusTv = () => {},
   onTurnOffMedia = () => {},
   tvPortalRef,
+  theme = "office",
 }: {
   onSelectEmployee: (employeeId: string) => void;
   onClear: () => void;
@@ -126,10 +128,13 @@ export function OfficeScene({
   onFocusTv?: () => void;
   onTurnOffMedia?: () => void;
   tvPortalRef?: RefObject<HTMLElement | null>;
+  theme?: WorldThemeId;
 }) {
   const { state } = useOffice();
   const bosses: Boss[] = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
-  const palette = MOOD_PALETTES[mood];
+  const palette = getThemePalette(theme, mood);
+  const themeRef = useRef<WorldThemeId>(theme);
+  themeRef.current = theme;
 
   const [activeSpeech, setActiveSpeech] = useState<{ speakerId: string; text: string } | null>(null);
   const lastSpeakerIdRef = useRef<string | null>(null);
@@ -170,7 +175,7 @@ export function OfficeScene({
           return;
         }
         const lastQuote = lastQuoteBySpeakerRef.current.get(speaker.id) ?? null;
-        const quote = pickOfficeQuote(speaker.status, lastQuote);
+        const quote = pickOfficeQuote(speaker.status, lastQuote, Math.random, themeRef.current);
         lastSpeakerIdRef.current = speaker.id;
         lastQuoteBySpeakerRef.current.set(speaker.id, quote);
         setActiveSpeech({ speakerId: speaker.id, text: quote });
@@ -224,10 +229,11 @@ export function OfficeScene({
       />
       <directionalLight position={[-12, 10, -10]} intensity={palette.fillIntensity} color={palette.fillColor} />
 
-      <OfficeRoom mood={mood} />
+      <OfficeRoom mood={mood} theme={theme} />
       <OfficeMediaTv
         media={state.media}
         mood={mood}
+        theme={theme}
         onOpenDrawer={onOpenMediaDrawer}
         onFocusTv={onFocusTv}
         onTurnOff={onTurnOffMedia}
@@ -239,6 +245,7 @@ export function OfficeScene({
           key={boss.id}
           boss={boss}
           mood={mood}
+          theme={theme}
           speechText={activeSpeech?.speakerId === `boss:${boss.id}` ? activeSpeech.text : null}
         />
       ))}
@@ -250,6 +257,7 @@ export function OfficeScene({
           selected={state.selectedId === employee.id}
           onSelect={onSelectEmployee}
           lampOn={mood === "evening"}
+          theme={theme}
           speechText={activeSpeech?.speakerId === employee.id ? activeSpeech.text : null}
         />
       ))}

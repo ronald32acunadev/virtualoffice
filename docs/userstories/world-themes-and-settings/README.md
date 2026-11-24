@@ -14,7 +14,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | complete |
 | US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | complete |
 | US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | complete |
-| US-05 | Theme-specific chatter quotes, full scene wiring, and end-to-end verification | US-01, US-02, US-03, US-04 | pending |
+| US-05 | Theme-specific chatter quotes, full scene wiring, and end-to-end verification | US-01, US-02, US-03, US-04 | complete |
 
 ## Confirmed facts, decisions & scope boundaries
 
@@ -128,5 +128,5 @@ As the owner, I want character speech bubbles to use quotes matching the active 
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-05 / AC-01` + quotes regression | `apps/web/src/scene/officeQuotes.test.ts` (expanded to verify all 4 themes have non-empty general & status pools, `theme` defaults to `"office"`, no back-to-back repeats for any theme) | Pending |
-| `US-05 / AC-02`, `US-05 / AC-03` | Full `npm run typecheck && npm test && npm run build` + manual verification matrix (4 themes × Day/Evening in `/office` & `/workspace`) | Pending |
+| `US-05 / AC-01` + quotes regression | `apps/web/src/scene/officeQuotes.test.ts` (expanded to verify all 4 themes have non-empty general & status pools, `theme` defaults to `"office"`, no back-to-back repeats for any theme) | Passed (`5/5` tests in `officeQuotes.test.ts`) |
+| `US-05 / AC-02`, `US-05 / AC-03` | Full `npm run typecheck && npm test && npm run build` + manual verification matrix (4 themes × Day/Evening in `/office` & `/workspace`) | Automated: passed (`tsc --noEmit` clean on server & web; `40/40` server files / `311/311` tests + `28/28` web files / `198/198` tests; `vite build` clean in 476ms); manual browser visual pass across all 4 themes × Day/Evening noted as manual-only |
