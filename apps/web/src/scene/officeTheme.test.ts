@@ -123,4 +123,10 @@ describe("officeTheme", () => {
     }
     expect(getThemeTvFrameStyle("office").standbyTitle).toBe("OFFICE TV");
   });
+
+  it("scales the metal TV screen larger and raises its mount", () => {
+    expect(getThemeTvFrameStyle("office").screenScale).toBe(1);
+    expect(getThemeTvFrameStyle("metal").screenScale).toBeGreaterThan(1.5);
+    expect(getThemeTvFrameStyle("metal").mountYOffset).toBeGreaterThan(0);
+  });
 });

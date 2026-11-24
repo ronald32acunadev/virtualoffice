@@ -92,6 +92,8 @@ export type ThemeTvFrameStyle = {
   accentColor: string;
   standbyTitle: string;
   standbySubtitle: string;
+  screenScale: number;
+  mountYOffset: number;
 };
 
 export function getThemeTvFrameStyle(theme: WorldThemeId): ThemeTvFrameStyle {
@@ -109,6 +111,8 @@ export function getThemeTvFrameStyle(theme: WorldThemeId): ThemeTvFrameStyle {
         accentColor: "#64748b",
         standbyTitle,
         standbySubtitle,
+        screenScale: 1,
+        mountYOffset: 0,
       };
     case "western":
       return {
@@ -119,6 +123,8 @@ export function getThemeTvFrameStyle(theme: WorldThemeId): ThemeTvFrameStyle {
         accentColor: "#c98a3d",
         standbyTitle,
         standbySubtitle,
+        screenScale: 1,
+        mountYOffset: 0,
       };
     case "horror":
       return {
@@ -129,6 +135,8 @@ export function getThemeTvFrameStyle(theme: WorldThemeId): ThemeTvFrameStyle {
         accentColor: "#7a1f2b",
         standbyTitle,
         standbySubtitle,
+        screenScale: 1,
+        mountYOffset: 0,
       };
     case "metal":
       return {
@@ -139,6 +147,8 @@ export function getThemeTvFrameStyle(theme: WorldThemeId): ThemeTvFrameStyle {
         accentColor: "#38bdf8",
         standbyTitle,
         standbySubtitle,
+        screenScale: 1.75,
+        mountYOffset: 0.55,
       };
   }
 }

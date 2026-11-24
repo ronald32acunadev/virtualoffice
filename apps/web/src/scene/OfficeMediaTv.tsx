@@ -34,18 +34,24 @@ export function OfficeMediaTv({
   const screen = getTvScreenModel(media);
   const visual = screen.mode === "playing" ? MEDIA_PROVIDER_VISUALS[screen.provider] : null;
   const frameStyle = getThemeTvFrameStyle(theme);
+  const scale = frameStyle.screenScale;
+  const bezelWidth = TV_BEZEL_SIZE.width * scale;
+  const bezelHeight = TV_BEZEL_SIZE.height * scale;
+  const mountPosition: [number, number, number] = [
+    TV_MOUNT_POSITION[0],
+    TV_MOUNT_POSITION[1] + frameStyle.mountYOffset,
+    TV_MOUNT_POSITION[2],
+  ];
 
   return (
-    <group position={TV_MOUNT_POSITION}>
+    <group position={mountPosition}>
       <mesh position={[0, 0, -0.09]}>
-        <boxGeometry args={[1.4, 0.75, 0.08]} />
+        <boxGeometry args={[1.4 * scale, 0.75 * scale, 0.08]} />
         <meshStandardMaterial color={frameStyle.mountColor} metalness={0.7} roughness={0.4} />
       </mesh>
 
       <mesh castShadow receiveShadow>
-        <boxGeometry
-          args={[TV_BEZEL_SIZE.width, TV_BEZEL_SIZE.height, TV_BEZEL_SIZE.depth]}
-        />
+        <boxGeometry args={[bezelWidth, bezelHeight, TV_BEZEL_SIZE.depth]} />
         <meshStandardMaterial
           color={frameStyle.bezelColor}
           roughness={0.35}
@@ -54,9 +60,7 @@ export function OfficeMediaTv({
       </mesh>
 
       <mesh position={[0, 0, TV_BEZEL_SIZE.depth / 2 + 0.004]}>
-        <planeGeometry
-          args={[TV_BEZEL_SIZE.width - 0.18, TV_BEZEL_SIZE.height - 0.18]}
-        />
+        <planeGeometry args={[bezelWidth - 0.18 * scale, bezelHeight - 0.18 * scale]} />
         <meshStandardMaterial
           color="#0b0f17"
           emissive={screen.ledColor}
@@ -68,15 +72,15 @@ export function OfficeMediaTv({
         />
       </mesh>
 
-      <mesh position={[0, -(TV_BEZEL_SIZE.height / 2) - 0.11, 0.02]}>
-        <boxGeometry args={[2.3, 0.11, 0.11]} />
+      <mesh position={[0, -(bezelHeight / 2) - 0.11, 0.02]}>
+        <boxGeometry args={[2.3 * scale, 0.11, 0.11]} />
         <meshStandardMaterial color={frameStyle.soundbarColor} />
       </mesh>
 
       <mesh
         position={[
-          TV_BEZEL_SIZE.width / 2 - 0.22,
-          -(TV_BEZEL_SIZE.height / 2) + 0.06,
+          bezelWidth / 2 - 0.22,
+          -(bezelHeight / 2) + 0.06,
           TV_BEZEL_SIZE.depth / 2 + 0.015,
         ]}
       >
@@ -98,11 +102,40 @@ export function OfficeMediaTv({
         />
       )}
 
+      {theme === "metal" && (
+        <group>
+          <mesh position={[-(bezelWidth / 2 + 0.16), 0, 0]}>
+            <boxGeometry args={[0.12, bezelHeight + 0.3, 0.12]} />
+            <meshStandardMaterial color="#383d4a" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <mesh position={[-(bezelWidth / 2 + 0.16), 0, 0.065]}>
+            <boxGeometry args={[0.04, bezelHeight + 0.3, 0.01]} />
+            <meshStandardMaterial
+              color="#e11d48"
+              emissive="#e11d48"
+              emissiveIntensity={mood === "evening" ? 1.4 : 0.6}
+            />
+          </mesh>
+          <mesh position={[bezelWidth / 2 + 0.16, 0, 0]}>
+            <boxGeometry args={[0.12, bezelHeight + 0.3, 0.12]} />
+            <meshStandardMaterial color="#383d4a" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <mesh position={[bezelWidth / 2 + 0.16, 0, 0.065]}>
+            <boxGeometry args={[0.04, bezelHeight + 0.3, 0.01]} />
+            <meshStandardMaterial
+              color="#e11d48"
+              emissive="#e11d48"
+              emissiveIntensity={mood === "evening" ? 1.4 : 0.6}
+            />
+          </mesh>
+        </group>
+      )}
+
       <Html
         transform
         portal={portalRef as RefObject<HTMLElement> | undefined}
         position={[0, 0, TV_BEZEL_SIZE.depth / 2 + 0.02]}
-        distanceFactor={TV_HTML_CONFIG.distanceFactor}
+        distanceFactor={TV_HTML_CONFIG.distanceFactor * scale}
         zIndexRange={[8, 0]}
       >
         <div
