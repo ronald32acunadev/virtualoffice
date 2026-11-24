@@ -136,6 +136,10 @@ export function OfficeScene({
   const themeRef = useRef<WorldThemeId>(theme);
   themeRef.current = theme;
 
+  useEffect(() => {
+    setActiveSpeech(null);
+  }, [theme]);
+
   const [activeSpeech, setActiveSpeech] = useState<{ speakerId: string; text: string } | null>(null);
   const lastSpeakerIdRef = useRef<string | null>(null);
   const lastQuoteBySpeakerRef = useRef<Map<string, string>>(new Map());
