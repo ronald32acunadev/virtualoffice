@@ -1764,3 +1764,203 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   color: var(--accent-contrast);
   border-color: var(--accent);
 }
+
+
+/* --- Agent Team Modal, Sidebar Chat Rows, Agent Card & 3D Activity Badges --- */
+.chat-title-text {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-agent-meta {
+  font-size: 0.78rem;
+  opacity: 0.86;
+  margin-top: 2px;
+}
+
+.team-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.team-section-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.team-agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.team-agent-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+}
+
+.team-agent-row.is-editing {
+  border-color: var(--accent);
+}
+
+.team-agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-agent-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.team-agent-meta {
+  display: block;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+.team-agent-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.danger-link {
+  color: #e05d5d;
+}
+
+.team-form {
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.agent-picker-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.agent-picker-label {
+  flex: 1;
+}
+
+.agent-card-chats {
+  list-style: none;
+  margin: 0.45rem 0 0.6rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.agent-card-chat-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt, rgba(255, 255, 255, 0.05));
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.agent-card-chat-btn:hover {
+  border-color: var(--accent);
+}
+
+.agent-card-chat-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.activity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.activity-chip-mcp {
+  background: rgba(49, 27, 94, 0.94);
+  border-color: #c084fc;
+  color: #f3e8ff;
+}
+
+.activity-chip-files {
+  background: rgba(14, 58, 74, 0.92);
+  border-color: #38bdf8;
+  color: #e0f2fe;
+}
+
+.activity-chip-web {
+  background: rgba(20, 62, 46, 0.92);
+  border-color: #34d399;
+  color: #d1fae5;
+}
+
+.activity-chip-delegating {
+  background: rgba(78, 42, 16, 0.92);
+  border-color: #fbbf24;
+  color: #fef3c7;
+}
+
+.mcp-hub-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(24, 18, 48, 0.88);
+  border: 1px solid rgba(192, 132, 252, 0.55);
+  color: #f3e8ff;
+  font-size: 0.76rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.mcp-hub-label.is-active {
+  background: rgba(59, 25, 118, 0.95);
+  border-color: #e879f9;
+  box-shadow: 0 0 18px rgba(192, 132, 252, 0.45);
+}

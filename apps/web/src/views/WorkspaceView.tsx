@@ -4,6 +4,7 @@ import { useOffice } from "../state/OfficeProvider";
 import { useOfficeMood } from "../state/officeMood";
 import { useWorldTheme } from "../state/worldTheme";
 import { SettingsModal } from "./SettingsModal";
+import { TeamModal } from "./TeamModal";
 import { buildViewUrl } from "../state/routing";
 import { createWorkspaceLink, openWindowChannel } from "../state/windowChannel";
 import { ConversationPane } from "./ConversationPane";
@@ -15,8 +16,10 @@ export function WorkspaceView() {
   const { mood, setMood, toggleMood } = useOfficeMood();
   const { theme, setTheme } = useWorldTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [modal, setModal] = useState<"new" | null>(null);
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null);
+  const [newTaskAgentId, setNewTaskAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     const channel = openWindowChannel();
@@ -39,11 +42,13 @@ export function WorkspaceView() {
       <Sidebar
         mood={mood}
         onToggleMood={toggleMood}
-        onNewTask={(projectPath) => {
+        onNewTask={(projectPath, agentId) => {
           setNewTaskDir(projectPath ?? null);
+          setNewTaskAgentId(agentId ?? null);
           setModal("new");
         }}
         onOpenOffice={openOffice}
+        onOpenTeam={() => setTeamOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="workspace-main">
@@ -63,12 +68,24 @@ export function WorkspaceView() {
       {modal === "new" ? (
         <NewTaskModal
           initialWorkingDirectory={newTaskDir}
+          initialAgentId={newTaskAgentId}
+          onManageTeam={() => setTeamOpen(true)}
           onClose={() => {
             setModal(null);
             setNewTaskDir(null);
+            setNewTaskAgentId(null);
           }}
         />
       ) : null}
+      <TeamModal
+        open={teamOpen}
+        onClose={() => setTeamOpen(false)}
+        onStartChatWithAgent={(agentId) => {
+          setNewTaskDir(null);
+          setNewTaskAgentId(agentId);
+          setModal("new");
+        }}
+      />
       <SettingsModal
         open={settingsOpen}
         theme={theme}

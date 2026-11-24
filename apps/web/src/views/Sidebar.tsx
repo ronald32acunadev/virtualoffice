@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import type { Employee, BossId } from "../api/types";
 import type { LightingMood } from "../scene/officeTheme";
 import { useOffice } from "../state/OfficeProvider";
-import { filterEmployees, formatSyncErrors, groupEmployeesByBoss, groupEmployeesByProject } from "../state/sidebar";
+import { groupEmployeesByAgent, resolveChatAgent } from "../state/agentView";
+import { filterEmployees, formatSyncErrors, groupEmployeesByProject } from "../state/sidebar";
 import { SPECIES_EMOJI } from "../state/species";
 import { RoleBadge } from "../ui/RoleBadge";
 import { UsageRing } from "../ui/UsageRing";
@@ -10,13 +11,14 @@ import { UsageRing } from "../ui/UsageRing";
 type Props = {
   mood: LightingMood;
   onToggleMood: () => void;
-  onNewTask: (projectPath?: string) => void;
+  onNewTask: (projectPath?: string, agentId?: string) => void;
   onOpenOffice: () => void;
+  onOpenTeam?: () => void;
   onOpenSettings?: () => void;
 };
-type GroupMode = "project" | "boss";
+type GroupMode = "project" | "agent";
 
-export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSettings }: Props) {
+export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenTeam, onOpenSettings }: Props) {
   const { state, actions } = useOffice();
   const [search, setSearch] = useState("");
   const [groupMode, setGroupMode] = useState<GroupMode>("project");
@@ -26,7 +28,10 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSet
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const filtered = useMemo(() => filterEmployees(state.employees, search), [state.employees, search]);
-  const bossGroups = useMemo(() => groupEmployeesByBoss(filtered, state.bosses), [filtered, state.bosses]);
+  const agentGroups = useMemo(
+    () => groupEmployeesByAgent(filtered, state.agents, search),
+    [filtered, state.agents, search],
+  );
   const projectGroups = useMemo(
     () => groupEmployeesByProject(filtered, search.trim() ? [] : state.projects),
     [filtered, search, state.projects],
@@ -60,45 +65,50 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSet
     return "Antigravity";
   };
 
-  const renderEmployeeRow = (employee: Employee) => (
-    <li key={employee.id}>
-      <button
-        type="button"
-        className={`employee-row${employee.status === "on_break" ? " employee-row-break" : ""}`}
-        aria-pressed={state.selectedId === employee.id}
-        onClick={() => actions.select(employee.id)}
-        data-boss={employee.bossId}
-      >
-        <span className="avatar" title={employee.species}>
-          {SPECIES_EMOJI[employee.species]}
-        </span>
-        <span className="employee-text">
-          <span className="employee-name">
-            <span className="employee-name-text">{employee.name}</span>
-            <span
-              className="employee-agent-tag"
-              data-boss={employee.bossId}
-              title={bossLabel(employee.bossId)}
-            >
-              <span className="boss-accent-dot" aria-hidden="true" />
-              {bossLabel(employee.bossId)}
+  const renderEmployeeRow = (employee: Employee) => {
+    const agent = resolveChatAgent(employee, state.agents);
+    const agentName = agent?.name ?? employee.name;
+    const agentSpecies = agent?.species ?? employee.species;
+    const agentRole = agent?.role ?? employee.role;
+    return (
+      <li key={employee.id}>
+        <button
+          type="button"
+          className={`employee-row${employee.status === "on_break" ? " employee-row-break" : ""}`}
+          aria-pressed={state.selectedId === employee.id}
+          onClick={() => actions.select(employee.id)}
+          data-boss={employee.bossId}
+        >
+          <span className="avatar" title={`${agentName} (${agentSpecies})`}>
+            {SPECIES_EMOJI[agentSpecies]}
+          </span>
+          <span className="employee-text">
+            <span className="chat-title-text" title={employee.task}>
+              {employee.task}
             </span>
-            {employee.jobTitle ? <span className="job-title-badge">{employee.jobTitle}</span> : null}
-            <RoleBadge role={employee.role} />
+            <span className="employee-name chat-agent-meta">
+              <span className="employee-name-text">{agentName}</span>
+              <span
+                className="employee-agent-tag"
+                data-boss={employee.bossId}
+                title={bossLabel(employee.bossId)}
+              >
+                <span className="boss-accent-dot" aria-hidden="true" />
+                {bossLabel(employee.bossId)}
+              </span>
+              <RoleBadge role={agentRole} />
+            </span>
           </span>
-          <span className="employee-task" title={employee.task}>
-            {employee.task}
-          </span>
-        </span>
-        <span
-          className={`dot dot-${employee.status}`}
-          role="img"
-          aria-label={employee.status.replace("_", " ")}
-          title={employee.status === "on_break" ? "On break" : employee.status.replace("_", " ")}
-        />
-      </button>
-    </li>
-  );
+          <span
+            className={`dot dot-${employee.status}`}
+            role="img"
+            aria-label={employee.status.replace("_", " ")}
+            title={employee.status === "on_break" ? "On break" : employee.status.replace("_", " ")}
+          />
+        </button>
+      </li>
+    );
+  };
 
   const availableBosses = state.bosses.filter((b) => b.available);
 
@@ -123,6 +133,11 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSet
           <button type="button" className="sidebar-nav-btn" onClick={onOpenOffice}>
             3D Office
           </button>
+          {onOpenTeam ? (
+            <button type="button" className="sidebar-nav-btn" onClick={onOpenTeam} title="Create and manage your agent team">
+              👥 Team
+            </button>
+          ) : null}
           <button
             type="button"
             className="sidebar-nav-btn"
@@ -189,18 +204,18 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSet
         <button
           type="button"
           role="tab"
-          className={`group-tab${groupMode === "boss" ? " is-active" : ""}`}
-          aria-selected={groupMode === "boss"}
-          onClick={() => setGroupMode("boss")}
+          className={`group-tab${groupMode === "agent" ? " is-active" : ""}`}
+          aria-selected={groupMode === "agent"}
+          onClick={() => setGroupMode("agent")}
         >
           Agents
         </button>
       </div>
 
-      <nav className="sidebar-list" aria-label="Employees">
-        {(groupMode === "project" ? projectGroups.length === 0 : filtered.length === 0) ? (
+      <nav className="sidebar-list" aria-label="Chats">
+        {(groupMode === "project" ? projectGroups.length === 0 : agentGroups.length === 0) ? (
           <p className="muted sidebar-empty">
-            {search.trim() ? "No matching conversations." : "No employees yet. Start a new task or sync providers."}
+            {search.trim() ? "No matching conversations." : "No chats yet. Create an agent or start a new chat."}
           </p>
         ) : groupMode === "project" ? (
           projectGroups.map((group) => {
@@ -250,25 +265,58 @@ export function Sidebar({ mood, onToggleMood, onNewTask, onOpenOffice, onOpenSet
             );
           })
         ) : (
-          bossGroups.map((group) => {
-            const boss = state.bosses.find((b) => b.id === group.bossId);
-            const isCollapsed = Boolean(collapsed[group.bossId]);
+          agentGroups.map((group) => {
+            const isCollapsed = Boolean(collapsed[group.groupKey]);
+            const agent = group.agent;
             return (
-              <section key={group.bossId} className="sidebar-section" data-boss={group.bossId}>
-                <button
-                  type="button"
-                  className="sidebar-group-head"
-                  aria-expanded={!isCollapsed}
-                  onClick={() => toggleGroup(group.bossId)}
-                >
-                  <span>
-                    <span className="boss-accent-dot" aria-hidden="true" />
-                    {group.bossName}
-                    {boss?.onBreak ? <span className="boss-break-tag">☕ On break</span> : null}
-                  </span>
-                  <span className="group-chevron" aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
-                </button>
-                {!isCollapsed ? <ul className="employee-list">{group.employees.map(renderEmployeeRow)}</ul> : null}
+              <section
+                key={group.groupKey}
+                className="sidebar-section"
+                data-boss={agent?.bossId}
+              >
+                <div className="sidebar-group-head-row">
+                  <button
+                    type="button"
+                    className="sidebar-group-head"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleGroup(group.groupKey)}
+                  >
+                    <span className="project-group-title">
+                      {agent ? (
+                        <>
+                          <span aria-hidden="true">{SPECIES_EMOJI[agent.species]}</span>
+                          <span className="project-group-name">{agent.name}</span>
+                          <span className="employee-agent-tag" data-boss={agent.bossId}>
+                            <span className="boss-accent-dot" aria-hidden="true" />
+                            {bossLabel(agent.bossId)}
+                          </span>
+                          <RoleBadge role={agent.role} />
+                        </>
+                      ) : (
+                        <span className="project-group-name">Unassigned</span>
+                      )}
+                    </span>
+                    <span className="group-chevron" aria-hidden="true">{isCollapsed ? "▸" : "▾"}</span>
+                  </button>
+                  {agent ? (
+                    <button
+                      type="button"
+                      className="sidebar-group-new"
+                      title={`New chat with ${agent.name}`}
+                      aria-label={`New chat with ${agent.name}`}
+                      onClick={() => onNewTask(undefined, agent.id)}
+                    >
+                      +
+                    </button>
+                  ) : null}
+                </div>
+                {!isCollapsed ? (
+                  group.employees.length === 0 ? (
+                    <p className="muted sidebar-empty">No chats yet.</p>
+                  ) : (
+                    <ul className="employee-list">{group.employees.map(renderEmployeeRow)}</ul>
+                  )
+                ) : null}
               </section>
             );
           })
