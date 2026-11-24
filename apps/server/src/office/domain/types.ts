@@ -63,9 +63,39 @@ export function isSpecies(value: unknown): value is Species {
 export const MAX_NAME_LENGTH = 40;
 export const MAX_JOB_TITLE_LENGTH = 60;
 
+export type ToolActivityCategory =
+  | "coding"
+  | "searching_files"
+  | "searching_web"
+  | "mcp_request"
+  | "delegating";
+
+export type AgentActivity = {
+  category: ToolActivityCategory;
+  toolName: string;
+  serverName: string | null;
+  label: string;
+  startedAt: string;
+};
+
+export type Agent = {
+  id: string;
+  bossId: BossId;
+  name: string;
+  species: Species;
+  /** Provider specialist role (e.g. Claude Code agent name); null means General. */
+  role: string | null;
+  /** Human-facing position / cargo assigned by the owner (provider-agnostic). */
+  jobTitle: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Employee = {
   id: string;
   bossId: BossId;
+  /** Team agent that owns this chat; null only if its agent was removed with no General fallback. */
+  agentId?: string | null;
   hiredBy: string | null;
   task: string;
   workingDirectory: string;
@@ -80,6 +110,8 @@ export type Employee = {
   status: EmployeeStatus;
   failureReason: string | null;
   usage?: EmployeeUsage;
+  /** Ephemeral live tool activity for an active chat; never persisted. */
+  activity?: AgentActivity | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -169,7 +201,10 @@ export type ApprovalRequest = {
 
 export type ServerEvent =
   | { type: "boss_updated"; boss: Boss }
+  | { type: "agent_updated"; agent: Agent }
+  | { type: "agent_removed"; agentId: string }
   | { type: "employee_updated"; employee: Employee }
+  | { type: "employee_activity"; employeeId: string; activity: AgentActivity | null }
   | { type: "employee_removed"; employeeId: string }
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }

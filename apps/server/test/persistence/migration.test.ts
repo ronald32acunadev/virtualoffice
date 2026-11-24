@@ -170,3 +170,46 @@ describe("US-02 / AC-01 media tables", () => {
     third.close();
   });
 });
+
+describe("Agent team table and employees.agent_id migration", () => {
+  it("adds agents table and nullable agent_id column, supports Agent CRUD, and reassigns chats", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+
+    expect(first.getEmployee("e1")?.agentId).toBeNull();
+    expect(first.listAgents()).toEqual([]);
+
+    const agent = {
+      id: "agent-1",
+      bossId: "claude" as const,
+      name: "Maya",
+      species: "fox" as const,
+      role: "review-risk",
+      jobTitle: "Reviewer",
+      createdAt: "2026-11-24T00:00:00Z",
+      updatedAt: "2026-11-24T00:00:00Z",
+    };
+    first.insertAgent(agent);
+    expect(first.getAgent("agent-1")).toEqual(agent);
+    expect(first.listAgents()).toEqual([agent]);
+
+    const e1 = first.getEmployee("e1")!;
+    first.updateEmployee({ ...e1, agentId: "agent-1" });
+    expect(first.getEmployee("e1")?.agentId).toBe("agent-1");
+
+    first.updateAgent({ ...agent, name: "Milo", jobTitle: "Lead Reviewer", updatedAt: "2026-11-24T01:00:00Z" });
+    expect(first.getAgent("agent-1")?.name).toBe("Milo");
+
+    first.reassignEmployeesAgent("agent-1", null);
+    expect(first.getEmployee("e1")?.agentId).toBeNull();
+
+    expect(first.deleteAgent("agent-1")).toBe(true);
+    expect(first.getAgent("agent-1")).toBeUndefined();
+    first.close();
+
+    const second = new SqliteOfficeRepository(file);
+    expect(second.listAgents()).toEqual([]);
+    expect(second.getEmployee("e1")?.agentId).toBeNull();
+    second.close();
+  });
+});

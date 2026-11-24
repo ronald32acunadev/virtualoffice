@@ -1,6 +1,13 @@
-import type { ApprovalRequest, Employee, MediaPlaybackState, MediaPreset, Message, MessageAttachment, Project } from "../domain/types.ts";
+import type { Agent, ApprovalRequest, Employee, MediaPlaybackState, MediaPreset, Message, MessageAttachment, Project } from "../domain/types.ts";
 
 export interface OfficeRepository {
+  insertAgent(agent: Agent): void;
+  updateAgent(agent: Agent): void;
+  getAgent(id: string): Agent | undefined;
+  listAgents(): Agent[];
+  deleteAgent(agentId: string): boolean;
+  reassignEmployeesAgent(fromAgentId: string, toAgentId: string | null): number;
+
   insertEmployee(employee: Employee): void;
   updateEmployee(employee: Employee): void;
   getEmployee(id: string): Employee | undefined;
