@@ -9,13 +9,26 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
+import type { Agent, BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
   select: (employeeId: string | null) => void;
+  createAgent: (input: {
+    bossId: BossId;
+    name?: string;
+    species?: Species;
+    role?: string | null;
+    jobTitle?: string | null;
+  }) => Promise<Agent>;
+  updateAgent: (
+    agentId: string,
+    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null },
+  ) => Promise<Agent>;
+  deleteAgent: (agentId: string) => Promise<void>;
   createEmployee: (input: {
     bossId: BossId;
+    agentId?: string;
     task: string;
     workingDirectory: string;
     name?: string;
@@ -100,6 +113,20 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
   const actions = useMemo<OfficeActions>(
     () => ({
       select: (employeeId) => dispatch({ type: "select", employeeId }),
+      createAgent: async (input) => {
+        const { agent } = await api.createAgent(input);
+        dispatch({ type: "server_event", event: { type: "agent_updated", agent } });
+        return agent;
+      },
+      updateAgent: async (agentId, patch) => {
+        const { agent } = await api.updateAgent(agentId, patch);
+        dispatch({ type: "server_event", event: { type: "agent_updated", agent } });
+        return agent;
+      },
+      deleteAgent: async (agentId) => {
+        await api.deleteAgent(agentId);
+        dispatch({ type: "server_event", event: { type: "agent_removed", agentId } });
+      },
       createEmployee: async (input) => {
         const { employee } = await api.createEmployee(input);
         dispatch({ type: "server_event", event: { type: "employee_updated", employee } });

@@ -1,4 +1,5 @@
 import type {
+  Agent,
   ApprovalRequest,
   Boss,
   Employee,
@@ -14,6 +15,7 @@ export type ConnectionState = "connecting" | "online" | "offline";
 
 export type OfficeState = {
   bosses: Boss[];
+  agents: Agent[];
   employees: Employee[];
   projects: Project[];
   /** Pending approvals only. */
@@ -39,6 +41,7 @@ export type OfficeAction =
 
 export const initialOfficeState: OfficeState = {
   bosses: [],
+  agents: [],
   employees: [],
   projects: [],
   approvals: [],
@@ -82,8 +85,19 @@ function applyEvent(state: OfficeState, event: ServerEvent): OfficeState {
   switch (event.type) {
     case "boss_updated":
       return { ...state, bosses: upsertById(state.bosses, event.boss) };
+    case "agent_updated":
+      return { ...state, agents: upsertById(state.agents, event.agent) };
+    case "agent_removed":
+      return { ...state, agents: state.agents.filter((a) => a.id !== event.agentId) };
     case "employee_updated":
       return { ...state, employees: upsertById(state.employees, event.employee) };
+    case "employee_activity": {
+      const idx = state.employees.findIndex((e) => e.id === event.employeeId);
+      if (idx === -1) return state;
+      const next = state.employees.slice();
+      next[idx] = { ...next[idx]!, activity: event.activity };
+      return { ...state, employees: next };
+    }
     case "message_added": {
       const { message } = event;
       const current = state.messages[message.employeeId] ?? [];
@@ -151,6 +165,7 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
       return {
         ...state,
         bosses: snapshot.bosses,
+        agents: snapshot.agents ?? [],
         employees: snapshot.employees,
         projects: snapshot.projects ?? [],
         approvals: snapshot.approvals.filter((approval) => approval.status === "pending"),
