@@ -9,6 +9,8 @@ import {
   overlapsAnyDesk,
 } from "./officeTheme";
 import { createRugTexture, createScreenTexture, createWoodFloorTexture } from "./textures";
+import { WORLD_THEME_IDS } from "./themes/registry";
+import { getThemeProps, getThemeTvFrameStyle } from "./themes/themeProps";
 
 const ALL_STATUSES: EmployeeStatus[] = [
   "starting",
@@ -90,5 +92,35 @@ describe("officeTheme", () => {
         expect(overlapsAnyDesk(ex, ez + 0.95, 0.3)).toBe(true);
       }
     }
+  });
+
+  it("US-03 / AC-02: theme props are non-empty, unique, in-bounds, and clear of desks", () => {
+    for (const theme of WORLD_THEME_IDS) {
+      const props = getThemeProps(theme);
+      expect(props.length).toBeGreaterThan(0);
+
+      const ids = props.map((p) => p.id);
+      expect(new Set(ids).size).toBe(ids.length);
+
+      for (const prop of props) {
+        const [x, , z] = prop.position;
+        expect(Math.abs(x) + prop.radius).toBeLessThanOrEqual(OFFICE_HALF_SIZE);
+        expect(Math.abs(z) + prop.radius).toBeLessThanOrEqual(OFFICE_HALF_SIZE);
+        expect(overlapsAnyDesk(x, z, prop.radius)).toBe(false);
+      }
+    }
+  });
+
+  it("US-03 / AC-03: theme TV frame styles are non-empty and office keeps its title", () => {
+    for (const theme of WORLD_THEME_IDS) {
+      const style = getThemeTvFrameStyle(theme);
+      expect(style.bezelColor.length).toBeGreaterThan(0);
+      expect(style.mountColor.length).toBeGreaterThan(0);
+      expect(style.soundbarColor.length).toBeGreaterThan(0);
+      expect(style.accentColor.length).toBeGreaterThan(0);
+      expect(style.standbyTitle.length).toBeGreaterThan(0);
+      expect(style.standbySubtitle.length).toBeGreaterThan(0);
+    }
+    expect(getThemeTvFrameStyle("office").standbyTitle).toBe("OFFICE TV");
   });
 });

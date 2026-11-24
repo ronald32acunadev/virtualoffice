@@ -9,10 +9,13 @@ import {
   TV_MOUNT_POSITION,
   getTvScreenModel,
 } from "./mediaTv";
+import type { WorldThemeId } from "./themes/registry";
+import { getThemeTvFrameStyle } from "./themes/themeProps";
 
 export type OfficeMediaTvProps = {
   media: MediaPlaybackState | null;
   mood: LightingMood;
+  theme?: WorldThemeId;
   onOpenDrawer: () => void;
   onFocusTv: () => void;
   onTurnOff: () => void;
@@ -22,6 +25,7 @@ export type OfficeMediaTvProps = {
 export function OfficeMediaTv({
   media,
   mood,
+  theme = "office",
   onOpenDrawer,
   onFocusTv,
   onTurnOff,
@@ -29,12 +33,13 @@ export function OfficeMediaTv({
 }: OfficeMediaTvProps) {
   const screen = getTvScreenModel(media);
   const visual = screen.mode === "playing" ? MEDIA_PROVIDER_VISUALS[screen.provider] : null;
+  const frameStyle = getThemeTvFrameStyle(theme);
 
   return (
     <group position={TV_MOUNT_POSITION}>
       <mesh position={[0, 0, -0.09]}>
         <boxGeometry args={[1.4, 0.75, 0.08]} />
-        <meshStandardMaterial color="#262b34" metalness={0.7} roughness={0.4} />
+        <meshStandardMaterial color={frameStyle.mountColor} metalness={0.7} roughness={0.4} />
       </mesh>
 
       <mesh castShadow receiveShadow>
@@ -42,7 +47,7 @@ export function OfficeMediaTv({
           args={[TV_BEZEL_SIZE.width, TV_BEZEL_SIZE.height, TV_BEZEL_SIZE.depth]}
         />
         <meshStandardMaterial
-          color="#151922"
+          color={frameStyle.bezelColor}
           roughness={0.35}
           metalness={0.5}
         />
@@ -65,7 +70,7 @@ export function OfficeMediaTv({
 
       <mesh position={[0, -(TV_BEZEL_SIZE.height / 2) - 0.11, 0.02]}>
         <boxGeometry args={[2.3, 0.11, 0.11]} />
-        <meshStandardMaterial color="#1c222e" />
+        <meshStandardMaterial color={frameStyle.soundbarColor} />
       </mesh>
 
       <mesh
@@ -110,9 +115,9 @@ export function OfficeMediaTv({
         >
           {screen.mode === "standby" ? (
             <div className="tv-standby">
-              <div className="tv-standby-header">OFFICE TV</div>
+              <div className="tv-standby-header">{frameStyle.standbyTitle}</div>
               <div className="tv-standby-subtitle">
-                Stream music or videos live on the office screen
+                {frameStyle.standbySubtitle}
               </div>
               <div className="tv-standby-providers">
                 <span

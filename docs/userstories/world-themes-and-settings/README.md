@@ -12,7 +12,7 @@ Implementer route: local-first (`pumbastudio` → `pumbalama` → lightweight ho
 | --- | --- | --- | --- |
 | US-01 | Theme registry, persistence, cross-window sync, and 2D UI / terminal palettes | — | complete |
 | US-02 | Settings modal in Office HUD and Workspace Sidebar | US-01 | complete |
-| US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | pending |
+| US-03 | Modular 3D environments and themed Media TV housing for Office, Western Camp, Horror Office, and Metal Concert | US-01 | complete |
 | US-04 | Theme-specific boss/employee workstations and character accessories | US-01, US-03 | pending |
 | US-05 | Theme-specific chatter quotes, full scene wiring, and end-to-end verification | US-01, US-02, US-03, US-04 | pending |
 
@@ -93,9 +93,9 @@ As the owner, I want each of the 4 themes to render its own distinct procedural 
 
 | Story / criterion or change-related regression risk | Test file and test name, or reproducible manual procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-02` + layout collision regression | `apps/web/src/scene/officeTheme.test.ts` (expanded to validate prop bounds, unique IDs, and zero `overlapsAnyDesk` collisions for all 4 themes, plus all 4×2 mood palettes) | Pending |
-| `US-03 / AC-03` + Media TV regression | `apps/web/src/scene/mediaTv.test.ts` (themed TV standby title/subtitle and frame style descriptors for all 4 themes while preserving strict embed URL allowlist and `TV_MOUNT_POSITION`) | Pending |
-| `US-03 / AC-01`, `US-03 / AC-04` | `npm run typecheck`, `npm test`, `npm run build` + manual visual verification in `/office` switching through all 4 themes in Day & Evening and checking `Focus TV` | Pending |
+| `US-03 / AC-02` + layout collision regression | `apps/web/src/scene/officeTheme.test.ts` (expanded to validate prop bounds, unique IDs, and zero `overlapsAnyDesk` collisions for all 4 themes, plus all 4×2 mood palettes) | Passed (`7/7` tests in `officeTheme.test.ts`) |
+| `US-03 / AC-03` + Media TV regression | `apps/web/src/scene/officeTheme.test.ts` + `apps/web/src/scene/mediaTv.test.ts` (themed TV standby title/subtitle and frame style descriptors for all 4 themes while preserving strict embed URL allowlist and `TV_MOUNT_POSITION`) | Passed (`7/7` in `mediaTv.test.ts`, `7/7` in `officeTheme.test.ts`) |
+| `US-03 / AC-01`, `US-03 / AC-04` | `npm run typecheck`, `npm test`, `npm run build` + manual visual verification in `/office` switching through all 4 themes in Day & Evening and checking `Focus TV` | Automated: passed (`28/28` test files, `196/196` tests, `tsc --noEmit` clean, `vite build` clean); manual visual check pending final pass |
 
 ---
 
