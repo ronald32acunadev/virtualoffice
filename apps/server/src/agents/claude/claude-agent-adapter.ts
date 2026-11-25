@@ -191,12 +191,14 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       cwd: employee.workingDirectory,
       settingSources: SETTING_SOURCES,
       systemPrompt: SYSTEM_PROMPT,
-      permissionMode: "default",
+      permissionMode: employee.mode === "turbo" ? "bypassPermissions" : "default",
+      ...(employee.mode === "turbo" ? { allowDangerouslySkipPermissions: true } : {}),
       includePartialMessages: true,
       abortController: session.abort,
       canUseTool,
       ...(resume ? { resume } : {}),
       ...(employee.role ? { agent: employee.role } : {}),
+      ...(typeof employee.model === "string" && employee.model.length > 0 ? { model: employee.model } : {}),
     };
 
     void this.run(employee.id, session, options, sink);

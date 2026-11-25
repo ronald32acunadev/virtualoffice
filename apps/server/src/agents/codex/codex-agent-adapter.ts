@@ -176,15 +176,19 @@ export class CodexAgentAdapter extends CliJsonlAdapter {
         }
 
         const imageFlags = images.flatMap((img) => ["-i", img.path]);
+        const modelFlags = employee.model ? ["-m", employee.model] : [];
+        const turboFlags = employee.mode === "turbo" ? ["--dangerously-bypass-approvals-and-sandbox"] : [];
 
         return resume
-          ? ["exec", "resume", resume, "--json", ...imageFlags, finalPrompt]
+          ? ["exec", "resume", resume, "--json", ...modelFlags, ...turboFlags, ...imageFlags, finalPrompt]
           : [
               "exec",
               "--json",
               "--cd",
               employee.workingDirectory,
               "--skip-git-repo-check",
+              ...modelFlags,
+              ...turboFlags,
               ...imageFlags,
               finalPrompt,
             ];

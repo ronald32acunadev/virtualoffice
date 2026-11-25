@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import { createHarness } from "../helpers/harness.ts";
+import { waitFor } from "../helpers/fake-sdk.ts";
+import { createFakeSpawner, createRecordingSink, makeEmployee } from "../helpers/fake-cli-process.ts";
+import { CodexAgentAdapter } from "../../src/agents/codex/codex-agent-adapter.ts";
+import { OpenCodeAgentAdapter } from "../../src/agents/opencode/opencode-agent-adapter.ts";
+import { AntigravityAgentAdapter } from "../../src/agents/antigravity/antigravity-agent-adapter.ts";
+import { GeminiAgentAdapter } from "../../src/agents/gemini/gemini-agent-adapter.ts";
+
+describe("US-02 / AC-01", () => {
+  it("ClaudeAgentAdapter passes model and turbo permission flags to the SDK", async () => {
+    const h = createHarness();
+    const agent = h.office.createAgent({
+      bossId: "claude",
+      name: "TurboClaude",
+      species: "fox",
+      model: "claude-opus-4-1",
+      mode: "turbo",
+    });
+    h.office.hire({
+      agentId: agent.id,
+      bossId: "claude",
+      task: "Run fast",
+      workingDirectory: h.dir,
+    });
+    await waitFor(() => h.sdk.sessions.length > 0);
+    expect(h.sdk.last.options).toMatchObject({
+      model: "claude-opus-4-1",
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+    });
+  });
+});
+
+describe("US-02 / AC-02", () => {
+  it("CodexAgentAdapter passes model and turbo flags", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new CodexAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("codex", "/repo"), model: "gpt-5.4", mode: "turbo" as const };
+    adapter.start({ employee, prompt: "Do it" }, sink);
+    expect(spawner.last.args).toContain("-m");
+    expect(spawner.last.args).toContain("gpt-5.4");
+    expect(spawner.last.args).toContain("--dangerously-bypass-approvals-and-sandbox");
+  });
+
+  it("CodexAgentAdapter default request_review with null model omits flags", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new CodexAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("codex", "/repo"), model: null, mode: "request_review" as const };
+    adapter.start({ employee, prompt: "Do it" }, sink);
+    expect(spawner.last.args).not.toContain("-m");
+    expect(spawner.last.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+  });
+});
+
+describe("US-02 / AC-03", () => {
+  it("OpenCodeAgentAdapter passes model and turbo flags", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new OpenCodeAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("opencode", "/repo"), model: "opencode/big-pickle", mode: "turbo" as const };
+    adapter.start({ employee, prompt: "Do it" }, sink);
+    expect(spawner.last.args).toContain("-m");
+    expect(spawner.last.args).toContain("opencode/big-pickle");
+    expect(spawner.last.args).toContain("--auto");
+  });
+});
+
+describe("US-02 / AC-04", () => {
+  it("AntigravityAgentAdapter passes model and turbo flags", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new AntigravityAgentAdapter({ spawnFn: spawner.spawn });
+    const employee = { ...makeEmployee("gemini", "/repo"), model: "gemini-4-neon-high", mode: "turbo" as const };
+    adapter.start({ employee, prompt: "Do it" }, sink);
+    expect(spawner.last.args).toContain("--model");
+    expect(spawner.last.args).toContain("gemini-4-neon-high");
+    expect(spawner.last.args).toContain("--dangerously-skip-permissions");
+  });
+
+  it("GeminiAgentAdapter passes model and turbo flags", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new GeminiAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("gemini", "/repo"), model: "gemini-3.8-flash-medium", mode: "turbo" as const };
+    adapter.start({ employee, prompt: "Do it" }, sink);
+    expect(spawner.last.args).toContain("-m");
+    expect(spawner.last.args).toContain("gemini-3.8-flash-medium");
+    expect(spawner.last.args).toContain("--yolo");
+  });
+});
