@@ -2,11 +2,13 @@ import type {
   Agent,
   ApprovalRequest,
   Boss,
+  BossId,
   Employee,
   MediaPlaybackState,
   MediaPreset,
   Message,
   Project,
+  ProviderModelOption,
   ServerEvent,
   StateSnapshot,
 } from "../api/types";
@@ -30,10 +32,12 @@ export type OfficeState = {
   loaded: boolean;
   media: MediaPlaybackState | null;
   mediaPresets: MediaPreset[];
+  providerModels: Partial<Record<BossId, ProviderModelOption[]>>;
 };
 
 export type OfficeAction =
   | { type: "state_loaded"; snapshot: StateSnapshot }
+  | { type: "models_loaded"; models: Partial<Record<BossId, ProviderModelOption[]>> }
   | { type: "messages_loaded"; employeeId: string; messages: Message[] }
   | { type: "server_event"; event: ServerEvent }
   | { type: "select"; employeeId: string | null }
@@ -53,6 +57,7 @@ export const initialOfficeState: OfficeState = {
   loaded: false,
   media: null,
   mediaPresets: [],
+  providerModels: {},
 };
 
 function upsertById<T extends { id: string }>(list: T[], item: T): T[] {
@@ -178,6 +183,8 @@ export function officeReducer(state: OfficeState, action: OfficeAction): OfficeS
         mediaPresets: snapshot.mediaPresets ?? [],
       };
     }
+    case "models_loaded":
+      return { ...state, providerModels: action.models };
     case "messages_loaded":
       return {
         ...state,

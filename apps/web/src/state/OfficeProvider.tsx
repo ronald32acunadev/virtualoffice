@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { Agent, BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
+import type { Agent, AgentMode, BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -20,10 +20,12 @@ export type OfficeActions = {
     species?: Species;
     role?: string | null;
     jobTitle?: string | null;
+    model?: string | null;
+    mode?: AgentMode;
   }) => Promise<Agent>;
   updateAgent: (
     agentId: string,
-    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null },
+    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
   ) => Promise<Agent>;
   deleteAgent: (agentId: string) => Promise<void>;
   createEmployee: (input: {
@@ -36,7 +38,10 @@ export type OfficeActions = {
     role?: string;
     jobTitle?: string;
   }) => Promise<void>;
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) => Promise<void>;
+  updateEmployee: (
+    employeeId: string,
+    patch: { name?: string; species?: Species; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+  ) => Promise<void>;
   syncProviders: () => Promise<SyncSummary>;
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;
   stopEmployee: (employeeId: string) => Promise<void>;
@@ -86,8 +91,14 @@ export function OfficeProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const snapshot = await api.getState();
+      const [snapshot, modelsRes] = await Promise.all([
+        api.getState(),
+        api.getProviderModels().catch(() => null),
+      ]);
       dispatch({ type: "state_loaded", snapshot });
+      if (modelsRes?.models) {
+        dispatch({ type: "models_loaded", models: modelsRes.models });
+      }
     } catch {
       return;
     }

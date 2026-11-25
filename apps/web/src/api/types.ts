@@ -56,6 +56,9 @@ export type AgentActivity = {
   startedAt: string;
 };
 
+export type AgentMode = "request_review" | "turbo";
+export type ProviderModelOption = { id: string; label: string };
+
 export type Agent = {
   id: string;
   bossId: BossId;
@@ -63,6 +66,8 @@ export type Agent = {
   species: Species;
   role: string | null;
   jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
   createdAt: string;
   updatedAt: string;
 };
@@ -79,6 +84,8 @@ export type Employee = {
   importedAt: string | null;
   role: string | null;
   jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;

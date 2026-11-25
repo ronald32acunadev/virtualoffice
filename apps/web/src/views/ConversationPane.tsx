@@ -28,6 +28,7 @@ import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { groupTimelineBlocks } from "../state/activityGroups";
 import { deriveLiveStatus, isNearBottom, STARTER_PROMPTS } from "../state/chatErgonomics";
 import { ActivityGroup } from "./ActivityGroup";
+import { ComposerConfigControls } from "./ComposerConfigControls";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
 
@@ -592,6 +593,23 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
                 <span className="boss-accent-dot" aria-hidden="true" />
                 {boss?.name ?? employee.bossId}
               </span>
+              <ComposerConfigControls
+                bossId={employee.bossId}
+                model={employee.model}
+                mode={employee.mode}
+                providerModels={state.providerModels}
+                disabled={busy}
+                onChangeModel={(nextModel) => {
+                  void actions.updateEmployee(employee.id, { model: nextModel }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
+                onChangeMode={(nextMode) => {
+                  void actions.updateEmployee(employee.id, { mode: nextMode }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
+              />
               {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
             </div>
             <div className="composer-status-right">

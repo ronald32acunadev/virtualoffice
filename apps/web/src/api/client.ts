@@ -1,6 +1,8 @@
 import type {
   Agent,
+  AgentMode,
   ApprovalRequest,
+  ProviderModelOption,
   AttachmentUpload,
   Catalog,
   BossId,
@@ -93,6 +95,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   getState: () => request<StateSnapshot>("GET", "/api/state"),
   syncProviders: () => request<SyncSummary>("POST", "/api/sync"),
+  getProviderModels: () => request<{ models: Partial<Record<BossId, ProviderModelOption[]>> }>("GET", "/api/models"),
   listAgents: () => request<{ agents: Agent[] }>("GET", "/api/agents"),
   createAgent: (input: {
     bossId: BossId;
@@ -100,10 +103,12 @@ export const api = {
     species?: Species;
     role?: string | null;
     jobTitle?: string | null;
+    model?: string | null;
+    mode?: AgentMode;
   }) => request<{ agent: Agent }>("POST", "/api/agents", input),
   updateAgent: (
     agentId: string,
-    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null },
+    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
   ) => request<{ agent: Agent }>("PATCH", `/api/agents/${encodeURIComponent(agentId)}`, patch),
   deleteAgent: (agentId: string) =>
     request<{ deleted: boolean }>("DELETE", `/api/agents/${encodeURIComponent(agentId)}`),
@@ -131,8 +136,10 @@ export const api = {
       "GET",
       `/api/employees/${encodeURIComponent(employeeId)}/catalog${refresh ? "?refresh=true" : ""}`,
     ),
-  updateEmployee: (employeeId: string, patch: { name?: string; species?: Species; jobTitle?: string | null }) =>
-    request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
+  updateEmployee: (
+    employeeId: string,
+    patch: { name?: string; species?: Species; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+  ) => request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
       text,
