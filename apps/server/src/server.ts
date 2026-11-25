@@ -26,6 +26,7 @@ import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repos
 
 
 export type StartOfficeServerOptions = {
+  host?: string;
   port?: number;
   dbPath?: string;
   staticRoot?: string;
@@ -49,6 +50,7 @@ export async function startOfficeServer(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../.."
   );
+  const host = options.host ?? process.env.OFFICE_HOST ?? "127.0.0.1";
   const port = options.port ?? Number(process.env.OFFICE_PORT ?? 4317);
   const dbPath =
     options.dbPath ?? process.env.OFFICE_DB ?? path.join(repoRoot, "data", "office.sqlite");
@@ -58,7 +60,7 @@ export async function startOfficeServer(
   );
   const devOrigin = options.devOrigin ?? (process.env.OFFICE_DEV_ORIGIN || undefined);
   const webDist = options.staticRoot ?? path.join(repoRoot, "apps", "web", "dist");
-  const token = options.token ?? createToken();
+  const token = options.token ?? (process.env.OFFICE_TOKEN || createToken());
 
   if (dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -140,7 +142,7 @@ export async function startOfficeServer(
     terminals,
   });
 
-  await app.listen({ host: "127.0.0.1", port });
+  await app.listen({ host, port });
 
   const address = app.server.address();
   const boundPort =

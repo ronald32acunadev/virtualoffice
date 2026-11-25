@@ -1,0 +1,22 @@
+services:
+  virtualoffice:
+    image: virtualoffice:${VO_VERSION:-dev}
+    container_name: virtualoffice
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OFFICE_PORT:-4317}:4317"
+    environment:
+      OFFICE_HOST: "0.0.0.0"
+      OFFICE_PORT: "4317"
+      OFFICE_DB: "/app/data/office.sqlite"
+      OFFICE_TOKEN: "${OFFICE_TOKEN:-}"
+      HOME: "/home/pumba"
+    volumes:
+      - ./data:/app/data
+      - ${HOME}/.claude:/home/pumba/.claude
+      - ${HOME}/.codex:/home/pumba/.codex
+      - ${HOME}/.config/opencode:/home/pumba/.config/opencode
+      - /run/media/pumba/Proyects:/run/media/pumba/Proyects
