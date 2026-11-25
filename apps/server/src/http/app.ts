@@ -8,7 +8,7 @@ import { OfficeError } from "../office/domain/types.ts";
 import { allowedHosts, allowedOrigins, tokensMatch } from "./security.ts";
 import { TerminalError, type TerminalSession, type TerminalSessionManager } from "../terminal/terminal-session-manager.ts";
 import { parseClientMessage, parseTerminalSize, type TerminalServerMessage } from "../terminal/terminal-protocol.ts";
-import { isSafeInlineImageMime, sanitizeAttachmentName } from "../office/application/attachments.ts";
+import { isSafeInlineAudioMime, isSafeInlineImageMime, sanitizeAttachmentName } from "../office/application/attachments.ts";
 
 export type BuildAppOptions = {
   token: string;
@@ -235,7 +235,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     if (!resolved) {
       return sendError(reply, 404, "not_found", "Attachment not found");
     }
-    const disposition = isSafeInlineImageMime(resolved.mimeType) ? "inline" : "attachment";
+    const disposition =
+      isSafeInlineImageMime(resolved.mimeType) || isSafeInlineAudioMime(resolved.mimeType)
+        ? "inline"
+        : "attachment";
     const safeName = sanitizeAttachmentName(resolved.name).replace(/"/g, "");
     return reply
       .code(200)

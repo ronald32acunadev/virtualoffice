@@ -5,7 +5,7 @@ import { getToken } from "../api/client";
 import type { MessageAttachment } from "../api/types";
 import type { TimelineItem } from "../state/timeline";
 import { buildToolLabel, splitLabel } from "../state/toolLabel";
-import { buildAuthenticatedAttachmentUrl, formatFileSize, isPreviewableImageMime } from "../state/attachments";
+import { buildAuthenticatedAttachmentUrl, formatFileSize, isPlayableAudioMime, isPreviewableImageMime } from "../state/attachments";
 
 function prettyInput(content: string): string {
   try {
@@ -141,6 +141,16 @@ export function TextBubble({ item }: { item: TimelineItem }) {
                     >
                       <img src={authUrl} alt={att.name} />
                     </button>
+                  );
+                }
+                if (isPlayableAudioMime(att.mimeType)) {
+                  return (
+                    <div key={att.id} className="msg-audio-wrap">
+                      <audio controls preload="metadata" className="msg-audio-player" src={authUrl} />
+                      <span className="msg-attachment-name">
+                        🎤 {att.name} · {formatFileSize(att.size)}
+                      </span>
+                    </div>
                   );
                 }
                 return (

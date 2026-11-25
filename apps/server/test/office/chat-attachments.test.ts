@@ -292,5 +292,58 @@ describe("US-03 Chat Attachments", () => {
 
       await app.close();
     });
+
+    it("US-04 / AC-01: serves safe audio attachments inline with nosniff header", async () => {
+      const h = createHarness();
+      const employee = await hireWorking(h, "Audio task");
+      const token = "audio-token-123";
+      const attachmentsDir = path.join(tmpDir, "audio-attachments");
+      (h.office as unknown as { attachmentStore: AttachmentStore }).attachmentStore = new AttachmentStore(attachmentsDir);
+
+      const app = await buildApp({
+        token,
+        port: 4317,
+        repository: h.repository,
+        office: h.office,
+      });
+      await app.ready();
+
+      const audioBase64 = Buffer.from("fake-webm-audio-bytes").toString("base64");
+      const sendRes = await app.inject({
+        method: "POST",
+        url: `/api/employees/${employee.id}/messages`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          host: "127.0.0.1:4317",
+        },
+        payload: {
+          text: "",
+          attachments: [
+            {
+              name: "voice-note.webm",
+              mimeType: "audio/webm;codecs=opus",
+              dataBase64: audioBase64,
+            },
+          ],
+        },
+      });
+      expect(sendRes.statusCode).toBe(202);
+      const attId = sendRes.json().message.attachments[0].id;
+
+      const dlRes = await app.inject({
+        method: "GET",
+        url: `/api/attachments/${attId}`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          host: "127.0.0.1:4317",
+        },
+      });
+      expect(dlRes.statusCode).toBe(200);
+      expect(dlRes.headers["x-content-type-options"]).toBe("nosniff");
+      expect(String(dlRes.headers["content-disposition"])).toMatch(/^inline;/);
+      expect(dlRes.body).toBe("fake-webm-audio-bytes");
+
+      await app.close();
+    });
   });
 });

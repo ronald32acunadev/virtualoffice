@@ -3,7 +3,7 @@
 - **Feature:** `agent-model-mode-and-audio`
 - **Branch:** `feature/agent-model-mode-and-audio`
 - **Execution mode:** `all`
-- **Status:** Approved — in progress
+- **Status:** Complete (all 4 stories verified)
 
 ## Scope & Confirmed Facts
 
@@ -28,7 +28,7 @@
 ## Stories
 
 ### US-01: Agent & Chat Model and Execution Mode Persistence & Model Catalog API
-- **Status:** `pending`
+- **Status:** `complete` (`47c094f`)
 - **Dependencies:** None
 - **Story:** As a Virtual Office user, I want each agent (and chat) to persist a chosen AI model and execution mode (`request_review` or `turbo`) and expose available models per provider, so that my selections survive restarts and work across all providers.
 - **Acceptance Criteria:**
@@ -40,15 +40,15 @@
 
 | Story / criterion or regression risk | Test file and test name / procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-01 / AC-01` | `apps/server/test/persistence/migration.test.ts` — `adds model and mode columns to agents and employees idempotently` | Pending |
-| `US-01 / AC-02`, `US-01 / AC-03` | `apps/server/test/office/agents.test.ts` — `persists and cascades agent model and mode and rejects invalid values` | Pending |
-| `US-01 / AC-04` | `apps/server/test/office/provider-models.test.ts` — `returns curated and discovered models per provider with safe fallback` | Pending |
-| Regression: existing `PATCH /api/employees/:id` & `POST /api/agents` | `apps/server/test/office/names.test.ts`, `apps/server/test/office/job-title.test.ts`, `apps/server/test/http/api.test.ts` | Pending |
+| `US-01 / AC-01` | `apps/server/test/persistence/migration.test.ts` — `adds agents table and nullable agent_id column, supports Agent CRUD, and reassigns chats` | Passed (`vitest`, 6/6) |
+| `US-01 / AC-02`, `US-01 / AC-03` | `apps/server/test/office/agents.test.ts` — `US-01 / AC-02, AC-03: persists and cascades agent model and mode and rejects invalid values` | Passed (`vitest`, 5/5) |
+| `US-01 / AC-04` | `apps/server/test/office/provider-models.test.ts` — `US-01 / AC-04: provider-models` | Passed (`vitest`, 3/3) |
+| Regression: existing `PATCH /api/employees/:id` & `POST /api/agents` | `apps/server/test/office/names.test.ts`, `apps/server/test/office/job-title.test.ts`, `apps/server/test/http/api.test.ts` | Passed (`npm run test -w apps/server`, 334/334) |
 
 ---
 
 ### US-02: Apply Selected Model and Execution Mode in All Provider Adapters
-- **Status:** `pending`
+- **Status:** `complete` (`16febf9`)
 - **Dependencies:** `US-01`
 - **Story:** As a Virtual Office user, I want the server adapters to pass my agent's chosen model and execution mode (`request_review` vs `turbo`) to Claude, Codex, OpenCode, Antigravity, and Gemini CLI, so that changing the dropdown actually controls how the underlying agent runs.
 - **Acceptance Criteria:**
@@ -60,16 +60,16 @@
 
 | Story / criterion or regression risk | Test file and test name / procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-02 / AC-01` | `apps/server/test/office/approvals.test.ts` / `apps/server/test/office/agents.test.ts` — `ClaudeAgentAdapter passes model and turbo permissionMode` | Pending |
-| `US-02 / AC-02` | `apps/server/test/agents/codex-agent-adapter.test.ts` — `passes model and turbo bypass flag when configured` | Pending |
-| `US-02 / AC-03` | `apps/server/test/agents/opencode-agent-adapter.test.ts` — `passes model and --auto flag in turbo mode` | Pending |
-| `US-02 / AC-04` | `apps/server/test/agents/antigravity-agent-adapter.test.ts` & `apps/server/test/agents/gemini-agent-adapter.test.ts` — `passes model and turbo flags` | Pending |
-| Regression: default mode behavior | Full `npm run test -w apps/server` suite | Pending |
+| `US-02 / AC-01` | `apps/server/test/agents/adapter-model-mode.test.ts` — `ClaudeAgentAdapter passes model and turbo permission flags to the SDK` | Passed (`vitest`, 6/6) |
+| `US-02 / AC-02` | `apps/server/test/agents/adapter-model-mode.test.ts` — `CodexAgentAdapter passes model and turbo flags` | Passed (`vitest`, 6/6) |
+| `US-02 / AC-03` | `apps/server/test/agents/adapter-model-mode.test.ts` — `OpenCodeAgentAdapter passes model and turbo flags` | Passed (`vitest`, 6/6) |
+| `US-02 / AC-04` | `apps/server/test/agents/adapter-model-mode.test.ts` — `AntigravityAgentAdapter` & `GeminiAgentAdapter` | Passed (`vitest`, 6/6) |
+| Regression: default mode behavior | Full `npm run test -w apps/server` suite | Passed (44/44 files, 334/334 tests) |
 
 ---
 
 ### US-03: Model & Mode Selectors in Chat Composer Footer and `TeamModal`
-- **Status:** `pending`
+- **Status:** `complete` (`b64d1ef`)
 - **Dependencies:** `US-01`, `US-02`
 - **Story:** As a Virtual Office user, I want dropdown selectors for Model and Agent Mode (`Request Review` / `Turbo`) right in the chat composer footer and inside `TeamModal`, so that I can configure any agent's model and autonomy level cleanly without leaving the conversation.
 - **Acceptance Criteria:**
@@ -81,13 +81,13 @@
 
 | Story / criterion or regression risk | Test file and test name / procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-03 / AC-01`, `US-03 / AC-02`, `US-03 / AC-03`, `US-03 / AC-04` | `apps/web/src/state/agentConfig.test.ts` — unit tests for model option resolution, mode metadata, and provider switching; `npm run typecheck -w apps/web` & `npm run build` | Pending |
-| Regression: existing composer & sidebar | `npm run test -w apps/web` | Pending |
+| `US-03 / AC-01`, `US-03 / AC-02`, `US-03 / AC-03`, `US-03 / AC-04` | `apps/web/src/state/agentConfig.test.ts` + `npm run typecheck -w apps/web` + `npm run build` | Passed (`vitest` 3/3, typecheck 0 errors, Vite build OK) |
+| Regression: existing composer & sidebar | `npm run test -w apps/web` | Passed (30/30 files, 209/209 tests) |
 
 ---
 
 ### US-04: Voice Recording, Inline Audio Playback & Audio Attachments in Chat
-- **Status:** `pending`
+- **Status:** `complete`
 - **Dependencies:** None (can be verified independently of `US-02`/`US-03`)
 - **Story:** As a Virtual Office user, I want to record a voice note or attach an audio file in the chat composer and play audio messages inline in the conversation, so that I can send spoken instructions to my agents.
 - **Acceptance Criteria:**
@@ -99,6 +99,6 @@
 
 | Story / criterion or regression risk | Test file and test name / procedure | Observed result and evidence |
 | --- | --- | --- |
-| `US-04 / AC-01` | `apps/server/test/office/chat-attachments.test.ts` — `serves safe audio attachments inline with nosniff header` | Pending |
-| `US-04 / AC-02`, `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/attachments.test.ts` — `detects playable audio MIME types and formats audio recording filenames/durations`; `npm run typecheck -w apps/web` & `npm run build` | Pending |
-| Regression: image & generic file attachments | `apps/server/test/office/chat-attachments.test.ts`, `apps/web/src/state/attachments.test.ts` | Pending |
+| `US-04 / AC-01` | `apps/server/test/office/chat-attachments.test.ts` — `US-04 / AC-01: serves safe audio attachments inline with nosniff header` | Passed (`vitest`, 11/11) |
+| `US-04 / AC-02`, `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/attachments.test.ts` — `US-04 / AC-02, AC-04: detects playable audio MIME types and formats voice filenames and durations`; `npm run typecheck -w apps/web` & `npm run build` | Passed (`vitest`, 8/8; typecheck & build OK) |
+| Regression: image & generic file attachments | `apps/server/test/office/chat-attachments.test.ts`, `apps/web/src/state/attachments.test.ts` | Passed |

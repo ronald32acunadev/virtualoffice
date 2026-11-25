@@ -6,6 +6,58 @@ export function isPreviewableImageMime(mimeType: string): boolean {
   return SAFE_IMAGE_MIMES.has(mimeType.trim().toLowerCase());
 }
 
+export const SAFE_AUDIO_MIMES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/aac",
+  "audio/flac",
+]);
+
+export function isPlayableAudioMime(mimeType: string): boolean {
+  return SAFE_AUDIO_MIMES.has(mimeType.split(";")[0]!.trim().toLowerCase());
+}
+
+export function pickRecorderAudioMime(isTypeSupported?: (mime: string) => boolean): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/mp4",
+  ];
+  if (isTypeSupported) {
+    for (const mime of candidates) {
+      if (isTypeSupported(mime)) return mime;
+    }
+  }
+  return "audio/webm";
+}
+
+export function buildVoiceRecordingFilename(mimeType: string, now = new Date()): string {
+  const base = mimeType.split(";")[0]!.trim().toLowerCase();
+  let ext = "webm";
+  if (base === "audio/ogg") ext = "ogg";
+  else if (base === "audio/mp4" || base === "audio/aac") ext = "m4a";
+  else if (base === "audio/mpeg") ext = "mp3";
+  else if (base === "audio/wav") ext = "wav";
+  else if (base === "audio/flac") ext = "flac";
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `voice-${date}-${time}.${ext}`;
+}
+
+export function formatDurationSeconds(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
 export function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;
