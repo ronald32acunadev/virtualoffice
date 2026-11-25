@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { OfficeRepository } from "../../office/ports/office-repository.ts";
 import type {
   Agent,
+  AgentMode,
   ApprovalRequest,
   Employee,
   EmployeeStatus,
@@ -31,6 +32,8 @@ CREATE TABLE IF NOT EXISTS agents (
   species TEXT NOT NULL,
   role TEXT,
   job_title TEXT,
+  model TEXT,
+  mode TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -119,6 +122,10 @@ const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   { table: "employees", column: "job_title", type: "TEXT" },
   { table: "messages", column: "source_uuid", type: "TEXT" },
   { table: "messages", column: "attachments", type: "TEXT" },
+  { table: "agents", column: "model", type: "TEXT" },
+  { table: "agents", column: "mode", type: "TEXT" },
+  { table: "employees", column: "model", type: "TEXT" },
+  { table: "employees", column: "mode", type: "TEXT" },
 ];
 
 const str = (value: unknown): string => String(value);
@@ -132,6 +139,8 @@ function toAgent(row: Row): Agent {
     species: (nullableStr(row.species) ?? "human") as Species,
     role: nullableStr(row.role),
     jobTitle: nullableStr(row.job_title),
+    model: nullableStr(row.model),
+    mode: (nullableStr(row.mode) === "turbo" ? "turbo" : "request_review") as AgentMode,
     createdAt: str(row.created_at),
     updatedAt: str(row.updated_at),
   };
@@ -150,6 +159,8 @@ function toEmployee(row: Row): Employee {
     importedAt: nullableStr(row.imported_at),
     role: nullableStr(row.role),
     jobTitle: nullableStr(row.job_title),
+    model: nullableStr(row.model),
+    mode: (nullableStr(row.mode) === "turbo" ? "turbo" : "request_review") as AgentMode,
     providerSessionId: nullableStr(row.provider_session_id),
     status: str(row.status) as EmployeeStatus,
     failureReason: nullableStr(row.failure_reason),
@@ -258,18 +269,38 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertAgent(a: Agent): void {
     this.db
       .prepare(
-        `INSERT INTO agents (id, boss_id, name, species, role, job_title, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, boss_id, name, species, role, job_title, model, mode, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(a.id, a.bossId, a.name, a.species, a.role, a.jobTitle, a.createdAt, a.updatedAt);
+      .run(
+        a.id,
+        a.bossId,
+        a.name,
+        a.species,
+        a.role,
+        a.jobTitle,
+        a.model ?? null,
+        a.mode ?? "request_review",
+        a.createdAt,
+        a.updatedAt,
+      );
   }
 
   updateAgent(a: Agent): void {
     this.db
       .prepare(
-        `UPDATE agents SET name = ?, species = ?, role = ?, job_title = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE agents SET name = ?, species = ?, role = ?, job_title = ?, model = ?, mode = ?, updated_at = ? WHERE id = ?`,
       )
-      .run(a.name, a.species, a.role, a.jobTitle, a.updatedAt, a.id);
+      .run(
+        a.name,
+        a.species,
+        a.role,
+        a.jobTitle,
+        a.model ?? null,
+        a.mode ?? "request_review",
+        a.updatedAt,
+        a.id,
+      );
   }
 
   getAgent(id: string): Agent | undefined {
@@ -296,8 +327,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertEmployee(e: Employee): void {
     this.db
       .prepare(
-        `INSERT INTO employees (id, boss_id, agent_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
+        `INSERT INTO employees (id, boss_id, agent_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, model, mode, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
       )
       .run(
         e.id,
@@ -316,6 +347,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.importedAt,
         e.role,
         e.jobTitle,
+        e.model ?? null,
+        e.mode ?? "request_review",
       );
   }
 
@@ -323,7 +356,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
     this.db
       .prepare(
         `UPDATE employees SET boss_id = ?, agent_id = ?, hired_by = ?, task = ?, working_directory = ?, provider_session_id = ?,
-         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ? WHERE id = ?`,
+         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ?, model = ?, mode = ? WHERE id = ?`,
       )
       .run(
         e.bossId,
@@ -340,6 +373,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.importedAt,
         e.role,
         e.jobTitle,
+        e.model ?? null,
+        e.mode ?? "request_review",
         e.id,
       );
   }

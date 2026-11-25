@@ -162,4 +162,40 @@ describe("Agent team management & live tool activity", () => {
       { employeeId: chat.id, category: null, serverName: null },
     ]);
   });
+
+  it("US-01 / AC-02, AC-03: persists and cascades agent model and mode and rejects invalid values", () => {
+    const h = createHarness();
+    const agent = h.office.createAgent({
+      bossId: "claude",
+      name: "Ada",
+      species: "fox",
+      model: "claude-opus-4-1",
+      mode: "turbo",
+    });
+    expect(agent.model).toBe("claude-opus-4-1");
+    expect(agent.mode).toBe("turbo");
+
+    const chat = h.office.hire({
+      agentId: agent.id,
+      bossId: "claude",
+      task: "Check config",
+      workingDirectory: h.dir,
+    });
+    expect(chat.model).toBe("claude-opus-4-1");
+    expect(chat.mode).toBe("turbo");
+
+    h.office.updateProfile(chat.id, { model: "claude-sonnet-4-5", mode: "request_review" });
+    const state = h.office.getState();
+    expect(state.employees.find((e) => e.id === chat.id)).toMatchObject({
+      model: "claude-sonnet-4-5",
+      mode: "request_review",
+    });
+    expect(state.agents.find((a) => a.id === agent.id)).toMatchObject({
+      model: "claude-sonnet-4-5",
+      mode: "request_review",
+    });
+
+    expect(() => h.office.updateAgent(agent.id, { mode: "invalid" })).toThrow(/mode/i);
+    expect(h.office.getState().agents.find((a) => a.id === agent.id)?.mode).toBe("request_review");
+  });
 });

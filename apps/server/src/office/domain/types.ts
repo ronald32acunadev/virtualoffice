@@ -62,6 +62,15 @@ export function isSpecies(value: unknown): value is Species {
 
 export const MAX_NAME_LENGTH = 40;
 export const MAX_JOB_TITLE_LENGTH = 60;
+export const MAX_MODEL_LENGTH = 120;
+
+export const AGENT_MODES = ["request_review", "turbo"] as const;
+export type AgentMode = (typeof AGENT_MODES)[number];
+export function isAgentMode(value: unknown): value is AgentMode {
+  return typeof value === "string" && (AGENT_MODES as readonly string[]).includes(value);
+}
+
+export type ProviderModelOption = { id: string; label: string };
 
 export type ToolActivityCategory =
   | "coding"
@@ -87,6 +96,8 @@ export type Agent = {
   role: string | null;
   /** Human-facing position / cargo assigned by the owner (provider-agnostic). */
   jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
   createdAt: string;
   updatedAt: string;
 };
@@ -106,6 +117,8 @@ export type Employee = {
   role: string | null;
   /** Human-facing position / cargo assigned by the owner (provider-agnostic). */
   jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;

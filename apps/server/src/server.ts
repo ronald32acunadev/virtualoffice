@@ -18,6 +18,7 @@ import { buildApp } from "./http/app.ts";
 import { TerminalSessionManager } from "./terminal/terminal-session-manager.ts";
 import { createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
+import { discoverProviderModels } from "./office/domain/provider-models.ts";
 import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
@@ -64,11 +65,12 @@ export async function startOfficeServer(
 
   const repository = new SqliteOfficeRepository(dbPath);
   const hasAgy = isBinaryAvailable("agy");
+  const hasOpenCode = isBinaryAvailable("opencode");
   const hasGemini = !hasAgy && isBinaryAvailable("gemini");
   const adapters: Partial<Record<BossId, AgentAdapter>> = {
     claude: new ClaudeAgentAdapter(),
     ...(isBinaryAvailable("codex") ? { codex: new CodexAgentAdapter() } : {}),
-    ...(isBinaryAvailable("opencode") ? { opencode: new OpenCodeAgentAdapter() } : {}),
+    ...(hasOpenCode ? { opencode: new OpenCodeAgentAdapter() } : {}),
     ...(hasAgy
       ? { gemini: new AntigravityAgentAdapter() }
       : hasGemini
@@ -96,6 +98,7 @@ export async function startOfficeServer(
       ...(hasAgy ? { gemini: new AntigravitySessionCatalog() } : {}),
     },
     ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
+    providerModelsLoader: () => discoverProviderModels({ hasAgy, hasOpenCode }),
   });
   office.recoverOnStartup();
   office.backfillProfiles();

@@ -186,6 +186,8 @@ describe("Agent team table and employees.agent_id migration", () => {
       species: "fox" as const,
       role: "review-risk",
       jobTitle: "Reviewer",
+      model: null,
+      mode: "request_review" as const,
       createdAt: "2026-11-24T00:00:00Z",
       updatedAt: "2026-11-24T00:00:00Z",
     };
@@ -194,11 +196,24 @@ describe("Agent team table and employees.agent_id migration", () => {
     expect(first.listAgents()).toEqual([agent]);
 
     const e1 = first.getEmployee("e1")!;
-    first.updateEmployee({ ...e1, agentId: "agent-1" });
-    expect(first.getEmployee("e1")?.agentId).toBe("agent-1");
+    expect(e1.model).toBeNull();
+    expect(e1.mode).toBe("request_review");
+    first.updateEmployee({ ...e1, agentId: "agent-1", model: "claude-opus-4-1", mode: "turbo" });
+    expect(first.getEmployee("e1")).toMatchObject({ agentId: "agent-1", model: "claude-opus-4-1", mode: "turbo" });
 
-    first.updateAgent({ ...agent, name: "Milo", jobTitle: "Lead Reviewer", updatedAt: "2026-11-24T01:00:00Z" });
-    expect(first.getAgent("agent-1")?.name).toBe("Milo");
+    first.updateAgent({
+      ...agent,
+      name: "Milo",
+      jobTitle: "Lead Reviewer",
+      model: "claude-sonnet-4-5",
+      mode: "turbo",
+      updatedAt: "2026-11-24T01:00:00Z",
+    });
+    expect(first.getAgent("agent-1")).toMatchObject({
+      name: "Milo",
+      model: "claude-sonnet-4-5",
+      mode: "turbo",
+    });
 
     first.reassignEmployeesAgent("agent-1", null);
     expect(first.getEmployee("e1")?.agentId).toBeNull();

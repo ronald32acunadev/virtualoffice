@@ -18,19 +18,23 @@ import type { TerminalGuard } from "../ports/terminal-guard.ts";
 import { buildCatalog } from "../domain/catalog.ts";
 import { generateName, generateSpecies, type RandomFn } from "../domain/names.ts";
 import { classifyToolActivity } from "../domain/tool-activity.ts";
+import { discoverProviderModels } from "../domain/provider-models.ts";
 import { isRateLimitErrorMessage } from "../../agents/usage-parser.ts";
 import { isMediaProvider, parseMediaUrl, resolveMediaMetadata, type FetchLike, type MediaKind, type MediaPlaybackState, type MediaPreset, type MediaProvider } from "../domain/media.ts";
 import { AttachmentStore, validateAndDecodeAttachments, type DecodedAttachment } from "./attachments.ts";
 import {
   BOSSES,
   MAX_JOB_TITLE_LENGTH,
+  MAX_MODEL_LENGTH,
   MAX_NAME_LENGTH,
   OfficeError,
   isActiveStatus,
+  isAgentMode,
   isDecision,
   isSpecies,
   type Agent,
   type AgentActivity,
+  type AgentMode,
   type ApprovalRequest,
   type Boss,
   type BossId,
@@ -45,6 +49,7 @@ import {
   type MessageAttachment,
   type Project,
   type ProviderCatalog,
+  type ProviderModelOption,
   type ProviderSyncStats,
   type Species,
   type StoredAttachment,
@@ -76,6 +81,7 @@ export type OfficeDeps = {
   terminals?: TerminalGuard;
   attachmentsDir?: string;
   mediaFetch?: FetchLike;
+  providerModelsLoader?: () => Promise<Record<BossId, ProviderModelOption[]>>;
 };
 
 const DEFAULT_PAGE_SIZE = 30;
@@ -122,6 +128,8 @@ export class OfficeService {
   private readonly terminals: TerminalGuard | undefined;
   private readonly attachmentStore: AttachmentStore;
   private readonly mediaFetch: FetchLike | undefined;
+  private readonly providerModelsLoader: (() => Promise<Record<BossId, ProviderModelOption[]>>) | undefined;
+  private cachedProviderModels: Record<BossId, ProviderModelOption[]> | null = null;
   /** Catalogs per absolute folder; only successful reads are stored. */
   private readonly catalogCache = new Map<string, Catalog>();
   /** In-flight probes per folder, so concurrent requests share one. */
@@ -151,6 +159,7 @@ export class OfficeService {
     this.terminals = deps.terminals;
     this.attachmentStore = new AttachmentStore(deps.attachmentsDir ?? path.join(os.tmpdir(), "virtualoffice-attachments"));
     this.mediaFetch = deps.mediaFetch;
+    this.providerModelsLoader = deps.providerModelsLoader;
   }
 
   subscribe(listener: Parameters<EventBus["subscribe"]>[0]): () => void {
@@ -322,12 +331,41 @@ export class OfficeService {
     return this.repository.listAgents();
   }
 
+  async getProviderModels(): Promise<Record<BossId, ProviderModelOption[]>> {
+    if (this.cachedProviderModels) return this.cachedProviderModels;
+    this.cachedProviderModels = await (this.providerModelsLoader
+      ? this.providerModelsLoader()
+      : discoverProviderModels());
+    return this.cachedProviderModels;
+  }
+
+  private parseModel(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string") {
+      throw new OfficeError("validation_error", "Model must be a string", "model");
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return null;
+    if (trimmed.length > MAX_MODEL_LENGTH) {
+      throw new OfficeError("validation_error", `Model must be at most ${MAX_MODEL_LENGTH} characters`, "model");
+    }
+    return trimmed;
+  }
+
+  private parseMode(value: unknown): AgentMode {
+    if (value === undefined || value === null || value === "") return "request_review";
+    if (isAgentMode(value)) return value;
+    throw new OfficeError("validation_error", "Unknown agent mode", "mode");
+  }
+
   createAgent(input: {
     bossId: unknown;
     name?: unknown;
     species?: unknown;
     role?: unknown;
     jobTitle?: unknown;
+    model?: unknown;
+    mode?: unknown;
   }): Agent {
     const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
@@ -344,6 +382,8 @@ export class OfficeService {
         ? generateSpecies(this.random)
         : parseSpecies(input.species);
     const jobTitle = parseJobTitle(input.jobTitle);
+    const model = this.parseModel(input.model);
+    const mode = this.parseMode(input.mode);
     const now = this.timestamp();
     const agent: Agent = {
       id: this.newId(),
@@ -352,6 +392,8 @@ export class OfficeService {
       species,
       role,
       jobTitle,
+      model,
+      mode,
       createdAt: now,
       updatedAt: now,
     };
@@ -362,7 +404,7 @@ export class OfficeService {
 
   updateAgent(
     agentId: string,
-    input: { name?: unknown; species?: unknown; role?: unknown; jobTitle?: unknown },
+    input: { name?: unknown; species?: unknown; role?: unknown; jobTitle?: unknown; model?: unknown; mode?: unknown },
   ): Agent {
     const existing = this.repository.getAgent(agentId);
     if (!existing) throw new OfficeError("not_found", "Agent not found");
@@ -370,32 +412,40 @@ export class OfficeService {
       input.name === undefined &&
       input.species === undefined &&
       input.role === undefined &&
-      input.jobTitle === undefined
+      input.jobTitle === undefined &&
+      input.model === undefined &&
+      input.mode === undefined
     ) {
-      throw new OfficeError("validation_error", "Provide a name, species, role, or job title", "name");
+      throw new OfficeError("validation_error", "Provide a name, species, role, job title, model, or mode", "name");
     }
     const nextRole = input.role === undefined ? existing.role : parseRole(input.role);
     if (nextRole !== null && existing.bossId !== "claude") {
       throw new OfficeError("validation_error", "Roles are only supported for Claude agents", "role");
     }
+    const nextModel = input.model === undefined ? (existing.model ?? null) : this.parseModel(input.model);
+    const nextMode = input.mode === undefined ? (existing.mode ?? "request_review") : this.parseMode(input.mode);
     const updated: Agent = {
       ...existing,
       name: input.name === undefined ? existing.name : parseName(input.name),
       species: input.species === undefined ? existing.species : parseSpecies(input.species),
       role: nextRole,
       jobTitle: input.jobTitle === undefined ? existing.jobTitle : parseJobTitle(input.jobTitle),
+      model: nextModel,
+      mode: nextMode,
       updatedAt: this.timestamp(),
     };
     this.repository.updateAgent(updated);
     this.events.publish({ type: "agent_updated", agent: updated });
 
-    // Cascade identity fields to all chats owned by this agent
+    // Cascade identity & config fields to all chats owned by this agent
     for (const employee of this.repository.listEmployees()) {
       if (employee.agentId !== agentId) continue;
       if (
         employee.name === updated.name &&
         employee.species === updated.species &&
-        employee.jobTitle === updated.jobTitle
+        employee.jobTitle === updated.jobTitle &&
+        (employee.model ?? null) === (updated.model ?? null) &&
+        (employee.mode ?? "request_review") === (updated.mode ?? "request_review")
       ) {
         continue;
       }
@@ -403,6 +453,8 @@ export class OfficeService {
         name: updated.name,
         species: updated.species,
         jobTitle: updated.jobTitle,
+        model: updated.model ?? null,
+        mode: updated.mode ?? "request_review",
       });
     }
     return updated;
@@ -968,6 +1020,8 @@ export class OfficeService {
     const { boss, task, workingDirectory } = this.validateHire(resolvedInput);
     const role = parseRole(resolvedInput.role);
     const jobTitle = parseJobTitle(resolvedInput.jobTitle);
+    const model = this.parseModel(resolvedInput.model);
+    const mode = this.parseMode(resolvedInput.mode);
     const hasExplicitAgentId = typeof input.agentId === "string" && input.agentId !== "";
     let agent: Agent;
     if (hasExplicitAgentId) {
@@ -997,6 +1051,8 @@ export class OfficeService {
       importedAt: null,
       role: agent.role,
       jobTitle: agent.jobTitle,
+      model: hasExplicitAgentId ? (input.model !== undefined ? model : (agent.model ?? null)) : (model ?? agent.model ?? null),
+      mode: hasExplicitAgentId ? (input.mode !== undefined ? mode : (agent.mode ?? "request_review")) : (input.mode !== undefined ? mode : (agent.mode ?? "request_review")),
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -1025,14 +1081,20 @@ export class OfficeService {
     return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
-  /** Renames an employee (or its linked agent), changes species, and/or updates job title. */
+  /** Renames an employee (or its linked agent), changes species, job title, model, and/or mode. */
   updateProfile(
     employeeId: string,
-    input: { name?: unknown; species?: unknown; jobTitle?: unknown },
+    input: { name?: unknown; species?: unknown; jobTitle?: unknown; model?: unknown; mode?: unknown },
   ): Employee {
     const existing = this.requireEmployee(employeeId);
-    if (input.name === undefined && input.species === undefined && input.jobTitle === undefined) {
-      throw new OfficeError("validation_error", "Provide a name, species, or job title", "name");
+    if (
+      input.name === undefined &&
+      input.species === undefined &&
+      input.jobTitle === undefined &&
+      input.model === undefined &&
+      input.mode === undefined
+    ) {
+      throw new OfficeError("validation_error", "Provide a name, species, job title, model, or mode", "name");
     }
     if (existing.agentId && this.repository.getAgent(existing.agentId)) {
       this.updateAgent(existing.agentId, input);
@@ -1042,6 +1104,8 @@ export class OfficeService {
     if (input.name !== undefined) patch.name = parseName(input.name);
     if (input.species !== undefined) patch.species = parseSpecies(input.species);
     if (input.jobTitle !== undefined) patch.jobTitle = parseJobTitle(input.jobTitle);
+    if (input.model !== undefined) patch.model = this.parseModel(input.model);
+    if (input.mode !== undefined) patch.mode = this.parseMode(input.mode);
     return this.patchEmployee(employeeId, patch);
   }
 
@@ -1645,6 +1709,8 @@ type HireInput = {
   species?: unknown;
   role?: unknown;
   jobTitle?: unknown;
+  model?: unknown;
+  mode?: unknown;
 };
 
 /** `undefined`, `null`, or blank string clears job title; otherwise trimmed up to MAX_JOB_TITLE_LENGTH. */
