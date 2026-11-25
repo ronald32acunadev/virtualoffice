@@ -1812,7 +1812,7 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   padding: 0.55rem 0.7rem;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--surface-alt, rgba(255, 255, 255, 0.04));
+  background: var(--card);
 }
 
 .team-agent-row.is-editing {
@@ -1887,8 +1887,8 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   padding: 0.4rem 0.55rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--surface-alt, rgba(255, 255, 255, 0.05));
-  color: inherit;
+  background: var(--card);
+  color: var(--text);
   cursor: pointer;
   font-size: 0.82rem;
 }
@@ -1985,20 +1985,21 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   padding: 0.22rem 0.55rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--surface-alt, rgba(255, 255, 255, 0.06));
-  color: inherit;
+  background: var(--card);
+  color: var(--text);
   font-size: 0.78rem;
   cursor: pointer;
   max-width: 210px;
 }
 
 .composer-config-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
   border-color: var(--accent);
 }
 
 .composer-config-btn.is-turbo {
-  border-color: #f59e0b;
-  color: #fbbf24;
+  border-color: var(--warn);
+  color: var(--warn);
 }
 
 .composer-config-text {
@@ -2019,8 +2020,9 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   padding: 0.35rem;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: var(--surface, #1e2430);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow-popover);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2059,9 +2061,9 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   border-radius: 999px;
   font-size: 0.68rem;
   font-weight: 500;
-  background: rgba(255, 255, 255, 0.1);
-  color: inherit;
-  opacity: 0.85;
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  border: 1px solid var(--badge-border);
 }
 
 .popover-option-right {
@@ -2155,7 +2157,7 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 
 .popover-option:hover,
 .popover-option.is-active {
-  background: var(--surface-hover, rgba(255, 255, 255, 0.1));
+  background: var(--surface-hover);
 }
 
 .popover-mode-option {
@@ -2206,9 +2208,9 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 }
 
 .composer-voice-btn.is-recording {
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.18);
-  color: #fca5a5;
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger-text);
 }
 
 .msg-audio-wrap,
@@ -2219,7 +2221,7 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   padding: 0.35rem 0.5rem;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--surface-alt, rgba(255, 255, 255, 0.05));
+  background: var(--card);
 }
 
 .msg-audio-player {
