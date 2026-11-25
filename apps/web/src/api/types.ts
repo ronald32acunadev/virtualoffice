@@ -56,7 +56,15 @@ export type AgentActivity = {
   startedAt: string;
 };
 
-export type AgentMode = "request_review" | "turbo";
+export type AgentMode =
+  | "request_review"
+  | "auto"
+  | "default"
+  | "acceptEdits"
+  | "plan"
+  | "bypassPermissions"
+  | "turbo";
+export type AgentEffort = "low" | "medium" | "high" | "max";
 export type ProviderModelOption = { id: string; label: string };
 
 export type Agent = {
@@ -68,6 +76,7 @@ export type Agent = {
   jobTitle: string | null;
   model?: string | null;
   mode?: AgentMode;
+  effort?: AgentEffort | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -86,6 +95,7 @@ export type Employee = {
   jobTitle: string | null;
   model?: string | null;
   mode?: AgentMode;
+  effort?: AgentEffort | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;

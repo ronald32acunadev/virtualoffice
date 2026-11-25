@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
@@ -83,12 +84,13 @@ export async function startOfficeServer(
     onActiveChange: (employeeId, active) => office.notifyTerminal(employeeId, active),
   });
 
+  const claudeCatalogProvider = new ClaudeCatalogProvider();
   const office = new OfficeService({
     repository,
     adapters,
     events: new InMemoryEventBus(),
     sessions: new ClaudeSessionCatalog(),
-    catalogProvider: new ClaudeCatalogProvider(),
+    catalogProvider: claudeCatalogProvider,
     terminals,
     attachmentsDir,
     sessionCatalogs: {
@@ -98,7 +100,12 @@ export async function startOfficeServer(
       ...(hasAgy ? { gemini: new AntigravitySessionCatalog() } : {}),
     },
     ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
-    providerModelsLoader: () => discoverProviderModels({ hasAgy, hasOpenCode }),
+    providerModelsLoader: () =>
+      discoverProviderModels({
+        hasAgy,
+        hasOpenCode,
+        loadClaudeModels: () => claudeCatalogProvider.probeModels(os.homedir()),
+      }),
   });
   office.recoverOnStartup();
   office.backfillProfiles();

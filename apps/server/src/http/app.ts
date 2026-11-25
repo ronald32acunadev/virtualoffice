@@ -136,6 +136,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       jobTitle: body.jobTitle,
       model: body.model,
       mode: body.mode,
+      effort: body.effort,
     });
     return reply.code(201).send({ agent });
   });
@@ -149,6 +150,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         jobTitle: body.jobTitle,
         model: body.model,
         mode: body.mode,
+        effort: body.effort,
       }),
     };
   });
@@ -186,6 +188,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       jobTitle: body.jobTitle,
       model: body.model,
       mode: body.mode,
+      effort: body.effort,
     });
     return reply.code(201).send({ employee });
   });
@@ -214,6 +217,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         jobTitle: body.jobTitle,
         model: body.model,
         mode: body.mode,
+        effort: body.effort,
       }),
     };
   });

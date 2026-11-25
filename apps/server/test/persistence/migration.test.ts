@@ -188,6 +188,7 @@ describe("Agent team table and employees.agent_id migration", () => {
       jobTitle: "Reviewer",
       model: null,
       mode: "request_review" as const,
+      effort: null,
       createdAt: "2026-11-24T00:00:00Z",
       updatedAt: "2026-11-24T00:00:00Z",
     };

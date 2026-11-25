@@ -91,3 +91,62 @@ describe("US-02 / AC-04", () => {
     expect(spawner.last.args).toContain("--yolo");
   });
 });
+
+describe("US-05 / AC-02: native per-provider modes and Claude effort", () => {
+  it("ClaudeAgentAdapter passes native permissionMode (auto/acceptEdits/plan/default) and effort", async () => {
+    const h = createHarness();
+    const agent = h.office.createAgent({
+      bossId: "claude",
+      name: "NativeClaude",
+      species: "cat",
+      model: "opus",
+      mode: "acceptEdits",
+      effort: "high",
+    });
+    h.office.hire({
+      agentId: agent.id,
+      bossId: "claude",
+      task: "Edit carefully",
+      workingDirectory: h.dir,
+    });
+    await waitFor(() => h.sdk.sessions.length > 0);
+    expect(h.sdk.last.options).toMatchObject({
+      model: "opus",
+      permissionMode: "acceptEdits",
+      effort: "high",
+    });
+    expect(h.sdk.last.options.allowDangerouslySkipPermissions).toBeUndefined();
+  });
+
+  it("CodexAgentAdapter passes --approve-for-me for auto mode", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new CodexAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("codex", "/repo"), mode: "auto" as const };
+    adapter.start({ employee, prompt: "Check" }, sink);
+    expect(spawner.last.args).toContain("--approve-for-me");
+    expect(spawner.last.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+  });
+
+  it("AntigravityAgentAdapter passes --mode accept-edits / auto / plan", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new AntigravityAgentAdapter({ spawnFn: spawner.spawn });
+
+    adapter.start({ employee: { ...makeEmployee("gemini", "/repo"), mode: "acceptEdits" }, prompt: "Edit" }, sink);
+    expect(spawner.last.args).toContain("--mode");
+    expect(spawner.last.args).toContain("accept-edits");
+
+    adapter.start({ employee: { ...makeEmployee("gemini", "/repo"), mode: "plan" }, prompt: "Plan" }, sink);
+    expect(spawner.last.args).toContain("plan");
+  });
+
+  it("OpenCodeAgentAdapter passes --auto for auto mode", () => {
+    const spawner = createFakeSpawner();
+    const { sink } = createRecordingSink();
+    const adapter = new OpenCodeAgentAdapter(spawner.spawn);
+    const employee = { ...makeEmployee("opencode", "/repo"), mode: "auto" as const };
+    adapter.start({ employee, prompt: "Go" }, sink);
+    expect(spawner.last.args).toContain("--auto");
+  });
+});

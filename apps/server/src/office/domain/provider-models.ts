@@ -6,9 +6,9 @@ const execFileAsync = promisify(execFile);
 
 export const CURATED_MODELS: Record<BossId, readonly ProviderModelOption[]> = {
   claude: [
-    { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
-    { id: "claude-opus-4-1", label: "Claude Opus 4.1" },
-    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+    { id: "opus", label: "Opus 5.5" },
+    { id: "sonnet", label: "Sonnet 5.5" },
+    { id: "haiku", label: "Haiku 5.5" },
   ],
   codex: [
     { id: "gpt-5.4", label: "GPT-5.4" },
@@ -73,6 +73,7 @@ export type CommandRunner = (command: string, args: string[], timeoutMs: number)
 export async function discoverProviderModels(options?: {
   hasAgy?: boolean;
   hasOpenCode?: boolean;
+  loadClaudeModels?: () => Promise<ProviderModelOption[]>;
   runCommand?: CommandRunner;
   timeoutMs?: number;
 }): Promise<Record<BossId, ProviderModelOption[]>> {
@@ -90,6 +91,17 @@ export async function discoverProviderModels(options?: {
     opencode: [...CURATED_MODELS.opencode],
     gemini: [...CURATED_MODELS.gemini],
   };
+
+  if (options?.loadClaudeModels) {
+    try {
+      const claudeModels = await options.loadClaudeModels();
+      if (claudeModels.length > 0) {
+        result.claude = claudeModels;
+      }
+    } catch {
+      // fall back to curated
+    }
+  }
 
   if (options?.hasAgy) {
     try {

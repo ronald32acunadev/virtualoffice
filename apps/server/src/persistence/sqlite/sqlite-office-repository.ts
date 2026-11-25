@@ -1,24 +1,27 @@
 import { DatabaseSync } from "node:sqlite";
 import type { OfficeRepository } from "../../office/ports/office-repository.ts";
-import type {
-  Agent,
-  AgentMode,
-  ApprovalRequest,
-  Employee,
-  EmployeeStatus,
-  Message,
-  MessageAttachment,
-  BossId,
-  MessageKind,
-  ApprovalKind,
-  ApprovalStatus,
-  Decision,
-  Species,
-  Project,
-  MediaKind,
-  MediaPlaybackState,
-  MediaPreset,
-  MediaProvider,
+import {
+  isAgentEffort,
+  isAgentMode,
+  type Agent,
+  type AgentEffort,
+  type AgentMode,
+  type ApprovalRequest,
+  type Employee,
+  type EmployeeStatus,
+  type Message,
+  type MessageAttachment,
+  type BossId,
+  type MessageKind,
+  type ApprovalKind,
+  type ApprovalStatus,
+  type Decision,
+  type Species,
+  type Project,
+  type MediaKind,
+  type MediaPlaybackState,
+  type MediaPreset,
+  type MediaProvider,
 } from "../../office/domain/types.ts";
 
 type Row = Record<string, unknown>;
@@ -34,6 +37,7 @@ CREATE TABLE IF NOT EXISTS agents (
   job_title TEXT,
   model TEXT,
   mode TEXT,
+  effort TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -124,12 +128,22 @@ const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   { table: "messages", column: "attachments", type: "TEXT" },
   { table: "agents", column: "model", type: "TEXT" },
   { table: "agents", column: "mode", type: "TEXT" },
+  { table: "agents", column: "effort", type: "TEXT" },
   { table: "employees", column: "model", type: "TEXT" },
   { table: "employees", column: "mode", type: "TEXT" },
+  { table: "employees", column: "effort", type: "TEXT" },
 ];
 
 const str = (value: unknown): string => String(value);
 const nullableStr = (value: unknown): string | null => (value === null || value === undefined ? null : String(value));
+const parseStoredMode = (value: unknown): AgentMode => {
+  const raw = nullableStr(value);
+  return isAgentMode(raw) ? raw : "request_review";
+};
+const parseStoredEffort = (value: unknown): AgentEffort | null => {
+  const raw = nullableStr(value);
+  return isAgentEffort(raw) ? raw : null;
+};
 
 function toAgent(row: Row): Agent {
   return {
@@ -140,7 +154,8 @@ function toAgent(row: Row): Agent {
     role: nullableStr(row.role),
     jobTitle: nullableStr(row.job_title),
     model: nullableStr(row.model),
-    mode: (nullableStr(row.mode) === "turbo" ? "turbo" : "request_review") as AgentMode,
+    mode: parseStoredMode(row.mode),
+    effort: parseStoredEffort(row.effort),
     createdAt: str(row.created_at),
     updatedAt: str(row.updated_at),
   };
@@ -160,7 +175,8 @@ function toEmployee(row: Row): Employee {
     role: nullableStr(row.role),
     jobTitle: nullableStr(row.job_title),
     model: nullableStr(row.model),
-    mode: (nullableStr(row.mode) === "turbo" ? "turbo" : "request_review") as AgentMode,
+    mode: parseStoredMode(row.mode),
+    effort: parseStoredEffort(row.effort),
     providerSessionId: nullableStr(row.provider_session_id),
     status: str(row.status) as EmployeeStatus,
     failureReason: nullableStr(row.failure_reason),
@@ -269,8 +285,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertAgent(a: Agent): void {
     this.db
       .prepare(
-        `INSERT INTO agents (id, boss_id, name, species, role, job_title, model, mode, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO agents (id, boss_id, name, species, role, job_title, model, mode, effort, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         a.id,
@@ -281,6 +297,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         a.jobTitle,
         a.model ?? null,
         a.mode ?? "request_review",
+        a.effort ?? null,
         a.createdAt,
         a.updatedAt,
       );
@@ -289,7 +306,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
   updateAgent(a: Agent): void {
     this.db
       .prepare(
-        `UPDATE agents SET name = ?, species = ?, role = ?, job_title = ?, model = ?, mode = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE agents SET name = ?, species = ?, role = ?, job_title = ?, model = ?, mode = ?, effort = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         a.name,
@@ -298,6 +315,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         a.jobTitle,
         a.model ?? null,
         a.mode ?? "request_review",
+        a.effort ?? null,
         a.updatedAt,
         a.id,
       );
@@ -327,8 +345,8 @@ export class SqliteOfficeRepository implements OfficeRepository {
   insertEmployee(e: Employee): void {
     this.db
       .prepare(
-        `INSERT INTO employees (id, boss_id, agent_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, model, mode, seq)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
+        `INSERT INTO employees (id, boss_id, agent_id, hired_by, task, working_directory, provider_session_id, status, failure_reason, created_at, updated_at, name, species, imported_at, role, job_title, model, mode, effort, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM employees))`,
       )
       .run(
         e.id,
@@ -349,6 +367,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.jobTitle,
         e.model ?? null,
         e.mode ?? "request_review",
+        e.effort ?? null,
       );
   }
 
@@ -356,7 +375,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
     this.db
       .prepare(
         `UPDATE employees SET boss_id = ?, agent_id = ?, hired_by = ?, task = ?, working_directory = ?, provider_session_id = ?,
-         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ?, model = ?, mode = ? WHERE id = ?`,
+         status = ?, failure_reason = ?, updated_at = ?, name = ?, species = ?, imported_at = ?, role = ?, job_title = ?, model = ?, mode = ?, effort = ? WHERE id = ?`,
       )
       .run(
         e.bossId,
@@ -375,6 +394,7 @@ export class SqliteOfficeRepository implements OfficeRepository {
         e.jobTitle,
         e.model ?? null,
         e.mode ?? "request_review",
+        e.effort ?? null,
         e.id,
       );
   }

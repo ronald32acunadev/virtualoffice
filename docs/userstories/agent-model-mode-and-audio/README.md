@@ -2,8 +2,8 @@
 
 - **Feature:** `agent-model-mode-and-audio`
 - **Branch:** `feature/agent-model-mode-and-audio`
-- **Execution mode:** `all`
-- **Status:** Complete (all 4 stories verified)
+- **Execution mode:** Pending user selection for revised scope (`US-05`)
+- **Status:** Revision pending approval (`US-01`..`US-04` complete; `US-05` pending)
 
 ## Scope & Confirmed Facts
 
@@ -102,3 +102,32 @@
 | `US-04 / AC-01` | `apps/server/test/office/chat-attachments.test.ts` — `US-04 / AC-01: serves safe audio attachments inline with nosniff header` | Passed (`vitest`, 11/11) |
 | `US-04 / AC-02`, `US-04 / AC-03`, `US-04 / AC-04` | `apps/web/src/state/attachments.test.ts` — `US-04 / AC-02, AC-04: detects playable audio MIME types and formats voice filenames and durations`; `npm run typecheck -w apps/web` & `npm run build` | Passed (`vitest`, 8/8; typecheck & build OK) |
 | Regression: image & generic file attachments | `apps/server/test/office/chat-attachments.test.ts`, `apps/web/src/state/attachments.test.ts` | Passed |
+
+
+---
+
+### US-05: Native Per-Provider Modes, Live Claude SDK Models & Effort Selector (Revision)
+- **Status:** `complete`
+- **Dependencies:** `US-01`, `US-02`, `US-03`
+- **Story:** As a Virtual Office user, I want each provider to show its own real models (including live Claude SDK models instead of hardcoded outdated ones) and its own native execution modes (Claude: Auto / Manual / Accept edits / Plan / Bypass permissions + Effort; Antigravity: Request Review / Turbo / Accept edits / Auto / Plan; Codex: Manual / Auto / Turbo; OpenCode: Manual / Auto), so that the selectors match the real capabilities of each agent.
+- **Acceptance Criteria:**
+  - `US-05 / AC-01`: Server `provider-models.ts` discovers live Claude models via `ClaudeCatalogProvider` / SDK `initializationResult().models` (falling back to current defaults only if unavailable) alongside `agy models` and `opencode models`, and exposes provider-specific `modes` metadata in `GET /api/models` (or `/api/provider-capabilities`).
+  - `US-05 / AC-02`: Domain validation (`AgentMode`) and SQLite persistence support all native provider modes (`auto`, `default` / `request_review`, `acceptEdits`, `plan`, `bypassPermissions` / `turbo`) plus optional `effort` (`"low" | "medium" | "high" | "max" | null`) for Claude.
+  - `US-05 / AC-03`: Every adapter maps its native modes accurately:
+    - `ClaudeAgentAdapter`: passes `permissionMode` (`"auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions"` with `allowDangerouslySkipPermissions: true` only for `bypassPermissions`) and `effort` when set.
+    - `AntigravityAgentAdapter`: maps `turbo` → `--dangerously-skip-permissions`, `acceptEdits` → `--mode accept-edits`, `auto` → `--mode auto`, `plan` → `--mode plan`.
+    - `CodexAgentAdapter`: maps `auto` → `--approve-for-me`, `turbo` → `--dangerously-bypass-approvals-and-sandbox`.
+    - `OpenCodeAgentAdapter`: maps `auto` / `turbo` → `--auto`.
+  - `US-05 / AC-04`: `ComposerConfigControls` and `TeamModal` render provider-native Mode and Model menus matching what users are accustomed to:
+    - Claude: live models + inline `Effort` (`Low`, `Medium`, `High`, `Max`) and Mode menu (`Auto (Default)`, `Manual`, `Accept edits`, `Plan`, and separated `Bypass permissions` at bottom).
+    - Antigravity (`agy`): live `agy models` and Mode menu (`Request Review`, `Turbo`, `Accept edits`, `Auto`, `Plan`).
+    - Codex: `Manual`, `Auto`, `Turbo`; OpenCode: `Manual`, `Auto`.
+    - Composer layout places Model/Effort + Mode pills cleanly in the footer alongside the Usage Ring, and places the microphone button (`🎤`) on the right side of the input bar next to Send.
+- **Verification Mapping:**
+
+| Story / criterion or regression risk | Test file and test name / procedure | Observed result and evidence |
+| --- | --- | --- |
+| `US-05 / AC-01` | `apps/server/test/office/provider-models.test.ts` — `US-05 / AC-01: discoverProviderModels uses live Claude models when loadClaudeModels returns results and falls back otherwise` | Passed (`vitest`, 4/4) |
+| `US-05 / AC-02`, `US-05 / AC-03` | `apps/server/test/agents/adapter-model-mode.test.ts` — `US-05 / AC-02: native per-provider modes and Claude effort` (Claude `acceptEdits` + `effort`, Codex `--approve-for-me`, Antigravity `--mode`, OpenCode `--auto`) | Passed (`vitest`, 10/10) |
+| `US-05 / AC-04` | `apps/web/src/state/agentConfig.test.ts` — `US-05 / AC-02: getModesForBoss returns native modes per provider and formatEffortLabel formats effort`; `npm run typecheck && npm run build` | Passed (`vitest`, 4/4; typecheck 0 errors; Vite build OK) |
+| Regression: existing `US-01..US-04` tests | Full `npm test` (server + web) | Passed (`apps/server`: 44 files, 339/339; `apps/web`: 30 files, 210/210) |

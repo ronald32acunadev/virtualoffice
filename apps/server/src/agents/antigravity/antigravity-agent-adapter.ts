@@ -266,7 +266,16 @@ export class AntigravityAgentAdapter extends CliJsonlAdapter {
         const dirs = [...new Set((attachments ?? []).map((a) => path.dirname(a.path)))];
         const addDirFlags = dirs.flatMap((dir) => ["--add-dir", dir]);
         const modelFlags = employee.model ? ["--model", employee.model] : [];
-        const turboFlags = employee.mode === "turbo" ? ["--dangerously-skip-permissions"] : [];
+        const modeFlags =
+          employee.mode === "turbo" || employee.mode === "bypassPermissions"
+            ? ["--dangerously-skip-permissions"]
+            : employee.mode === "acceptEdits"
+              ? ["--mode", "accept-edits"]
+              : employee.mode === "auto"
+                ? ["--mode", "auto"]
+                : employee.mode === "plan"
+                  ? ["--mode", "plan"]
+                  : [];
 
         let finalPrompt = prompt.trim();
         if (attachments && attachments.length > 0) {
@@ -279,8 +288,8 @@ export class AntigravityAgentAdapter extends CliJsonlAdapter {
         }
 
         return resume
-          ? ["--conversation", resume, ...modelFlags, ...turboFlags, ...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"]
-          : [...modelFlags, ...turboFlags, ...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"];
+          ? ["--conversation", resume, ...modelFlags, ...modeFlags, ...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"]
+          : [...modelFlags, ...modeFlags, ...addDirFlags, "-p", finalPrompt, "--output-format", "stream-json"];
       },
       createParser: createAntigravityParser,
     };

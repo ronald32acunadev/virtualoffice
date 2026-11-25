@@ -50,4 +50,24 @@ describe("US-01 / AC-04: provider-models", () => {
     });
     expect(fallback).toEqual(CURATED_MODELS);
   });
+
+  it("US-05 / AC-01: discoverProviderModels uses live Claude models when loadClaudeModels returns results and falls back otherwise", async () => {
+    const withClaude = await discoverProviderModels({
+      loadClaudeModels: async () => [
+        { id: "opus", label: "Opus 5.5" },
+        { id: "sonnet", label: "Sonnet 5.5" },
+      ],
+    });
+    expect(withClaude.claude).toEqual([
+      { id: "opus", label: "Opus 5.5" },
+      { id: "sonnet", label: "Sonnet 5.5" },
+    ]);
+
+    const failingClaude = await discoverProviderModels({
+      loadClaudeModels: async () => {
+        throw new Error("sdk unavailable");
+      },
+    });
+    expect(failingClaude.claude).toEqual(CURATED_MODELS.claude);
+  });
 });

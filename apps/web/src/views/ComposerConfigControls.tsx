@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { AgentMode, BossId, ProviderModelOption } from "../api/types";
+import type { AgentEffort, AgentMode, BossId, ProviderModelOption } from "../api/types";
 import {
-  AGENT_MODE_OPTIONS,
+  AGENT_EFFORT_OPTIONS,
   buildModelOptionsForBoss,
+  formatEffortLabel,
   getAgentModeOption,
+  getModesForBoss,
   resolveModelLabel,
 } from "../state/agentConfig";
 
@@ -13,26 +15,35 @@ export function ComposerConfigControls({
   bossId,
   model,
   mode,
+  effort,
   providerModels,
   onChangeModel,
   onChangeMode,
+  onChangeEffort,
   disabled,
 }: {
   bossId: BossId;
   model: string | null | undefined;
   mode: AgentMode | null | undefined;
+  effort?: AgentEffort | null;
   providerModels: Partial<Record<BossId, ProviderModelOption[]>>;
   onChangeModel: (model: string | null) => void;
   onChangeMode: (mode: AgentMode) => void;
+  onChangeEffort?: (effort: AgentEffort | null) => void;
   disabled?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [openPopover, setOpenPopover] = useState<PopoverKey>(null);
 
   const options = buildModelOptionsForBoss(bossId, providerModels, model);
-  const activeMode = getAgentModeOption(mode);
+  const modeOptions = getModesForBoss(bossId);
+  const activeMode = getAgentModeOption(mode, bossId);
   const modelLabel = resolveModelLabel(model, options);
-  const modeLabel = activeMode.id === "turbo" ? "⚡ Turbo" : "👁 Request Review";
+  const isClaude = bossId === "claude";
+  const effortLabel = formatEffortLabel(effort);
+
+  const primaryModes = isClaude ? modeOptions.filter((m) => !m.dangerous) : modeOptions;
+  const dangerModes = isClaude ? modeOptions.filter((m) => m.dangerous) : [];
 
   const togglePopover = (key: Exclude<PopoverKey, null>) => {
     if (disabled) return;
@@ -57,6 +68,40 @@ export function ComposerConfigControls({
     };
   }, [openPopover]);
 
+  const renderModeOption = (option: (typeof modeOptions)[number], danger: boolean) => {
+    const isActive = option.id === activeMode.id;
+    return (
+      <button
+        key={option.id}
+        type="button"
+        role="menuitem"
+        className={`popover-option popover-mode-option${danger ? " popover-danger-option" : ""}${isActive ? " is-active" : ""}`}
+        onClick={() => {
+          onChangeMode(option.id);
+          setOpenPopover(null);
+        }}
+      >
+        <span className="mode-text">
+          <span className="mode-label-row">
+            <span className="mode-label">{option.label}</span>
+            {option.isDefault ? <span className="popover-default-badge">Default</span> : null}
+          </span>
+          {!danger && option.description ? <span className="mode-desc">{option.description}</span> : null}
+        </span>
+        <span className="popover-option-right">
+          {danger ? (
+            <span className="popover-enable-tag">{isActive ? "Active" : "Enable"}</span>
+          ) : (
+            <>
+              {isActive ? <span className="check">✓</span> : null}
+              {option.shortcut ? <span className="popover-shortcut">{option.shortcut}</span> : null}
+            </>
+          )}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="composer-config-controls" ref={wrapRef}>
       <div className="composer-config-item">
@@ -70,11 +115,12 @@ export function ComposerConfigControls({
           title="Select model"
         >
           <span className="composer-config-text">{modelLabel}</span>
+          {isClaude ? <span className="composer-config-effort">{effortLabel}</span> : null}
           <span aria-hidden="true">▾</span>
         </button>
 
         {openPopover === "model" ? (
-          <div className="composer-config-popover" role="menu" aria-label="Model">
+          <div className="composer-config-popover composer-config-popover-right" role="menu" aria-label="Model">
             <div className="popover-header">Model</div>
             <button
               type="button"
@@ -86,9 +132,11 @@ export function ComposerConfigControls({
               }}
             >
               <span>Default model</span>
-              {!model ? <span className="check">✓</span> : null}
+              <span className="popover-option-right">
+                {!model ? <span className="check">✓</span> : null}
+              </span>
             </button>
-            {options.map((option) => {
+            {options.map((option, index) => {
               const isActive = option.id === model;
               return (
                 <button
@@ -102,10 +150,36 @@ export function ComposerConfigControls({
                   }}
                 >
                   <span>{option.label}</span>
-                  {isActive ? <span className="check">✓</span> : null}
+                  <span className="popover-option-right">
+                    {isActive ? <span className="check">✓</span> : <span className="popover-shortcut">{index + 1}</span>}
+                  </span>
                 </button>
               );
             })}
+            {isClaude && onChangeEffort ? (
+              <>
+                <div className="popover-divider" />
+                <div className="popover-effort-block">
+                  <div className="popover-effort-label">Effort</div>
+                  <div className="popover-effort-row" role="group" aria-label="Reasoning effort">
+                    {AGENT_EFFORT_OPTIONS.map((opt) => {
+                      const active = (effort ?? "medium") === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`effort-pill${active ? " is-active" : ""}`}
+                          aria-pressed={active}
+                          onClick={() => onChangeEffort(opt.id)}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -113,43 +187,27 @@ export function ComposerConfigControls({
       <div className="composer-config-item">
         <button
           type="button"
-          className={`composer-config-btn${activeMode.id === "turbo" ? " is-turbo" : ""}`}
+          className={`composer-config-btn${activeMode.dangerous ? " is-turbo" : ""}`}
           disabled={disabled}
           onClick={() => togglePopover("mode")}
           aria-haspopup="menu"
           aria-expanded={openPopover === "mode"}
           title="Select agent execution mode"
         >
-          <span className="composer-config-text">{modeLabel}</span>
+          <span className="composer-config-text">{activeMode.shortLabel}</span>
           <span aria-hidden="true">▾</span>
         </button>
 
         {openPopover === "mode" ? (
-          <div className="composer-config-popover composer-mode-popover" role="menu" aria-label="Agent mode">
-            <div className="popover-header">This Conversation</div>
-            {AGENT_MODE_OPTIONS.map((option) => {
-              const isActive = option.id === activeMode.id;
-              const icon = option.id === "request_review" ? "👁" : "⚡";
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="menuitem"
-                  className={`popover-option popover-mode-option${isActive ? " is-active" : ""}`}
-                  onClick={() => {
-                    onChangeMode(option.id);
-                    setOpenPopover(null);
-                  }}
-                >
-                  <span className="mode-icon" aria-hidden="true">{icon}</span>
-                  <span className="mode-text">
-                    <span className="mode-label">{option.label}</span>
-                    <span className="mode-desc">{option.description}</span>
-                  </span>
-                  {isActive ? <span className="check">✓</span> : null}
-                </button>
-              );
-            })}
+          <div className="composer-config-popover composer-mode-popover composer-config-popover-right" role="menu" aria-label="Agent mode">
+            <div className="popover-header">{isClaude ? "Mode" : "This Conversation"}</div>
+            {primaryModes.map((option) => renderModeOption(option, false))}
+            {isClaude && dangerModes.length > 0 ? (
+              <>
+                <div className="popover-divider" />
+                {dangerModes.map((option) => renderModeOption(option, true))}
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -2026,8 +2026,106 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
   gap: 2px;
 }
 
+.composer-config-popover-right {
+  left: auto;
+  right: 0;
+}
+
+.composer-config-effort {
+  opacity: 0.72;
+  font-size: 0.75rem;
+}
+
 .composer-mode-popover {
-  min-width: 270px;
+  min-width: 280px;
+}
+
+.popover-divider {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--border);
+}
+
+.mode-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.popover-default-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  opacity: 0.85;
+}
+
+.popover-option-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.popover-shortcut {
+  font-size: 0.74rem;
+  opacity: 0.55;
+  min-width: 0.8rem;
+  text-align: right;
+}
+
+.popover-enable-tag {
+  font-size: 0.76rem;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+.popover-danger-option {
+  align-items: center;
+}
+
+.popover-effort-block {
+  padding: 0.35rem 0.5rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.popover-effort-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.popover-effort-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+}
+
+.effort-pill {
+  padding: 0.25rem 0.3rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.effort-pill:hover {
+  border-color: var(--accent);
+}
+
+.effort-pill.is-active {
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 .popover-header {

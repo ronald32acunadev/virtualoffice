@@ -1,8 +1,16 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { api } from "../api/client";
-import type { Agent, AgentInfo, AgentMode, BossId, Species } from "../api/types";
+import type { Agent, AgentEffort, AgentInfo, AgentMode, BossId, Species } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
-import { AGENT_MODE_OPTIONS, buildModelOptionsForBoss, getAgentModeOption, resolveModelLabel } from "../state/agentConfig";
+import {
+  AGENT_EFFORT_OPTIONS,
+  buildModelOptionsForBoss,
+  formatEffortLabel,
+  getAgentModeOption,
+  getDefaultModeForBoss,
+  getModesForBoss,
+  resolveModelLabel,
+} from "../state/agentConfig";
 import { JOB_TITLE_PRESETS, MAX_JOB_TITLE_LENGTH } from "../state/jobTitle";
 import { groupRoleOptions } from "../state/role";
 import { SPECIES_EMOJI, SPECIES_LIST, speciesLabel } from "../state/species";
@@ -30,7 +38,8 @@ export function TeamModal({
   const [jobTitle, setJobTitle] = useState("");
   const [role, setRole] = useState("");
   const [model, setModel] = useState("");
-  const [mode, setMode] = useState<AgentMode>("request_review");
+  const [mode, setMode] = useState<AgentMode>(() => getDefaultModeForBoss(bosses.find((b) => b.available)?.id ?? "claude"));
+  const [effort, setEffort] = useState<"" | AgentEffort>("");
   const [catalogAgents, setCatalogAgents] = useState<AgentInfo[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -72,7 +81,8 @@ export function TeamModal({
     setJobTitle("");
     setRole("");
     setModel("");
-    setMode("request_review");
+    setMode(getDefaultModeForBoss(bossId));
+    setEffort("");
     setError(null);
   };
 
@@ -84,11 +94,13 @@ export function TeamModal({
     setJobTitle(agent.jobTitle ?? "");
     setRole(agent.role ?? "");
     setModel(agent.model ?? "");
-    setMode(agent.mode ?? "request_review");
+    setMode(agent.mode ?? getDefaultModeForBoss(agent.bossId));
+    setEffort(agent.effort ?? "");
     setError(null);
   };
 
   const modelOptions = buildModelOptionsForBoss(bossId, state.providerModels, model || null);
+  const modeOptions = getModesForBoss(bossId);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -102,6 +114,7 @@ export function TeamModal({
           jobTitle: jobTitle.trim() === "" ? null : jobTitle.trim(),
           model: model.trim() === "" ? null : model.trim(),
           mode,
+          ...(bossId === "claude" ? { effort: effort === "" ? null : effort } : {}),
           ...(bossId === "claude" ? { role: role.trim() === "" ? null : role.trim() } : {}),
         });
       } else {
@@ -112,6 +125,7 @@ export function TeamModal({
           ...(jobTitle.trim() !== "" ? { jobTitle: jobTitle.trim() } : {}),
           ...(model.trim() !== "" ? { model: model.trim() } : {}),
           mode,
+          ...(bossId === "claude" && effort !== "" ? { effort } : {}),
           ...(bossId === "claude" && role.trim() !== "" ? { role: role.trim() } : {}),
         });
       }
@@ -164,8 +178,9 @@ export function TeamModal({
                       </div>
                       <span className="muted team-agent-meta">
                         {chatCount} {chatCount === 1 ? "chat" : "chats"} ·{" "}
-                        {resolveModelLabel(agent.model, buildModelOptionsForBoss(agent.bossId, state.providerModels, agent.model))} ·{" "}
-                        {getAgentModeOption(agent.mode).shortLabel}
+                        {resolveModelLabel(agent.model, buildModelOptionsForBoss(agent.bossId, state.providerModels, agent.model))}
+                        {agent.bossId === "claude" && agent.effort ? ` (${formatEffortLabel(agent.effort)})` : ""} ·{" "}
+                        {getAgentModeOption(agent.mode, agent.bossId).shortLabel}
                       </span>
                     </div>
                     <div className="team-agent-actions">
@@ -212,7 +227,11 @@ export function TeamModal({
                   const next = e.target.value as BossId;
                   setBossId(next);
                   setModel("");
-                  if (next !== "claude") setRole("");
+                  setMode(getDefaultModeForBoss(next));
+                  if (next !== "claude") {
+                    setRole("");
+                    setEffort("");
+                  }
                 }}
               >
                 {bosses.map((boss) => (
@@ -303,13 +322,26 @@ export function TeamModal({
             <label>
               Execution mode
               <select value={mode} onChange={(e) => setMode(e.target.value as AgentMode)}>
-                {AGENT_MODE_OPTIONS.map((opt) => (
+                {modeOptions.map((opt) => (
                   <option key={opt.id} value={opt.id}>
                     {opt.label}
                   </option>
                 ))}
               </select>
             </label>
+            {bossId === "claude" ? (
+              <label>
+                Effort
+                <select value={effort} onChange={(e) => setEffort(e.target.value as "" | AgentEffort)}>
+                  <option value="">Default (Medium)</option>
+                  {AGENT_EFFORT_OPTIONS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           {bossId === "claude" ? (
             <button

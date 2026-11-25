@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError, openEventSocket } from "../api/client";
-import type { Agent, AgentMode, BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
+import type { Agent, AgentEffort, AgentMode, BossId, Decision, AttachmentUpload, Species, SyncSummary, MediaPlaybackState, MediaPreset, MediaProvider } from "../api/types";
 import { initialOfficeState, officeReducer, type OfficeState } from "./officeReducer";
 
 export type OfficeActions = {
@@ -22,10 +22,19 @@ export type OfficeActions = {
     jobTitle?: string | null;
     model?: string | null;
     mode?: AgentMode;
+    effort?: AgentEffort | null;
   }) => Promise<Agent>;
   updateAgent: (
     agentId: string,
-    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+    patch: {
+      name?: string;
+      species?: Species;
+      role?: string | null;
+      jobTitle?: string | null;
+      model?: string | null;
+      mode?: AgentMode;
+      effort?: AgentEffort | null;
+    },
   ) => Promise<Agent>;
   deleteAgent: (agentId: string) => Promise<void>;
   createEmployee: (input: {
@@ -40,7 +49,14 @@ export type OfficeActions = {
   }) => Promise<void>;
   updateEmployee: (
     employeeId: string,
-    patch: { name?: string; species?: Species; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+    patch: {
+      name?: string;
+      species?: Species;
+      jobTitle?: string | null;
+      model?: string | null;
+      mode?: AgentMode;
+      effort?: AgentEffort | null;
+    },
   ) => Promise<void>;
   syncProviders: () => Promise<SyncSummary>;
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) => Promise<void>;

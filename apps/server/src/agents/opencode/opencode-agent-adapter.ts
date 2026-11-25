@@ -135,14 +135,17 @@ export class OpenCodeAgentAdapter extends CliJsonlAdapter {
       buildArgs: ({ employee, prompt, resume, attachments }: StartParams) => {
         const fileFlags = (attachments ?? []).flatMap((a) => ["--file", a.path]);
         const modelFlags = employee.model ? ["-m", employee.model] : [];
-        const turboFlags = employee.mode === "turbo" ? ["--auto"] : [];
+        const modeFlags =
+          employee.mode === "auto" || employee.mode === "turbo" || employee.mode === "bypassPermissions"
+            ? ["--auto"]
+            : [];
         const trimmedPrompt = prompt.trim();
         const finalPrompt =
           trimmedPrompt || (fileFlags.length > 0 ? "Please inspect the attached file(s)." : trimmedPrompt);
 
         return resume
-          ? ["run", "--format", "json", "--session", resume, ...modelFlags, ...turboFlags, ...fileFlags, finalPrompt]
-          : ["run", "--format", "json", ...modelFlags, ...turboFlags, ...fileFlags, finalPrompt];
+          ? ["run", "--format", "json", "--session", resume, ...modelFlags, ...modeFlags, ...fileFlags, finalPrompt]
+          : ["run", "--format", "json", ...modelFlags, ...modeFlags, ...fileFlags, finalPrompt];
       },
       createParser: createOpenCodeParser,
     };

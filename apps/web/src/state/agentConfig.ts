@@ -1,32 +1,173 @@
-import type { AgentMode, BossId, ProviderModelOption } from "../api/types";
+import type { AgentEffort, AgentMode, BossId, ProviderModelOption } from "../api/types";
 
 export type AgentModeOption = {
   id: AgentMode;
   label: string;
-  description: string;
   shortLabel: string;
+  description: string;
+  isDefault?: boolean;
+  dangerous?: boolean;
+  shortcut?: string;
 };
 
-export const AGENT_MODE_OPTIONS: readonly AgentModeOption[] = [
-  {
-    id: "request_review",
-    label: "Request Review",
-    shortLabel: "Review",
-    description: "Every command requires approval.",
-  },
-  {
-    id: "turbo",
-    label: "Turbo",
-    shortLabel: "Turbo",
-    description: "Run all commands without restrictions.",
-  },
-];
+export const AGENT_EFFORT_OPTIONS: readonly { id: AgentEffort; label: string }[] = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+  { id: "max", label: "Max" },
+] as const;
 
-export function getAgentModeOption(mode: AgentMode | null | undefined): AgentModeOption {
-  if (mode === "turbo") {
-    return AGENT_MODE_OPTIONS[1]!;
+export const PROVIDER_MODE_OPTIONS: Record<BossId, readonly AgentModeOption[]> = {
+  claude: [
+    {
+      id: "auto",
+      label: "Auto",
+      shortLabel: "Auto",
+      description: "Claude handles permission decisions",
+      isDefault: true,
+      shortcut: "1",
+    },
+    {
+      id: "default",
+      label: "Manual",
+      shortLabel: "Manual",
+      description: "Always ask before making changes",
+      shortcut: "2",
+    },
+    {
+      id: "acceptEdits",
+      label: "Accept edits",
+      shortLabel: "Accept edits",
+      description: "Automatically accept all file edits",
+      shortcut: "3",
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      shortLabel: "Plan",
+      description: "Create a plan before making changes",
+      shortcut: "4",
+    },
+    {
+      id: "bypassPermissions",
+      label: "Bypass permissions",
+      shortLabel: "Bypass",
+      description: "Skip all permission prompts",
+      dangerous: true,
+    },
+  ],
+  gemini: [
+    {
+      id: "request_review",
+      label: "Request Review",
+      shortLabel: "Request Review",
+      description: "Every command requires approval.",
+      isDefault: true,
+      shortcut: "1",
+    },
+    {
+      id: "turbo",
+      label: "Turbo",
+      shortLabel: "Turbo",
+      description: "Run all commands without restrictions.",
+      dangerous: true,
+      shortcut: "2",
+    },
+    {
+      id: "acceptEdits",
+      label: "Accept edits",
+      shortLabel: "Accept edits",
+      description: "Automatically accept file edits.",
+      shortcut: "3",
+    },
+    {
+      id: "auto",
+      label: "Auto",
+      shortLabel: "Auto",
+      description: "Let the agent decide approvals automatically.",
+      shortcut: "4",
+    },
+    {
+      id: "plan",
+      label: "Plan",
+      shortLabel: "Plan",
+      description: "Create a plan before making changes.",
+      shortcut: "5",
+    },
+  ],
+  codex: [
+    {
+      id: "request_review",
+      label: "Manual",
+      shortLabel: "Manual",
+      description: "Ask before running commands.",
+      isDefault: true,
+      shortcut: "1",
+    },
+    {
+      id: "auto",
+      label: "Auto",
+      shortLabel: "Auto",
+      description: "Approve routine actions automatically.",
+      shortcut: "2",
+    },
+    {
+      id: "turbo",
+      label: "Turbo",
+      shortLabel: "Turbo",
+      description: "Bypass approvals and sandbox restrictions.",
+      dangerous: true,
+      shortcut: "3",
+    },
+  ],
+  opencode: [
+    {
+      id: "request_review",
+      label: "Manual",
+      shortLabel: "Manual",
+      description: "Ask before running commands.",
+      isDefault: true,
+      shortcut: "1",
+    },
+    {
+      id: "auto",
+      label: "Auto",
+      shortLabel: "Auto",
+      description: "Run actions automatically.",
+      shortcut: "2",
+    },
+  ],
+};
+
+export const AGENT_MODE_OPTIONS = PROVIDER_MODE_OPTIONS.gemini;
+
+export function getModesForBoss(bossId: BossId): readonly AgentModeOption[] {
+  return PROVIDER_MODE_OPTIONS[bossId] ?? PROVIDER_MODE_OPTIONS.gemini;
+}
+
+export function getDefaultModeForBoss(bossId: BossId): AgentMode {
+  const modes = getModesForBoss(bossId);
+  const defaultOption = modes.find((option) => option.isDefault === true);
+  return defaultOption?.id ?? modes[0]?.id ?? "request_review";
+}
+
+export function getAgentModeOption(
+  mode: AgentMode | null | undefined,
+  bossId: BossId = "gemini",
+): AgentModeOption {
+  const modes = getModesForBoss(bossId);
+  if (mode) {
+    const match = modes.find((option) => option.id === mode);
+    if (match) return match;
   }
-  return AGENT_MODE_OPTIONS[0]!;
+  const defaultOption = modes.find((option) => option.isDefault === true);
+  return defaultOption ?? modes[0]!;
+}
+
+export function formatEffortLabel(effort: AgentEffort | null | undefined): string {
+  if (!effort) return "Medium";
+  const option = AGENT_EFFORT_OPTIONS.find((item) => item.id === effort);
+  return option?.label ?? "Medium";
 }
 
 export function resolveModelLabel(

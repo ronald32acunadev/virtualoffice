@@ -517,14 +517,6 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             >
               📎
             </button>
-            <VoiceRecorderButton
-              disabled={disabled}
-              onAudioRecorded={(file) => stageFiles([file])}
-              onTranscript={(spoken) =>
-                setText((prev) => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken))
-              }
-              onError={(msg) => setError(msg)}
-            />
             <input
               ref={fileInputRef}
               type="file"
@@ -583,6 +575,14 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
                     : "Type / for commands or write a message..."
               }
             />
+            <VoiceRecorderButton
+              disabled={disabled}
+              onAudioRecorded={(file) => stageFiles([file])}
+              onTranscript={(spoken) =>
+                setText((prev) => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken))
+              }
+              onError={(msg) => setError(msg)}
+            />
             {STOPPABLE.has(employee.status) ? (
               <button
                 type="button"
@@ -608,10 +608,14 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
                 <span className="boss-accent-dot" aria-hidden="true" />
                 {boss?.name ?? employee.bossId}
               </span>
+              {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
+            </div>
+            <div className="composer-status-right">
               <ComposerConfigControls
                 bossId={employee.bossId}
                 model={employee.model}
                 mode={employee.mode}
+                effort={employee.effort}
                 providerModels={state.providerModels}
                 disabled={busy}
                 onChangeModel={(nextModel) => {
@@ -624,10 +628,12 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
                     setError(toFormError(err).message);
                   });
                 }}
+                onChangeEffort={(nextEffort) => {
+                  void actions.updateEmployee(employee.id, { effort: nextEffort }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
               />
-              {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
-            </div>
-            <div className="composer-status-right">
               <UsageRing
                 bossUsage={boss?.usage}
                 employeeUsage={employee.usage}

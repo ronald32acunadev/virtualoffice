@@ -29,11 +29,13 @@ import {
   MAX_NAME_LENGTH,
   OfficeError,
   isActiveStatus,
+  isAgentEffort,
   isAgentMode,
   isDecision,
   isSpecies,
   type Agent,
   type AgentActivity,
+  type AgentEffort,
   type AgentMode,
   type ApprovalRequest,
   type Boss,
@@ -352,10 +354,18 @@ export class OfficeService {
     return trimmed;
   }
 
-  private parseMode(value: unknown): AgentMode {
-    if (value === undefined || value === null || value === "") return "request_review";
+  private parseMode(value: unknown, bossId?: BossId): AgentMode {
+    if (value === undefined || value === null || value === "") {
+      return bossId === "claude" ? "auto" : "request_review";
+    }
     if (isAgentMode(value)) return value;
     throw new OfficeError("validation_error", "Unknown agent mode", "mode");
+  }
+
+  private parseEffort(value: unknown): AgentEffort | null {
+    if (value === undefined || value === null || value === "") return null;
+    if (isAgentEffort(value)) return value;
+    throw new OfficeError("validation_error", "Unknown effort level", "effort");
   }
 
   createAgent(input: {
@@ -366,6 +376,7 @@ export class OfficeService {
     jobTitle?: unknown;
     model?: unknown;
     mode?: unknown;
+    effort?: unknown;
   }): Agent {
     const boss = this.listBosses().find((candidate) => candidate.id === input.bossId);
     if (!boss) throw new OfficeError("validation_error", "Unknown boss", "bossId");
@@ -383,7 +394,8 @@ export class OfficeService {
         : parseSpecies(input.species);
     const jobTitle = parseJobTitle(input.jobTitle);
     const model = this.parseModel(input.model);
-    const mode = this.parseMode(input.mode);
+    const mode = this.parseMode(input.mode, boss.id);
+    const effort = this.parseEffort(input.effort);
     const now = this.timestamp();
     const agent: Agent = {
       id: this.newId(),
@@ -394,6 +406,7 @@ export class OfficeService {
       jobTitle,
       model,
       mode,
+      effort,
       createdAt: now,
       updatedAt: now,
     };
@@ -404,7 +417,15 @@ export class OfficeService {
 
   updateAgent(
     agentId: string,
-    input: { name?: unknown; species?: unknown; role?: unknown; jobTitle?: unknown; model?: unknown; mode?: unknown },
+    input: {
+      name?: unknown;
+      species?: unknown;
+      role?: unknown;
+      jobTitle?: unknown;
+      model?: unknown;
+      mode?: unknown;
+      effort?: unknown;
+    },
   ): Agent {
     const existing = this.repository.getAgent(agentId);
     if (!existing) throw new OfficeError("not_found", "Agent not found");
@@ -414,16 +435,21 @@ export class OfficeService {
       input.role === undefined &&
       input.jobTitle === undefined &&
       input.model === undefined &&
-      input.mode === undefined
+      input.mode === undefined &&
+      input.effort === undefined
     ) {
-      throw new OfficeError("validation_error", "Provide a name, species, role, job title, model, or mode", "name");
+      throw new OfficeError("validation_error", "Provide a name, species, role, job title, model, mode, or effort", "name");
     }
     const nextRole = input.role === undefined ? existing.role : parseRole(input.role);
     if (nextRole !== null && existing.bossId !== "claude") {
       throw new OfficeError("validation_error", "Roles are only supported for Claude agents", "role");
     }
     const nextModel = input.model === undefined ? (existing.model ?? null) : this.parseModel(input.model);
-    const nextMode = input.mode === undefined ? (existing.mode ?? "request_review") : this.parseMode(input.mode);
+    const nextMode =
+      input.mode === undefined
+        ? (existing.mode ?? (existing.bossId === "claude" ? "auto" : "request_review"))
+        : this.parseMode(input.mode, existing.bossId);
+    const nextEffort = input.effort === undefined ? (existing.effort ?? null) : this.parseEffort(input.effort);
     const updated: Agent = {
       ...existing,
       name: input.name === undefined ? existing.name : parseName(input.name),
@@ -432,6 +458,7 @@ export class OfficeService {
       jobTitle: input.jobTitle === undefined ? existing.jobTitle : parseJobTitle(input.jobTitle),
       model: nextModel,
       mode: nextMode,
+      effort: nextEffort,
       updatedAt: this.timestamp(),
     };
     this.repository.updateAgent(updated);
@@ -445,7 +472,8 @@ export class OfficeService {
         employee.species === updated.species &&
         employee.jobTitle === updated.jobTitle &&
         (employee.model ?? null) === (updated.model ?? null) &&
-        (employee.mode ?? "request_review") === (updated.mode ?? "request_review")
+        (employee.mode ?? "request_review") === (updated.mode ?? "request_review") &&
+        (employee.effort ?? null) === (updated.effort ?? null)
       ) {
         continue;
       }
@@ -455,6 +483,7 @@ export class OfficeService {
         jobTitle: updated.jobTitle,
         model: updated.model ?? null,
         mode: updated.mode ?? "request_review",
+        effort: updated.effort ?? null,
       });
     }
     return updated;
@@ -1021,7 +1050,8 @@ export class OfficeService {
     const role = parseRole(resolvedInput.role);
     const jobTitle = parseJobTitle(resolvedInput.jobTitle);
     const model = this.parseModel(resolvedInput.model);
-    const mode = this.parseMode(resolvedInput.mode);
+    const mode = this.parseMode(resolvedInput.mode, boss.id);
+    const effort = this.parseEffort(resolvedInput.effort);
     const hasExplicitAgentId = typeof input.agentId === "string" && input.agentId !== "";
     let agent: Agent;
     if (hasExplicitAgentId) {
@@ -1053,6 +1083,7 @@ export class OfficeService {
       jobTitle: agent.jobTitle,
       model: hasExplicitAgentId ? (input.model !== undefined ? model : (agent.model ?? null)) : (model ?? agent.model ?? null),
       mode: hasExplicitAgentId ? (input.mode !== undefined ? mode : (agent.mode ?? "request_review")) : (input.mode !== undefined ? mode : (agent.mode ?? "request_review")),
+      effort: hasExplicitAgentId ? (input.effort !== undefined ? effort : (agent.effort ?? null)) : (effort ?? agent.effort ?? null),
       providerSessionId: null,
       status: "starting",
       failureReason: null,
@@ -1081,10 +1112,10 @@ export class OfficeService {
     return { boss, task: input.task.trim(), workingDirectory: this.requireFolder(input.workingDirectory) };
   }
 
-  /** Renames an employee (or its linked agent), changes species, job title, model, and/or mode. */
+  /** Renames an employee (or its linked agent), changes species, job title, model, mode, and/or effort. */
   updateProfile(
     employeeId: string,
-    input: { name?: unknown; species?: unknown; jobTitle?: unknown; model?: unknown; mode?: unknown },
+    input: { name?: unknown; species?: unknown; jobTitle?: unknown; model?: unknown; mode?: unknown; effort?: unknown },
   ): Employee {
     const existing = this.requireEmployee(employeeId);
     if (
@@ -1092,9 +1123,10 @@ export class OfficeService {
       input.species === undefined &&
       input.jobTitle === undefined &&
       input.model === undefined &&
-      input.mode === undefined
+      input.mode === undefined &&
+      input.effort === undefined
     ) {
-      throw new OfficeError("validation_error", "Provide a name, species, job title, model, or mode", "name");
+      throw new OfficeError("validation_error", "Provide a name, species, job title, model, mode, or effort", "name");
     }
     if (existing.agentId && this.repository.getAgent(existing.agentId)) {
       this.updateAgent(existing.agentId, input);
@@ -1105,7 +1137,8 @@ export class OfficeService {
     if (input.species !== undefined) patch.species = parseSpecies(input.species);
     if (input.jobTitle !== undefined) patch.jobTitle = parseJobTitle(input.jobTitle);
     if (input.model !== undefined) patch.model = this.parseModel(input.model);
-    if (input.mode !== undefined) patch.mode = this.parseMode(input.mode);
+    if (input.mode !== undefined) patch.mode = this.parseMode(input.mode, existing.bossId);
+    if (input.effort !== undefined) patch.effort = this.parseEffort(input.effort);
     return this.patchEmployee(employeeId, patch);
   }
 
@@ -1711,6 +1744,7 @@ type HireInput = {
   jobTitle?: unknown;
   model?: unknown;
   mode?: unknown;
+  effort?: unknown;
 };
 
 /** `undefined`, `null`, or blank string clears job title; otherwise trimmed up to MAX_JOB_TITLE_LENGTH. */

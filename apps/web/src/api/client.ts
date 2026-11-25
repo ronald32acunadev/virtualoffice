@@ -1,5 +1,6 @@
 import type {
   Agent,
+  AgentEffort,
   AgentMode,
   ApprovalRequest,
   ProviderModelOption,
@@ -105,10 +106,19 @@ export const api = {
     jobTitle?: string | null;
     model?: string | null;
     mode?: AgentMode;
+    effort?: AgentEffort | null;
   }) => request<{ agent: Agent }>("POST", "/api/agents", input),
   updateAgent: (
     agentId: string,
-    patch: { name?: string; species?: Species; role?: string | null; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+    patch: {
+      name?: string;
+      species?: Species;
+      role?: string | null;
+      jobTitle?: string | null;
+      model?: string | null;
+      mode?: AgentMode;
+      effort?: AgentEffort | null;
+    },
   ) => request<{ agent: Agent }>("PATCH", `/api/agents/${encodeURIComponent(agentId)}`, patch),
   deleteAgent: (agentId: string) =>
     request<{ deleted: boolean }>("DELETE", `/api/agents/${encodeURIComponent(agentId)}`),
@@ -138,7 +148,14 @@ export const api = {
     ),
   updateEmployee: (
     employeeId: string,
-    patch: { name?: string; species?: Species; jobTitle?: string | null; model?: string | null; mode?: AgentMode },
+    patch: {
+      name?: string;
+      species?: Species;
+      jobTitle?: string | null;
+      model?: string | null;
+      mode?: AgentMode;
+      effort?: AgentEffort | null;
+    },
   ) => request<{ employee: Employee }>("PATCH", `/api/employees/${encodeURIComponent(employeeId)}`, patch),
   sendMessage: (employeeId: string, text: string, attachments?: AttachmentUpload[]) =>
     request<{ message: Message }>("POST", `/api/employees/${encodeURIComponent(employeeId)}/messages`, {
