@@ -2104,13 +2104,14 @@ button.link { background: none; color: var(--muted); padding: 0; text-decoration
 }
 
 .popover-effort-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
 }
 
 .effort-pill {
-  padding: 0.25rem 0.3rem;
+  flex: 1 1 auto;
+  padding: 0.25rem 0.45rem;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;

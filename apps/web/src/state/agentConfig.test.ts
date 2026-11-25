@@ -5,6 +5,7 @@ import {
   formatEffortLabel,
   getAgentModeOption,
   getDefaultModeForBoss,
+  getEffortsForBoss,
   getModesForBoss,
   resolveModelLabel,
 } from "./agentConfig";
@@ -54,12 +55,23 @@ describe("US-03 / AC-04: agentConfig", () => {
     expect(getDefaultModeForBoss("gemini")).toBe("request_review");
     expect(getAgentModeOption(null, "claude").id).toBe("auto");
     expect(getAgentModeOption("acceptEdits", "claude").label).toBe("Accept edits");
-    expect(getModesForBoss("codex").map((m) => m.id)).toEqual(["request_review", "auto", "turbo"]);
+    expect(getModesForBoss("codex").map((m) => m.id)).toEqual([
+      "auto",
+      "request_review",
+      "acceptEdits",
+      "plan",
+      "turbo",
+    ]);
+    expect(getDefaultModeForBoss("codex")).toBe("auto");
+    expect(getEffortsForBoss("claude").map((e) => e.id)).toEqual(["low", "medium", "high", "max"]);
+    expect(getEffortsForBoss("codex").map((e) => e.id)).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(getEffortsForBoss("gemini")).toEqual([]);
     expect(getModesForBoss("opencode").map((m) => m.id)).toEqual(["request_review", "auto"]);
 
     expect(formatEffortLabel(null)).toBe("Medium");
     expect(formatEffortLabel("low")).toBe("Low");
     expect(formatEffortLabel("high")).toBe("High");
+    expect(formatEffortLabel("xhigh")).toBe("Extra High");
     expect(formatEffortLabel("max")).toBe("Max");
   });
 });

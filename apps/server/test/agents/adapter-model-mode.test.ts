@@ -118,14 +118,24 @@ describe("US-05 / AC-02: native per-provider modes and Claude effort", () => {
     expect(h.sdk.last.options.allowDangerouslySkipPermissions).toBeUndefined();
   });
 
-  it("CodexAgentAdapter passes --approve-for-me for auto mode", () => {
+  it("CodexAgentAdapter passes --approve-for-me for auto mode, sandbox flags for acceptEdits/plan, and reasoning effort", () => {
     const spawner = createFakeSpawner();
     const { sink } = createRecordingSink();
     const adapter = new CodexAgentAdapter(spawner.spawn);
-    const employee = { ...makeEmployee("codex", "/repo"), mode: "auto" as const };
-    adapter.start({ employee, prompt: "Check" }, sink);
+
+    adapter.start({ employee: { ...makeEmployee("codex", "/repo"), mode: "auto", effort: "xhigh" }, prompt: "Check" }, sink);
     expect(spawner.last.args).toContain("--approve-for-me");
+    expect(spawner.last.args).toContain("-c");
+    expect(spawner.last.args).toContain("model_reasoning_effort=xhigh");
     expect(spawner.last.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+
+    adapter.start({ employee: { ...makeEmployee("codex", "/repo"), mode: "acceptEdits" }, prompt: "Edit" }, sink);
+    expect(spawner.last.args).toContain("-s");
+    expect(spawner.last.args).toContain("workspace-write");
+
+    adapter.start({ employee: { ...makeEmployee("codex", "/repo"), mode: "plan" }, prompt: "Inspect" }, sink);
+    expect(spawner.last.args).toContain("-s");
+    expect(spawner.last.args).toContain("read-only");
   });
 
   it("AntigravityAgentAdapter passes --mode accept-edits / auto / plan", () => {

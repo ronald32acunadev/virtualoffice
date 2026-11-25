@@ -11,9 +11,9 @@ export const CURATED_MODELS: Record<BossId, readonly ProviderModelOption[]> = {
     { id: "haiku", label: "Haiku 5.5" },
   ],
   codex: [
-    { id: "gpt-5.4", label: "GPT-5.4" },
-    { id: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
-    { id: "o3", label: "o3" },
+    { id: "gpt-6.2-sol", label: "GPT-6.2-Sol" },
+    { id: "gpt-6.2-astra", label: "GPT-6.2-Astra" },
+    { id: "gpt-6.1-sol", label: "GPT-6.1-Sol" },
   ],
   opencode: [
     { id: "opencode/big-pickle", label: "Big Pickle" },
@@ -68,12 +68,43 @@ export function parseOpenCodeModelsOutput(stdout: string): ProviderModelOption[]
   return result;
 }
 
+export function parseCodexModelsCache(rawJson: string): ProviderModelOption[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch {
+    return [];
+  }
+  const models = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { models?: unknown }).models)
+      ? (parsed as { models: unknown[] }).models
+      : [];
+  const seen = new Set<string>();
+  const result: ProviderModelOption[] = [];
+  for (const item of models) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    if (rec.visibility !== undefined && rec.visibility !== "list") continue;
+    const id = typeof rec.slug === "string" ? rec.slug.trim() : "";
+    const label =
+      typeof rec.display_name === "string" && rec.display_name.trim() !== ""
+        ? rec.display_name.trim()
+        : id;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    result.push({ id, label });
+  }
+  return result;
+}
+
 export type CommandRunner = (command: string, args: string[], timeoutMs: number) => Promise<string>;
 
 export async function discoverProviderModels(options?: {
   hasAgy?: boolean;
   hasOpenCode?: boolean;
   loadClaudeModels?: () => Promise<ProviderModelOption[]>;
+  loadCodexModels?: () => Promise<ProviderModelOption[]>;
   runCommand?: CommandRunner;
   timeoutMs?: number;
 }): Promise<Record<BossId, ProviderModelOption[]>> {
@@ -97,6 +128,17 @@ export async function discoverProviderModels(options?: {
       const claudeModels = await options.loadClaudeModels();
       if (claudeModels.length > 0) {
         result.claude = claudeModels;
+      }
+    } catch {
+      // fall back to curated
+    }
+  }
+
+  if (options?.loadCodexModels) {
+    try {
+      const codexModels = await options.loadCodexModels();
+      if (codexModels.length > 0) {
+        result.codex = codexModels;
       }
     } catch {
       // fall back to curated

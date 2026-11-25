@@ -78,7 +78,7 @@ export function isAgentMode(value: unknown): value is AgentMode {
   return typeof value === "string" && (AGENT_MODES as readonly string[]).includes(value);
 }
 
-export const AGENT_EFFORTS = ["low", "medium", "high", "max"] as const;
+export const AGENT_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
 export function isAgentEffort(value: unknown): value is AgentEffort {
   return typeof value === "string" && (AGENT_EFFORTS as readonly string[]).includes(value);

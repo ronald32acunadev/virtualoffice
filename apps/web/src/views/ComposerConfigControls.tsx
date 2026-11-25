@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentEffort, AgentMode, BossId, ProviderModelOption } from "../api/types";
 import {
-  AGENT_EFFORT_OPTIONS,
   buildModelOptionsForBoss,
   formatEffortLabel,
   getAgentModeOption,
+  getEffortsForBoss,
   getModesForBoss,
   resolveModelLabel,
 } from "../state/agentConfig";
@@ -37,13 +37,15 @@ export function ComposerConfigControls({
 
   const options = buildModelOptionsForBoss(bossId, providerModels, model);
   const modeOptions = getModesForBoss(bossId);
+  const effortOptions = getEffortsForBoss(bossId);
   const activeMode = getAgentModeOption(mode, bossId);
   const modelLabel = resolveModelLabel(model, options);
-  const isClaude = bossId === "claude";
+  const showEffort = effortOptions.length > 0;
+  const splitDangerModes = bossId === "claude" || bossId === "codex";
   const effortLabel = formatEffortLabel(effort);
 
-  const primaryModes = isClaude ? modeOptions.filter((m) => !m.dangerous) : modeOptions;
-  const dangerModes = isClaude ? modeOptions.filter((m) => m.dangerous) : [];
+  const primaryModes = splitDangerModes ? modeOptions.filter((m) => !m.dangerous) : modeOptions;
+  const dangerModes = splitDangerModes ? modeOptions.filter((m) => m.dangerous) : [];
 
   const togglePopover = (key: Exclude<PopoverKey, null>) => {
     if (disabled) return;
@@ -115,7 +117,7 @@ export function ComposerConfigControls({
           title="Select model"
         >
           <span className="composer-config-text">{modelLabel}</span>
-          {isClaude ? <span className="composer-config-effort">{effortLabel}</span> : null}
+          {showEffort ? <span className="composer-config-effort">{effortLabel}</span> : null}
           <span aria-hidden="true">▾</span>
         </button>
 
@@ -156,13 +158,13 @@ export function ComposerConfigControls({
                 </button>
               );
             })}
-            {isClaude && onChangeEffort ? (
+            {showEffort && onChangeEffort ? (
               <>
                 <div className="popover-divider" />
                 <div className="popover-effort-block">
                   <div className="popover-effort-label">Effort</div>
                   <div className="popover-effort-row" role="group" aria-label="Reasoning effort">
-                    {AGENT_EFFORT_OPTIONS.map((opt) => {
+                    {effortOptions.map((opt) => {
                       const active = (effort ?? "medium") === opt.id;
                       return (
                         <button
@@ -200,9 +202,9 @@ export function ComposerConfigControls({
 
         {openPopover === "mode" ? (
           <div className="composer-config-popover composer-mode-popover composer-config-popover-right" role="menu" aria-label="Agent mode">
-            <div className="popover-header">{isClaude ? "Mode" : "This Conversation"}</div>
+            <div className="popover-header">{splitDangerModes ? "Mode" : "This Conversation"}</div>
             {primaryModes.map((option) => renderModeOption(option, false))}
-            {isClaude && dangerModes.length > 0 ? (
+            {splitDangerModes && dangerModes.length > 0 ? (
               <>
                 <div className="popover-divider" />
                 {dangerModes.map((option) => renderModeOption(option, true))}

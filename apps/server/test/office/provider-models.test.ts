@@ -3,6 +3,7 @@ import {
   CURATED_MODELS,
   discoverProviderModels,
   parseAgyModelsOutput,
+  parseCodexModelsCache,
   parseOpenCodeModelsOutput,
 } from "../../src/office/domain/provider-models.ts";
 
@@ -69,5 +70,28 @@ describe("US-01 / AC-04: provider-models", () => {
       },
     });
     expect(failingClaude.claude).toEqual(CURATED_MODELS.claude);
+  });
+
+  it("US-06: parseCodexModelsCache filters visibility=list and discoverProviderModels uses live Codex models", async () => {
+    const raw = JSON.stringify({
+      models: [
+        { slug: "gpt-6.2-sol", display_name: "GPT-6.2-Sol", visibility: "list" },
+        { slug: "gpt-reserve", display_name: "GPT-Reserve", visibility: "hide" },
+        { slug: "gpt-6.2-sol", display_name: "Duplicate", visibility: "list" },
+        { slug: "gpt-6.1-terra", display_name: "GPT-6.1 Terra", visibility: "list" },
+      ],
+    });
+    expect(parseCodexModelsCache(raw)).toEqual([
+      { id: "gpt-6.2-sol", label: "GPT-6.2-Sol" },
+      { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+    ]);
+
+    const discovered = await discoverProviderModels({
+      loadCodexModels: async () => parseCodexModelsCache(raw),
+    });
+    expect(discovered.codex).toEqual([
+      { id: "gpt-6.2-sol", label: "GPT-6.2-Sol" },
+      { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+    ]);
   });
 });

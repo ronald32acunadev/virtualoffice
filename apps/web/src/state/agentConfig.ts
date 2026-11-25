@@ -14,8 +14,19 @@ export const AGENT_EFFORT_OPTIONS: readonly { id: AgentEffort; label: string }[]
   { id: "low", label: "Low" },
   { id: "medium", label: "Medium" },
   { id: "high", label: "High" },
+  { id: "xhigh", label: "Extra High" },
   { id: "max", label: "Max" },
 ] as const;
+
+export function getEffortsForBoss(bossId: BossId): readonly { id: AgentEffort; label: string }[] {
+  if (bossId === "claude") {
+    return AGENT_EFFORT_OPTIONS.filter((opt) => opt.id !== "xhigh");
+  }
+  if (bossId === "codex") {
+    return AGENT_EFFORT_OPTIONS;
+  }
+  return [];
+}
 
 export const PROVIDER_MODE_OPTIONS: Record<BossId, readonly AgentModeOption[]> = {
   claude: [
@@ -97,27 +108,40 @@ export const PROVIDER_MODE_OPTIONS: Record<BossId, readonly AgentModeOption[]> =
   ],
   codex: [
     {
-      id: "request_review",
-      label: "Manual",
-      shortLabel: "Manual",
-      description: "Ask before running commands.",
+      id: "auto",
+      label: "Auto",
+      shortLabel: "Auto",
+      description: "Automatic approval review in workspace-write sandbox",
       isDefault: true,
       shortcut: "1",
     },
     {
-      id: "auto",
-      label: "Auto",
-      shortLabel: "Auto",
-      description: "Approve routine actions automatically.",
+      id: "request_review",
+      label: "Manual",
+      shortLabel: "Manual",
+      description: "Ask before running commands",
       shortcut: "2",
     },
     {
-      id: "turbo",
-      label: "Turbo",
-      shortLabel: "Turbo",
-      description: "Bypass approvals and sandbox restrictions.",
-      dangerous: true,
+      id: "acceptEdits",
+      label: "Workspace write",
+      shortLabel: "Workspace write",
+      description: "Allow edits inside the workspace",
       shortcut: "3",
+    },
+    {
+      id: "plan",
+      label: "Read-only",
+      shortLabel: "Read-only",
+      description: "Inspect files without making edits",
+      shortcut: "4",
+    },
+    {
+      id: "turbo",
+      label: "Full access",
+      shortLabel: "Full access",
+      description: "Bypass approvals and sandbox restrictions",
+      dangerous: true,
     },
   ],
   opencode: [

@@ -64,7 +64,7 @@ export type AgentMode =
   | "plan"
   | "bypassPermissions"
   | "turbo";
-export type AgentEffort = "low" | "medium" | "high" | "max";
+export type AgentEffort = "low" | "medium" | "high" | "xhigh" | "max";
 export type ProviderModelOption = { id: string; label: string };
 
 export type Agent = {
