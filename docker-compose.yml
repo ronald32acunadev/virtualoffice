@@ -18,5 +18,9 @@ services:
       - ./data:/app/data
       - ${HOME}/.claude:/home/pumba/.claude
       - ${HOME}/.codex:/home/pumba/.codex
+      - ${HOME}/.gemini:/home/pumba/.gemini
       - ${HOME}/.config/opencode:/home/pumba/.config/opencode
+      - ${HOME}/.local/share/opencode:/home/pumba/.local/share/opencode
+      - ${HOME}/.local/bin/agy:/usr/local/bin/agy:ro
+      - ${HOME}/.opencode/bin/opencode:/usr/local/bin/opencode:ro
       - /run/media/pumba/Proyects:/run/media/pumba/Proyects
