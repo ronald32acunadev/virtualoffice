@@ -137,7 +137,11 @@ export class GeminiAgentAdapter extends CliJsonlAdapter {
     const spec: CliProviderSpec = {
       name: "Gemini CLI",
       command,
-      buildArgs: ({ prompt, resume, attachments }: StartParams) => {
+      buildArgs: ({ employee, prompt, resume, attachments }: StartParams) => {
+        const modelFlags = employee.model ? ["-m", employee.model] : [];
+        const modeFlags =
+          employee.mode === "turbo" || employee.mode === "bypassPermissions" ? ["--yolo"] : [];
+
         let finalPrompt = prompt.trim();
         if (attachments && attachments.length > 0) {
           const lines = attachments.map((a) => `- ${a.name} (${a.mimeType}): ${a.path}`);
@@ -149,8 +153,8 @@ export class GeminiAgentAdapter extends CliJsonlAdapter {
         }
 
         return resume
-          ? ["--resume", resume, "-p", finalPrompt, "--output-format", "stream-json"]
-          : ["-p", finalPrompt, "--output-format", "stream-json"];
+          ? ["--resume", resume, ...modelFlags, ...modeFlags, "-p", finalPrompt, "--output-format", "stream-json"]
+          : [...modelFlags, ...modeFlags, "-p", finalPrompt, "--output-format", "stream-json"];
       },
       createParser: createGeminiParser,
     };

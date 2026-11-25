@@ -2,33 +2,83 @@ import { useRef, useState } from "react";
 import { Html } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import type { Group, MeshStandardMaterial } from "three";
-import type { Employee } from "../api/types";
-import { employeeLabel } from "../state/role";
+import type { Agent, AgentActivity, EmployeeStatus } from "../api/types";
+import { agentDisplayLabel } from "../state/agentView";
 import { Desk } from "./BossArea";
-import { CHARACTER_POSES, hasSpecialistAccessory } from "./characterVisuals";
-import { STATUS_COLORS, type Vec3 } from "./layout";
+import { getEffectiveCharacterPose, hasSpecialistAccessory } from "./characterVisuals";
+import { MCP_HUB_POSITION, STATUS_COLORS, type Vec3 } from "./layout";
 import { SPECIES_COLORS, SpecialistHeadset, SpeciesParts, SpeciesTail } from "./SpeciesParts";
+import type { WorldThemeId } from "./themes/registry";
+import { CharacterThemeAccessory } from "./themes/ThemeAccessories";
 
 type Props = {
-  employee: Employee;
+  agent: Agent;
+  status: EmployeeStatus;
+  activity?: AgentActivity | null;
+  chatCount: number;
+  latestTask?: string | null;
   position: Vec3;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (agentId: string) => void;
   lampOn?: boolean;
   speechText?: string | null;
+  theme?: WorldThemeId;
+  mcpTargetPosition?: Vec3;
 };
 
 const MUTED_SHIRT = "#6e7480";
 const MUTED_HEAD = "#969ba3";
 const BASE_TORSO_Y = 0.6;
 
+function activityChipMeta(activity: AgentActivity): { icon: string; className: string; text: string } {
+  switch (activity.category) {
+    case "mcp_request":
+      return {
+        icon: "📡",
+        className: "activity-chip activity-chip-mcp",
+        text: `MCP · ${activity.serverName ?? activity.label}`,
+      };
+    case "searching_files":
+      return {
+        icon: "🔍",
+        className: "activity-chip activity-chip-files",
+        text: activity.label,
+      };
+    case "searching_web":
+      return {
+        icon: "🌐",
+        className: "activity-chip activity-chip-web",
+        text: activity.label,
+      };
+    case "delegating":
+      return {
+        icon: "🤝",
+        className: "activity-chip activity-chip-delegating",
+        text: activity.label,
+      };
+    case "coding":
+    default:
+      return {
+        icon: "⌨",
+        className: "activity-chip",
+        text: activity.label,
+      };
+  }
+}
+
 export function Character({
-  employee,
+  agent,
+  status,
+  activity = null,
+  chatCount,
+  latestTask = null,
   position,
   selected,
   onSelect,
   lampOn = false,
   speechText = null,
+  theme = "office",
+  mcpTargetPosition = MCP_HUB_POSITION,
 }: Props) {
   const rootRef = useRef<Group>(null);
   const torsoRef = useRef<Group>(null);
@@ -39,13 +89,23 @@ export function Character({
   const haloMatRef = useRef<MeshStandardMaterial>(null);
 
   const [hovered, setHovered] = useState(false);
-  const { status } = employee;
-  const pose = CHARACTER_POSES[status];
+  const activeTool = status === "working" ? activity : null;
+  const pose = getEffectiveCharacterPose(status, activeTool);
   const shirtColor = pose.muted ? MUTED_SHIRT : STATUS_COLORS[status];
-  const headColor = pose.muted ? MUTED_HEAD : SPECIES_COLORS[employee.species];
+  const headColor = pose.muted ? MUTED_HEAD : SPECIES_COLORS[agent.species];
   const pantsColor = pose.muted ? "#484d56" : "#2f3644";
   const shoeColor = pose.muted ? "#3a3e45" : "#22262e";
-  const specialist = hasSpecialistAccessory(employee.role);
+  const specialist = hasSpecialistAccessory(agent.role);
+
+  const isFileSearch = activeTool?.category === "searching_files";
+  const isMcpRequest = activeTool?.category === "mcp_request";
+  const isDelegating = activeTool?.category === "delegating";
+
+  // Target yaw angle from this desk toward the MCP Liaison Hub (character normally faces -Z)
+  const dxToMcp = mcpTargetPosition[0] - position[0];
+  const dzToMcp = mcpTargetPosition[2] - (position[2] + 0.86);
+  const rawYawToMcp = Math.atan2(-dxToMcp, -dzToMcp);
+  const clampedMcpYaw = Math.max(-1.35, Math.min(1.35, rawYawToMcp));
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
@@ -71,9 +131,11 @@ export function Character({
         bodyMat.emissiveIntensity =
           status === "waiting_approval"
             ? 0.35 + Math.sin(t * 4.5) * 0.22
-            : status === "starting"
-              ? 0.2 + Math.sin(t * 4) * 0.12
-              : 0.18;
+            : isMcpRequest
+              ? 0.28 + Math.sin(t * 5) * 0.16
+              : status === "starting"
+                ? 0.2 + Math.sin(t * 4) * 0.12
+                : 0.18;
       } else {
         bodyMat.emissive.set("#000000");
         bodyMat.emissiveIntensity = 0;
@@ -84,10 +146,25 @@ export function Character({
       torso.position.y = BASE_TORSO_Y + Math.sin(t * pose.breathingSpeed) * 0.013;
       torso.rotation.x =
         pose.leanX + (pose.typing ? Math.sin(t * 6) * 0.018 : Math.sin(t * 1.6) * 0.008);
+      const targetTorsoYaw = isMcpRequest
+        ? clampedMcpYaw * 0.72
+        : isDelegating
+          ? 0.45 * Math.sin(t * 1.6)
+          : 0;
+      torso.rotation.y += (targetTorsoYaw - torso.rotation.y) * 0.12;
     }
 
     if (head) {
-      if (status === "working") {
+      if (isFileSearch) {
+        head.rotation.x = pose.headTiltX + Math.sin(t * 2.4) * 0.06;
+        head.rotation.y = Math.sin(t * 2.8) * 0.34;
+      } else if (isMcpRequest) {
+        head.rotation.x = pose.headTiltX + Math.sin(t * 3.2) * 0.04;
+        head.rotation.y = clampedMcpYaw * 0.35 + Math.sin(t * 2.5) * 0.08;
+      } else if (isDelegating) {
+        head.rotation.x = pose.headTiltX;
+        head.rotation.y = 0.28 + Math.sin(t * 2.2) * 0.14;
+      } else if (status === "working") {
         head.rotation.x = pose.headTiltX + Math.sin(t * 4.5) * 0.032;
         head.rotation.y = Math.sin(t * 1.4) * 0.05;
       } else if (status === "waiting_approval") {
@@ -106,14 +183,28 @@ export function Character({
     }
 
     if (armL && armR) {
-      if (pose.typing) {
-        armL.rotation.x = -0.82 + Math.sin(t * 14) * 0.22;
-        armR.rotation.x = -0.82 + Math.cos(t * 14) * 0.22;
-        armR.rotation.z = 0;
-      } else if (pose.waving) {
+      if (pose.waving) {
         armL.rotation.x = -0.35;
         armR.rotation.x = -2.42;
         armR.rotation.z = -0.34 + Math.sin(t * 7.5) * 0.28;
+      } else if (isFileSearch) {
+        // Right arm raises magnifying glass / scanning document; left arm flips pages
+        armL.rotation.x = -0.68 + Math.sin(t * 4.2) * 0.14;
+        armR.rotation.x = -1.42 + Math.sin(t * 2.8) * 0.16;
+        armR.rotation.z = -0.18 + Math.cos(t * 2.8) * 0.12;
+      } else if (isMcpRequest) {
+        // Gesturing outward toward the MCP Liaison Agent to request info
+        armL.rotation.x = -0.45;
+        armR.rotation.x = -1.55 + Math.sin(t * 5.2) * 0.2;
+        armR.rotation.z = -0.25 + Math.sin(t * 3.4) * 0.18;
+      } else if (isDelegating) {
+        armL.rotation.x = -0.5;
+        armR.rotation.x = -1.25 + Math.sin(t * 4) * 0.18;
+        armR.rotation.z = -0.32;
+      } else if (pose.typing) {
+        armL.rotation.x = -0.82 + Math.sin(t * 14) * 0.22;
+        armR.rotation.x = -0.82 + Math.cos(t * 14) * 0.22;
+        armR.rotation.z = 0;
       } else if (status === "stopped") {
         armL.rotation.x = -0.15;
         armR.rotation.x = -0.15;
@@ -136,7 +227,7 @@ export function Character({
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
-    onSelect(employee.id);
+    onSelect(agent.id);
   };
 
   const marker =
@@ -148,9 +239,11 @@ export function Character({
       <div className="marker marker-failed">x</div>
     ) : null;
 
+  const chip = activeTool && !marker ? activityChipMeta(activeTool) : null;
+
   return (
     <group position={position}>
-      <Desk position={[0, 0, 0]} color="#c49a6c" status={status} lampOn={lampOn} />
+      <Desk position={[0, 0, 0]} color="#c49a6c" status={status} lampOn={lampOn} theme={theme} />
 
       <group
         ref={rootRef}
@@ -170,17 +263,14 @@ export function Character({
           </mesh>
           {([-0.11, 0.11] as const).map((lx) => (
             <group key={lx}>
-              {/* Thigh */}
               <mesh position={[lx, 0.545, -0.17]} castShadow>
                 <boxGeometry args={[0.14, 0.12, 0.32]} />
                 <meshStandardMaterial color={pantsColor} roughness={0.8} />
               </mesh>
-              {/* Calf */}
               <mesh position={[lx, 0.33, -0.3]} castShadow>
                 <boxGeometry args={[0.12, 0.34, 0.12]} />
                 <meshStandardMaterial color={pantsColor} roughness={0.8} />
               </mesh>
-              {/* Shoe */}
               <mesh position={[lx, 0.13, -0.33]} castShadow>
                 <boxGeometry args={[0.13, 0.09, 0.19]} />
                 <meshStandardMaterial color={shoeColor} roughness={0.65} />
@@ -190,21 +280,18 @@ export function Character({
         </group>
 
         {/* Animated species tail */}
-        <SpeciesTail species={employee.species} status={status} muted={pose.muted} />
+        <SpeciesTail species={agent.species} status={status} muted={pose.muted} />
 
         {/* Articulated upper body (shirt/hoodie, arms, head) */}
         <group ref={torsoRef} position={[0, BASE_TORSO_Y, 0.02]}>
-          {/* Tailored hoodie / shirt torso */}
           <mesh position={[0, 0.24, 0]} scale={[1.05, 1, 0.86]} castShadow>
             <capsuleGeometry args={[0.21, 0.24, 6, 12]} />
             <meshStandardMaterial ref={bodyMatRef} color={shirtColor} transparent roughness={0.68} />
           </mesh>
-          {/* Hoodie collar accent */}
           <mesh position={[0, 0.43, -0.02]} rotation={[Math.PI / 2 - 0.15, 0, 0]}>
             <torusGeometry args={[0.145, 0.035, 8, 16]} />
             <meshStandardMaterial color={pose.muted ? "#7f8590" : "#f4f6fa"} roughness={0.6} />
           </mesh>
-          {/* Chest badge / pocket stripe */}
           <mesh position={[0.09, 0.31, -0.175]}>
             <boxGeometry args={[0.075, 0.055, 0.02]} />
             <meshStandardMaterial
@@ -227,6 +314,13 @@ export function Character({
               <sphereGeometry args={[0.055, 10, 10]} />
               <meshStandardMaterial color={headColor} roughness={0.75} />
             </mesh>
+            {/* Glowing file/document sheet when searching files */}
+            {isFileSearch ? (
+              <mesh position={[0, -0.18, -0.34]} rotation={[0.25, 0.15, 0]}>
+                <boxGeometry args={[0.18, 0.22, 0.016]} />
+                <meshStandardMaterial color="#e0f2fe" emissive="#38bdf8" emissiveIntensity={0.45} roughness={0.4} />
+              </mesh>
+            ) : null}
           </group>
 
           {/* Right articulated arm */}
@@ -243,6 +337,19 @@ export function Character({
               <sphereGeometry args={[0.055, 10, 10]} />
               <meshStandardMaterial color={headColor} roughness={0.75} />
             </mesh>
+            {/* Procedural magnifying glass when searching files */}
+            {isFileSearch ? (
+              <group position={[0, -0.22, -0.36]}>
+                <mesh rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[0.095, 0.018, 8, 20]} />
+                  <meshStandardMaterial color="#38bdf8" emissive="#0ea5e9" emissiveIntensity={0.75} roughness={0.3} />
+                </mesh>
+                <mesh rotation={[Math.PI / 2, 0, 0]}>
+                  <circleGeometry args={[0.082, 16]} />
+                  <meshStandardMaterial color="#bae6fd" transparent opacity={0.45} roughness={0.1} />
+                </mesh>
+              </group>
+            ) : null}
           </group>
 
           {/* Articulated head */}
@@ -253,7 +360,6 @@ export function Character({
                 <meshStandardMaterial color={headColor} roughness={0.72} />
               </mesh>
 
-              {/* Crisp eyes facing -z toward monitor */}
               {([-0.085, 0.085] as const).map((ex) => (
                 <group key={ex} position={[ex, 0.02, -0.215]}>
                   <mesh scale={[1, 1.12, 0.55]}>
@@ -272,10 +378,11 @@ export function Character({
               ))}
 
               <SpeciesParts
-                species={employee.species}
+                species={agent.species}
                 tint={pose.muted ? MUTED_HEAD : undefined}
               />
               {specialist ? <SpecialistHeadset muted={pose.muted} /> : null}
+              <CharacterThemeAccessory theme={theme} muted={pose.muted} />
             </group>
           </group>
         </group>
@@ -305,12 +412,19 @@ export function Character({
           <Html position={[0, 2.38, 0]} center zIndexRange={[10, 0]}>
             {marker}
           </Html>
+        ) : chip ? (
+          <Html position={[0, 2.38, 0]} center zIndexRange={[10, 0]}>
+            <div className={chip.className}>
+              <span>{chip.icon}</span>
+              <span>{chip.text}</span>
+            </div>
+          </Html>
         ) : null}
         <Html position={[0, 1.9, 0]} center zIndexRange={[5, 0]}>
-          <div className="name-label">{employeeLabel(employee)}</div>
+          <div className="name-label">{agentDisplayLabel(agent)}</div>
         </Html>
         {speechText && !hovered ? (
-          <Html position={[0, marker ? 3.25 : 2.75, 0]} center zIndexRange={[15, 0]}>
+          <Html position={[0, marker || chip ? 3.25 : 2.75, 0]} center zIndexRange={[15, 0]}>
             <div className="speech-bubble" role="status">
               {speechText}
             </div>
@@ -319,8 +433,17 @@ export function Character({
         {hovered ? (
           <Html position={[0, 2.85, 0]} center zIndexRange={[20, 0]}>
             <div className="tooltip">
-              <strong>{employee.task.length > 80 ? `${employee.task.slice(0, 80)}...` : employee.task}</strong>
-              <span>{employee.status.replace("_", " ")}</span>
+              <strong>
+                {latestTask
+                  ? latestTask.length > 80
+                    ? `${latestTask.slice(0, 80)}...`
+                    : latestTask
+                  : `${agent.name} (${chatCount} ${chatCount === 1 ? "chat" : "chats"})`}
+              </strong>
+              <span>
+                {activeTool ? `${activeTool.label} · ` : ""}
+                {status.replace("_", " ")} · {chatCount} {chatCount === 1 ? "chat" : "chats"}
+              </span>
             </div>
           </Html>
         ) : null}

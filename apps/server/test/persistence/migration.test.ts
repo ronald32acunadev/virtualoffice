@@ -170,3 +170,62 @@ describe("US-02 / AC-01 media tables", () => {
     third.close();
   });
 });
+
+describe("Agent team table and employees.agent_id migration", () => {
+  it("adds agents table and nullable agent_id column, supports Agent CRUD, and reassigns chats", () => {
+    const file = createMvpDatabase();
+    const first = new SqliteOfficeRepository(file);
+
+    expect(first.getEmployee("e1")?.agentId).toBeNull();
+    expect(first.listAgents()).toEqual([]);
+
+    const agent = {
+      id: "agent-1",
+      bossId: "claude" as const,
+      name: "Maya",
+      species: "fox" as const,
+      role: "review-risk",
+      jobTitle: "Reviewer",
+      model: null,
+      mode: "request_review" as const,
+      effort: null,
+      createdAt: "2026-11-24T00:00:00Z",
+      updatedAt: "2026-11-24T00:00:00Z",
+    };
+    first.insertAgent(agent);
+    expect(first.getAgent("agent-1")).toEqual(agent);
+    expect(first.listAgents()).toEqual([agent]);
+
+    const e1 = first.getEmployee("e1")!;
+    expect(e1.model).toBeNull();
+    expect(e1.mode).toBe("request_review");
+    first.updateEmployee({ ...e1, agentId: "agent-1", model: "claude-opus-4-1", mode: "turbo" });
+    expect(first.getEmployee("e1")).toMatchObject({ agentId: "agent-1", model: "claude-opus-4-1", mode: "turbo" });
+
+    first.updateAgent({
+      ...agent,
+      name: "Milo",
+      jobTitle: "Lead Reviewer",
+      model: "claude-sonnet-4-5",
+      mode: "turbo",
+      updatedAt: "2026-11-24T01:00:00Z",
+    });
+    expect(first.getAgent("agent-1")).toMatchObject({
+      name: "Milo",
+      model: "claude-sonnet-4-5",
+      mode: "turbo",
+    });
+
+    first.reassignEmployeesAgent("agent-1", null);
+    expect(first.getEmployee("e1")?.agentId).toBeNull();
+
+    expect(first.deleteAgent("agent-1")).toBe(true);
+    expect(first.getAgent("agent-1")).toBeUndefined();
+    first.close();
+
+    const second = new SqliteOfficeRepository(file);
+    expect(second.listAgents()).toEqual([]);
+    expect(second.getEmployee("e1")?.agentId).toBeNull();
+    second.close();
+  });
+});

@@ -41,9 +41,50 @@ export type EmployeeStatus =
 
 export type Species = "wolf" | "dog" | "fox" | "cat" | "bear" | "human";
 
+export type ToolActivityCategory =
+  | "coding"
+  | "searching_files"
+  | "searching_web"
+  | "mcp_request"
+  | "delegating";
+
+export type AgentActivity = {
+  category: ToolActivityCategory;
+  toolName: string;
+  serverName: string | null;
+  label: string;
+  startedAt: string;
+};
+
+export type AgentMode =
+  | "request_review"
+  | "auto"
+  | "default"
+  | "acceptEdits"
+  | "plan"
+  | "bypassPermissions"
+  | "turbo";
+export type AgentEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export type ProviderModelOption = { id: string; label: string };
+
+export type Agent = {
+  id: string;
+  bossId: BossId;
+  name: string;
+  species: Species;
+  role: string | null;
+  jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
+  effort?: AgentEffort | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Employee = {
   id: string;
   bossId: BossId;
+  agentId?: string | null;
   hiredBy: string | null;
   task: string;
   workingDirectory: string;
@@ -52,10 +93,14 @@ export type Employee = {
   importedAt: string | null;
   role: string | null;
   jobTitle: string | null;
+  model?: string | null;
+  mode?: AgentMode;
+  effort?: AgentEffort | null;
   providerSessionId: string | null;
   status: EmployeeStatus;
   failureReason: string | null;
   usage?: EmployeeUsage;
+  activity?: AgentActivity | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -164,7 +209,10 @@ export type MediaPreset = {
 
 export type ServerEvent =
   | { type: "boss_updated"; boss: Boss }
+  | { type: "agent_updated"; agent: Agent }
+  | { type: "agent_removed"; agentId: string }
   | { type: "employee_updated"; employee: Employee }
+  | { type: "employee_activity"; employeeId: string; activity: AgentActivity | null }
   | { type: "employee_removed"; employeeId: string }
   | { type: "message_added"; message: Message }
   | { type: "message_delta"; employeeId: string; text: string }
@@ -177,6 +225,7 @@ export type ServerEvent =
 
 export type StateSnapshot = {
   bosses: Boss[];
+  agents?: Agent[];
   employees: Employee[];
   approvals: ApprovalRequest[];
   activeTerminals?: string[];

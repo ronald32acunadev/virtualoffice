@@ -10,6 +10,20 @@ export function isSafeInlineImageMime(mimeType: string): boolean {
   return SAFE_INLINE_IMAGE_MIMES.has(mimeType.toLowerCase().trim());
 }
 
+export const SAFE_INLINE_AUDIO_MIMES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/aac",
+  "audio/flac",
+]);
+
+export function isSafeInlineAudioMime(mimeType: string): boolean {
+  return SAFE_INLINE_AUDIO_MIMES.has(mimeType.split(";")[0]!.trim().toLowerCase());
+}
+
 export function sanitizeAttachmentName(raw: string): string {
   if (typeof raw !== "string") return "attachment";
   const trimmedInput = raw.trim();

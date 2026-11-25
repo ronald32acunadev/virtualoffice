@@ -1,0 +1,12 @@
+node_modules
+apps/web/dist
+apps/server/dist
+data
+.git
+.atl
+.codegraph
+.context
+odd
+*.sqlite
+*.sqlite-*
+just start

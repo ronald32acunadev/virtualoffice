@@ -1,4 +1,6 @@
 import type { EmployeeStatus } from "../api/types";
+import type { WorldThemeId } from "./themes/registry";
+import { THEME_QUOTE_BANKS } from "./themes/themeQuotes";
 
 export const THE_OFFICE_QUOTES: readonly string[] = [
   "Bears. Beets. Battlestar Galactica.",
@@ -66,9 +68,12 @@ export function pickOfficeQuote(
   status?: EmployeeStatus,
   lastQuote?: string | null,
   rng: () => number = Math.random,
+  theme: WorldThemeId = "office",
 ): string {
-  const statusPool = status ? STATUS_QUOTES[status] ?? [] : [];
-  const combined = Array.from(new Set([...statusPool, ...THE_OFFICE_QUOTES]));
+  const bank = theme === "office" ? null : THEME_QUOTE_BANKS[theme];
+  const statusPool = status ? (bank ? bank.byStatus[status] ?? [] : STATUS_QUOTES[status] ?? []) : [];
+  const generalPool = bank ? bank.general : THE_OFFICE_QUOTES;
+  const combined = Array.from(new Set([...statusPool, ...generalPool]));
   const filtered =
     lastQuote && combined.length > 1
       ? combined.filter((quote) => quote !== lastQuote)

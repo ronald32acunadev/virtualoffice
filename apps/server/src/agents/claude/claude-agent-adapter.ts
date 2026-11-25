@@ -187,16 +187,36 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       }
     };
 
+    const resolveClaudePermissionMode = (): Options["permissionMode"] => {
+      switch (employee.mode) {
+        case "auto":
+          return "auto";
+        case "acceptEdits":
+          return "acceptEdits";
+        case "plan":
+          return "plan";
+        case "bypassPermissions":
+        case "turbo":
+          return "bypassPermissions";
+        default:
+          return "default";
+      }
+    };
+    const permissionMode = resolveClaudePermissionMode();
+
     const options: Options = {
       cwd: employee.workingDirectory,
       settingSources: SETTING_SOURCES,
       systemPrompt: SYSTEM_PROMPT,
-      permissionMode: "default",
+      permissionMode,
+      ...(permissionMode === "bypassPermissions" ? { allowDangerouslySkipPermissions: true } : {}),
       includePartialMessages: true,
       abortController: session.abort,
       canUseTool,
       ...(resume ? { resume } : {}),
       ...(employee.role ? { agent: employee.role } : {}),
+      ...(typeof employee.model === "string" && employee.model.length > 0 ? { model: employee.model } : {}),
+      ...(employee.effort ? { effort: employee.effort } : {}),
     };
 
     void this.run(employee.id, session, options, sink);

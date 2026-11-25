@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
@@ -18,12 +19,14 @@ import { buildApp } from "./http/app.ts";
 import { TerminalSessionManager } from "./terminal/terminal-session-manager.ts";
 import { createToken } from "./http/security.ts";
 import { OfficeService } from "./office/application/office-service.ts";
+import { discoverProviderModels, parseCodexModelsCache } from "./office/domain/provider-models.ts";
 import type { BossId } from "./office/domain/types.ts";
 import type { AgentAdapter } from "./office/ports/agent-adapter.ts";
 import { SqliteOfficeRepository } from "./persistence/sqlite/sqlite-office-repository.ts";
 
 
 export type StartOfficeServerOptions = {
+  host?: string;
   port?: number;
   dbPath?: string;
   staticRoot?: string;
@@ -47,6 +50,7 @@ export async function startOfficeServer(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../.."
   );
+  const host = options.host ?? process.env.OFFICE_HOST ?? "127.0.0.1";
   const port = options.port ?? Number(process.env.OFFICE_PORT ?? 4317);
   const dbPath =
     options.dbPath ?? process.env.OFFICE_DB ?? path.join(repoRoot, "data", "office.sqlite");
@@ -56,7 +60,7 @@ export async function startOfficeServer(
   );
   const devOrigin = options.devOrigin ?? (process.env.OFFICE_DEV_ORIGIN || undefined);
   const webDist = options.staticRoot ?? path.join(repoRoot, "apps", "web", "dist");
-  const token = options.token ?? createToken();
+  const token = options.token ?? (process.env.OFFICE_TOKEN || createToken());
 
   if (dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -64,11 +68,12 @@ export async function startOfficeServer(
 
   const repository = new SqliteOfficeRepository(dbPath);
   const hasAgy = isBinaryAvailable("agy");
+  const hasOpenCode = isBinaryAvailable("opencode");
   const hasGemini = !hasAgy && isBinaryAvailable("gemini");
   const adapters: Partial<Record<BossId, AgentAdapter>> = {
     claude: new ClaudeAgentAdapter(),
     ...(isBinaryAvailable("codex") ? { codex: new CodexAgentAdapter() } : {}),
-    ...(isBinaryAvailable("opencode") ? { opencode: new OpenCodeAgentAdapter() } : {}),
+    ...(hasOpenCode ? { opencode: new OpenCodeAgentAdapter() } : {}),
     ...(hasAgy
       ? { gemini: new AntigravityAgentAdapter() }
       : hasGemini
@@ -81,12 +86,13 @@ export async function startOfficeServer(
     onActiveChange: (employeeId, active) => office.notifyTerminal(employeeId, active),
   });
 
+  const claudeCatalogProvider = new ClaudeCatalogProvider();
   const office = new OfficeService({
     repository,
     adapters,
     events: new InMemoryEventBus(),
     sessions: new ClaudeSessionCatalog(),
-    catalogProvider: new ClaudeCatalogProvider(),
+    catalogProvider: claudeCatalogProvider,
     terminals,
     attachmentsDir,
     sessionCatalogs: {
@@ -96,9 +102,20 @@ export async function startOfficeServer(
       ...(hasAgy ? { gemini: new AntigravitySessionCatalog() } : {}),
     },
     ...(hasAgy ? { bossNames: { gemini: "Antigravity" } } : {}),
+    providerModelsLoader: () =>
+      discoverProviderModels({
+        hasAgy,
+        hasOpenCode,
+        loadClaudeModels: () => claudeCatalogProvider.probeModels(os.homedir()),
+        loadCodexModels: async () => {
+          const raw = await fs.promises.readFile(path.join(os.homedir(), ".codex", "models_cache.json"), "utf8");
+          return parseCodexModelsCache(raw);
+        },
+      }),
   });
   office.recoverOnStartup();
   office.backfillProfiles();
+  office.backfillAgents();
 
   const autoSync = options.autoSync ?? dbPath !== ":memory:";
   let syncTimer: NodeJS.Timeout | undefined;
@@ -125,7 +142,7 @@ export async function startOfficeServer(
     terminals,
   });
 
-  await app.listen({ host: "127.0.0.1", port });
+  await app.listen({ host, port });
 
   const address = app.server.address();
   const boundPort =

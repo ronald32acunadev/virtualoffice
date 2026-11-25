@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { getToken } from "../api/client";
 import { getTerminalTheme } from "../state/officeMood";
 import type { LightingMood } from "../scene/officeTheme";
+import type { WorldThemeId } from "../scene/themes/registry";
 import {
   buildTerminalUrl,
   createResizeScheduler,
@@ -19,7 +20,7 @@ import {
 
 type Status = "connecting" | "open" | "ended";
 /** Embedded xterm.js terminal attached to the employee's agent CLI over /ws/terminal. */
-export function TerminalPanel({ employeeId, busy, mood }: { employeeId: string; busy: boolean; mood: LightingMood }) {
+export function TerminalPanel({ employeeId, busy, mood, theme = "office" }: { employeeId: string; busy: boolean; mood: LightingMood; theme?: WorldThemeId }) {
   const [status, setStatus] = useState<Status>("connecting");
   const [endText, setEndText] = useState<string | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -31,12 +32,14 @@ export function TerminalPanel({ employeeId, busy, mood }: { employeeId: string; 
   const termRef = useRef<Terminal | null>(null);
   const moodRef = useRef<LightingMood>(mood);
   moodRef.current = mood;
+  const themeRef = useRef<WorldThemeId>(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     if (termRef.current) {
-      termRef.current.options.theme = getTerminalTheme(mood);
+      termRef.current.options.theme = getTerminalTheme(mood, theme);
     }
-  }, [mood]);
+  }, [mood, theme]);
 
   useEffect(() => {
     if (!canConnect) return;
@@ -51,7 +54,7 @@ export function TerminalPanel({ employeeId, busy, mood }: { employeeId: string; 
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize: 13,
       scrollback: 5000,
-      theme: getTerminalTheme(moodRef.current),
+      theme: getTerminalTheme(moodRef.current, themeRef.current),
     });
     termRef.current = term;
 

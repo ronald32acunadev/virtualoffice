@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
 import type { Boss, BossId, EmployeeStatus } from "../api/types";
 import { useOffice } from "../state/OfficeProvider";
+import { aggregateAgentActivity, aggregateAgentStatus } from "../state/agentView";
 import { BossArea } from "./BossArea";
 import {
   DEFAULT_CAMERA_POSITION,
@@ -13,11 +14,13 @@ import {
   clampCameraTarget,
 } from "./camera";
 import { Character } from "./Character";
+import { McpAgentStation, type ActiveMcpRequest } from "./McpAgentStation";
 import { OfficeMediaTv } from "./OfficeMediaTv";
-import { employeeDeskPosition } from "./layout";
+import { MCP_HUB_POSITION, employeeDeskPosition } from "./layout";
 import { pickOfficeQuote, pickSpeaker } from "./officeQuotes";
 import { OfficeRoom } from "./OfficeRoom";
-import { MOOD_PALETTES, type LightingMood } from "./officeTheme";
+import type { LightingMood } from "./officeTheme";
+import { getThemePalette, type WorldThemeId } from "./themes/registry";
 
 const FALLBACK_BOSSES: { id: BossId; name: string; available: boolean }[] = [
   { id: "claude", name: "Claude", available: true },
@@ -105,7 +108,8 @@ function CameraRig({ resetToken, focusTvToken }: { resetToken: number; focusTvTo
 type Speaker = { id: string; status?: EmployeeStatus };
 
 export function OfficeScene({
-  onSelectEmployee,
+  selectedAgentId = null,
+  onSelectAgent,
   onClear,
   mood = "day",
   resetToken = 0,
@@ -115,8 +119,10 @@ export function OfficeScene({
   onFocusTv = () => {},
   onTurnOffMedia = () => {},
   tvPortalRef,
+  theme = "office",
 }: {
-  onSelectEmployee: (employeeId: string) => void;
+  selectedAgentId?: string | null;
+  onSelectAgent: (agentId: string) => void;
   onClear: () => void;
   mood?: LightingMood;
   resetToken?: number;
@@ -126,19 +132,63 @@ export function OfficeScene({
   onFocusTv?: () => void;
   onTurnOffMedia?: () => void;
   tvPortalRef?: RefObject<HTMLElement | null>;
+  theme?: WorldThemeId;
 }) {
   const { state } = useOffice();
   const bosses: Boss[] = state.bosses.length > 0 ? state.bosses : FALLBACK_BOSSES;
-  const palette = MOOD_PALETTES[mood];
+  const palette = getThemePalette(theme, mood);
+  const themeRef = useRef<WorldThemeId>(theme);
+  themeRef.current = theme;
+
+  useEffect(() => {
+    setActiveSpeech(null);
+  }, [theme]);
 
   const [activeSpeech, setActiveSpeech] = useState<{ speakerId: string; text: string } | null>(null);
   const lastSpeakerIdRef = useRef<string | null>(null);
   const lastQuoteBySpeakerRef = useRef<Map<string, string>>(new Map());
 
+  const placedAgents = useMemo(() => {
+    const indexByBoss = new Map<BossId, number>();
+    return state.agents.map((agent) => {
+      const index = indexByBoss.get(agent.bossId) ?? 0;
+      indexByBoss.set(agent.bossId, index + 1);
+      const chats = state.employees
+        .filter((e) => e.agentId === agent.id)
+        .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      const boss = bosses.find((b) => b.id === agent.bossId);
+      const status = aggregateAgentStatus(chats, boss);
+      const activity = aggregateAgentActivity(chats);
+      return {
+        agent,
+        chats,
+        status,
+        activity,
+        latestTask: chats[0]?.task ?? null,
+        position: employeeDeskPosition(agent.bossId, index),
+      };
+    });
+  }, [state.agents, state.employees, bosses]);
+
+  const activeMcpRequests = useMemo<ActiveMcpRequest[]>(() => {
+    const list: ActiveMcpRequest[] = [];
+    for (const item of placedAgents) {
+      if (item.status === "working" && item.activity?.category === "mcp_request") {
+        list.push({
+          agentId: item.agent.id,
+          fromPosition: item.position,
+          serverName: item.activity.serverName ?? "MCP",
+          label: item.activity.label,
+        });
+      }
+    }
+    return list;
+  }, [placedAgents]);
+
   const speakers = useMemo<Speaker[]>(() => {
-    const list: Speaker[] = state.employees.map((employee) => ({
-      id: employee.id,
-      status: employee.status,
+    const list: Speaker[] = placedAgents.map(({ agent, status }) => ({
+      id: agent.id,
+      status,
     }));
     for (const boss of bosses) {
       if (boss.available) {
@@ -146,7 +196,7 @@ export function OfficeScene({
       }
     }
     return list;
-  }, [state.employees, bosses]);
+  }, [placedAgents, bosses]);
 
   const speakersRef = useRef(speakers);
   speakersRef.current = speakers;
@@ -170,7 +220,7 @@ export function OfficeScene({
           return;
         }
         const lastQuote = lastQuoteBySpeakerRef.current.get(speaker.id) ?? null;
-        const quote = pickOfficeQuote(speaker.status, lastQuote);
+        const quote = pickOfficeQuote(speaker.status, lastQuote, Math.random, themeRef.current);
         lastSpeakerIdRef.current = speaker.id;
         lastQuoteBySpeakerRef.current.set(speaker.id, quote);
         setActiveSpeech({ speakerId: speaker.id, text: quote });
@@ -193,13 +243,6 @@ export function OfficeScene({
       }
     };
   }, [chatterEnabled, hasSpeakers]);
-
-  const indexByBoss = new Map<BossId, number>();
-  const placed = state.employees.map((employee) => {
-    const index = indexByBoss.get(employee.bossId) ?? 0;
-    indexByBoss.set(employee.bossId, index + 1);
-    return { employee, position: employeeDeskPosition(employee.bossId, index) };
-  });
 
   return (
     <Canvas shadows camera={{ position: DEFAULT_CAMERA_POSITION, fov: 42 }} onPointerMissed={onClear}>
@@ -224,33 +267,43 @@ export function OfficeScene({
       />
       <directionalLight position={[-12, 10, -10]} intensity={palette.fillIntensity} color={palette.fillColor} />
 
-      <OfficeRoom mood={mood} />
+      <OfficeRoom mood={mood} theme={theme} />
       <OfficeMediaTv
         media={state.media}
         mood={mood}
+        theme={theme}
         onOpenDrawer={onOpenMediaDrawer}
         onFocusTv={onFocusTv}
         onTurnOff={onTurnOffMedia}
         portalRef={tvPortalRef}
       />
 
+      <McpAgentStation activeRequests={activeMcpRequests} theme={theme} />
+
       {bosses.map((boss) => (
         <BossArea
           key={boss.id}
           boss={boss}
           mood={mood}
+          theme={theme}
           speechText={activeSpeech?.speakerId === `boss:${boss.id}` ? activeSpeech.text : null}
         />
       ))}
-      {placed.map(({ employee, position }) => (
+      {placedAgents.map(({ agent, status, activity, chats, latestTask, position }) => (
         <Character
-          key={employee.id}
-          employee={employee}
+          key={agent.id}
+          agent={agent}
+          status={status}
+          activity={activity}
+          chatCount={chats.length}
+          latestTask={latestTask}
           position={position}
-          selected={state.selectedId === employee.id}
-          onSelect={onSelectEmployee}
+          selected={selectedAgentId === agent.id}
+          onSelect={onSelectAgent}
           lampOn={mood === "evening"}
-          speechText={activeSpeech?.speakerId === employee.id ? activeSpeech.text : null}
+          theme={theme}
+          mcpTargetPosition={MCP_HUB_POSITION}
+          speechText={activeSpeech?.speakerId === agent.id ? activeSpeech.text : null}
         />
       ))}
       <CameraRig resetToken={resetToken} focusTvToken={focusTvToken} />

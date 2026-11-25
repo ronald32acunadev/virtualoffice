@@ -3,6 +3,10 @@ import {
   MAX_ATTACHMENTS,
   MAX_ATTACHMENT_BYTES,
   isPreviewableImageMime,
+  isPlayableAudioMime,
+  pickRecorderAudioMime,
+  buildVoiceRecordingFilename,
+  formatDurationSeconds,
   formatFileSize,
   validateFilesToStage,
   canSendComposer,
@@ -82,5 +86,25 @@ describe("attachments utility", () => {
       text: "hi",
       attachments: [{ name: "a", mimeType: "text/plain", dataBase64: "abc" }],
     });
+  });
+
+  it("US-04 / AC-02, AC-04: detects playable audio MIME types and formats voice filenames and durations", () => {
+    expect(isPlayableAudioMime("audio/webm")).toBe(true);
+    expect(isPlayableAudioMime("audio/webm;codecs=opus")).toBe(true);
+    expect(isPlayableAudioMime("AUDIO/MPEG")).toBe(true);
+    expect(isPlayableAudioMime("audio/ogg;codecs=opus")).toBe(true);
+    expect(isPlayableAudioMime("application/octet-stream")).toBe(false);
+
+    expect(pickRecorderAudioMime((m) => m === "audio/ogg;codecs=opus")).toBe("audio/ogg;codecs=opus");
+    expect(pickRecorderAudioMime(() => false)).toBe("audio/webm");
+
+    const fixed = new Date(2026, 10, 25, 9, 5, 3);
+    expect(buildVoiceRecordingFilename("audio/webm;codecs=opus", fixed)).toBe("voice-20261125-090503.webm");
+    expect(buildVoiceRecordingFilename("audio/ogg", fixed)).toBe("voice-20261125-090503.ogg");
+    expect(buildVoiceRecordingFilename("audio/mp4", fixed)).toBe("voice-20261125-090503.m4a");
+
+    expect(formatDurationSeconds(0)).toBe("0:00");
+    expect(formatDurationSeconds(7)).toBe("0:07");
+    expect(formatDurationSeconds(83)).toBe("1:23");
   });
 });

@@ -2,11 +2,13 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Drag
 import { ApiError } from "../api/client";
 import type { Species } from "../api/types";
 import type { LightingMood } from "../scene/officeTheme";
+import type { WorldThemeId } from "../scene/themes/registry";
 import { useOffice } from "../state/OfficeProvider";
 import {
   canSendComposer,
   encodeAttachmentFile,
   formatFileSize,
+  isPlayableAudioMime,
   isPreviewableImageMime,
   validateFilesToStage,
   type AttachmentUpload,
@@ -27,6 +29,8 @@ import { RichMarkdown, TextBubble, ToolRow } from "./ToolRow";
 import { groupTimelineBlocks } from "../state/activityGroups";
 import { deriveLiveStatus, isNearBottom, STARTER_PROMPTS } from "../state/chatErgonomics";
 import { ActivityGroup } from "./ActivityGroup";
+import { ComposerConfigControls } from "./ComposerConfigControls";
+import { VoiceRecorderButton } from "./VoiceRecorderButton";
 import { Toolbox } from "./Toolbox";
 import { TerminalPanel } from "./TerminalPanel";
 
@@ -295,6 +299,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
 
     const newStaged: StagedAttachment[] = result.accepted.map((file) => {
       const isImage = isPreviewableImageMime(file.type);
+      const isAudio = isPlayableAudioMime(file.type);
       return {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         file,
@@ -302,7 +307,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
         mimeType: file.type || "application/octet-stream",
         size: file.size,
         isImage,
-        previewUrl: isImage ? URL.createObjectURL(file) : null,
+        previewUrl: isImage || isAudio ? URL.createObjectURL(file) : null,
       };
     });
 
@@ -459,9 +464,13 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
             <div className="composer-attachments">
               {staged.map((item) => (
                 <div key={item.id} className="composer-attachment-item">
-                  {item.previewUrl ? (
+                  {item.previewUrl && item.isImage ? (
                     <div className="composer-attachment-thumb">
                       <img src={item.previewUrl} alt={item.name} />
+                    </div>
+                  ) : item.previewUrl && isPlayableAudioMime(item.mimeType) ? (
+                    <div className="staged-audio-chip">
+                      <audio controls preload="metadata" className="msg-audio-player" src={item.previewUrl} />
                     </div>
                   ) : (
                     <div className="composer-attachment-thumb file-icon" aria-hidden="true">
@@ -502,7 +511,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
               type="button"
               className="composer-attach-btn"
               disabled={disabled}
-              title="Attach files or photos"
+              title="Attach files, photos, or audio"
               aria-label="Attach files"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -566,6 +575,14 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
                     : "Type / for commands or write a message..."
               }
             />
+            <VoiceRecorderButton
+              disabled={disabled}
+              onAudioRecorded={(file) => stageFiles([file])}
+              onTranscript={(spoken) =>
+                setText((prev) => (prev.trim() ? `${prev.trim()} ${spoken}` : spoken))
+              }
+              onError={(msg) => setError(msg)}
+            />
             {STOPPABLE.has(employee.status) ? (
               <button
                 type="button"
@@ -594,6 +611,29 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
               {employee.jobTitle ? <span className="composer-meta-sep">{employee.jobTitle}</span> : null}
             </div>
             <div className="composer-status-right">
+              <ComposerConfigControls
+                bossId={employee.bossId}
+                model={employee.model}
+                mode={employee.mode}
+                effort={employee.effort}
+                providerModels={state.providerModels}
+                disabled={busy}
+                onChangeModel={(nextModel) => {
+                  void actions.updateEmployee(employee.id, { model: nextModel }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
+                onChangeMode={(nextMode) => {
+                  void actions.updateEmployee(employee.id, { mode: nextMode }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
+                onChangeEffort={(nextEffort) => {
+                  void actions.updateEmployee(employee.id, { effort: nextEffort }).catch((err) => {
+                    setError(toFormError(err).message);
+                  });
+                }}
+              />
               <UsageRing
                 bossUsage={boss?.usage}
                 employeeUsage={employee.usage}
@@ -609,7 +649,7 @@ function Composer({ employeeId, pendingInsert }: { employeeId: string; pendingIn
   );
 }
 
-export function ConversationPane({ employeeId, mood }: { employeeId: string; mood: LightingMood }) {
+export function ConversationPane({ employeeId, mood, theme = "office" }: { employeeId: string; mood: LightingMood; theme?: WorldThemeId }) {
   const { state, actions } = useOffice();
   const approvals = state.approvals.filter((a) => a.employeeId === employeeId);
   const employee = state.employees.find((e) => e.id === employeeId);
@@ -732,7 +772,7 @@ export function ConversationPane({ employeeId, mood }: { employeeId: string; moo
         ) : null}
       </div>
       {view === "chat" ? <Composer key={employeeId} employeeId={employeeId} pendingInsert={pendingInsert} /> : null}
-      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} /> : null}
+      {view === "terminal" ? <TerminalPanel employeeId={employeeId} busy={busy} mood={mood} theme={theme} /> : null}
     </section>
   );
 }

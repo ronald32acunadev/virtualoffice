@@ -7,6 +7,10 @@ import {
   type PropPlacement,
 } from "./officeTheme";
 import { createRugTexture, createWoodFloorTexture } from "./textures";
+import type { WorldThemeId } from "./themes/registry";
+import { WesternCampEnvironment } from "./themes/environments/WesternCampEnvironment";
+import { HorrorOfficeEnvironment } from "./themes/environments/HorrorOfficeEnvironment";
+import { MetalConcertEnvironment } from "./themes/environments/MetalConcertEnvironment";
 
 const WALL_HEIGHT = 5.4;
 const WALL_THICKNESS = 0.45;
@@ -375,7 +379,7 @@ function RoomProp({ placement }: { placement: PropPlacement }) {
   );
 }
 
-export function OfficeRoom({ mood }: { mood: LightingMood }) {
+function DefaultOfficeEnvironment({ mood }: { mood: LightingMood }) {
   const palette = MOOD_PALETTES[mood];
   const woodFloorTexture = useMemo(() => createWoodFloorTexture(), []);
 
@@ -559,4 +563,11 @@ export function OfficeRoom({ mood }: { mood: LightingMood }) {
       ))}
     </group>
   );
+}
+
+export function OfficeRoom({ mood, theme = "office" }: { mood: LightingMood; theme?: WorldThemeId }) {
+  if (theme === "western") return <WesternCampEnvironment mood={mood} />;
+  if (theme === "horror") return <HorrorOfficeEnvironment mood={mood} />;
+  if (theme === "metal") return <MetalConcertEnvironment mood={mood} />;
+  return <DefaultOfficeEnvironment mood={mood} />;
 }

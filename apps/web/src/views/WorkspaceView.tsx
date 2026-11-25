@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { getToken } from "../api/client";
 import { useOffice } from "../state/OfficeProvider";
 import { useOfficeMood } from "../state/officeMood";
+import { useWorldTheme } from "../state/worldTheme";
+import { SettingsModal } from "./SettingsModal";
+import { TeamModal } from "./TeamModal";
 import { buildViewUrl } from "../state/routing";
 import { createWorkspaceLink, openWindowChannel } from "../state/windowChannel";
 import { ConversationPane } from "./ConversationPane";
@@ -10,9 +13,13 @@ import { Sidebar } from "./Sidebar";
 
 export function WorkspaceView() {
   const { state, actions } = useOffice();
-  const { mood, toggleMood } = useOfficeMood();
+  const { mood, setMood, toggleMood } = useOfficeMood();
+  const { theme, setTheme } = useWorldTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [modal, setModal] = useState<"new" | null>(null);
   const [newTaskDir, setNewTaskDir] = useState<string | null>(null);
+  const [newTaskAgentId, setNewTaskAgentId] = useState<string | null>(null);
 
   useEffect(() => {
     const channel = openWindowChannel();
@@ -35,15 +42,18 @@ export function WorkspaceView() {
       <Sidebar
         mood={mood}
         onToggleMood={toggleMood}
-        onNewTask={(projectPath) => {
+        onNewTask={(projectPath, agentId) => {
           setNewTaskDir(projectPath ?? null);
+          setNewTaskAgentId(agentId ?? null);
           setModal("new");
         }}
         onOpenOffice={openOffice}
+        onOpenTeam={() => setTeamOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="workspace-main">
         {selected ? (
-          <ConversationPane key={selected} employeeId={selected} mood={mood} />
+          <ConversationPane key={selected} employeeId={selected} mood={mood} theme={theme} />
         ) : (
           <div className="workspace-empty">
             <h1>Virtual Office</h1>
@@ -58,12 +68,32 @@ export function WorkspaceView() {
       {modal === "new" ? (
         <NewTaskModal
           initialWorkingDirectory={newTaskDir}
+          initialAgentId={newTaskAgentId}
+          onManageTeam={() => setTeamOpen(true)}
           onClose={() => {
             setModal(null);
             setNewTaskDir(null);
+            setNewTaskAgentId(null);
           }}
         />
       ) : null}
+      <TeamModal
+        open={teamOpen}
+        onClose={() => setTeamOpen(false)}
+        onStartChatWithAgent={(agentId) => {
+          setNewTaskDir(null);
+          setNewTaskAgentId(agentId);
+          setModal("new");
+        }}
+      />
+      <SettingsModal
+        open={settingsOpen}
+        theme={theme}
+        mood={mood}
+        onSelectTheme={setTheme}
+        onSelectMood={setMood}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }

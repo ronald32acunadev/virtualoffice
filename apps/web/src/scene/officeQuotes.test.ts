@@ -8,6 +8,8 @@ import {
   readSavedChatter,
   saveChatter,
 } from "./officeQuotes";
+import { WORLD_THEME_IDS } from "./themes/registry";
+import { THEME_QUOTE_BANKS } from "./themes/themeQuotes";
 
 describe("officeQuotes", () => {
   it("US-05 / AC-01: THE_OFFICE_QUOTES is populated and pickOfficeQuote avoids repeating lastQuote back-to-back", () => {
@@ -93,5 +95,25 @@ describe("officeQuotes", () => {
 
     expect(readSavedChatter(throwingStorage)).toBe(true);
     expect(() => saveChatter(false, throwingStorage)).not.toThrow();
+  });
+
+  it("US-05 / AC-01: pickOfficeQuote returns themed quotes for all 4 themes without back-to-back repeats", () => {
+    expect(WORLD_THEME_IDS.length).toBe(4);
+    const officeQuote = pickOfficeQuote(undefined, null, () => 0, "office");
+    expect(THE_OFFICE_QUOTES).toContain(officeQuote);
+
+    for (const theme of ["western", "horror", "metal"] as const) {
+      const bank = THEME_QUOTE_BANKS[theme];
+      expect(bank.general.length).toBeGreaterThan(0);
+
+      const generalQuote = pickOfficeQuote(undefined, null, () => 0, theme);
+      expect(bank.general).toContain(generalQuote);
+
+      const workingQuote = pickOfficeQuote("working", null, () => 0, theme);
+      expect(bank.byStatus.working).toContain(workingQuote);
+
+      const repeated = pickOfficeQuote(undefined, generalQuote, () => 0, theme);
+      expect(repeated).not.toBe(generalQuote);
+    }
   });
 });
